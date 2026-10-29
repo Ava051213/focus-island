@@ -92,11 +92,13 @@ fn is_mouse_over_window<R: Runtime>(window: WebviewWindow<R>, pad: f64) -> bool 
     let (mx, my) = mouse_position_raw();
     let Ok(pos) = window.outer_position() else { return false };
     let Ok(size) = window.outer_size() else { return false };
-    let scale = window.scale_factor().unwrap_or(1.0);
 
     // macOS: CGEvent location is in points with top-left origin; convert to physical px.
     #[cfg(target_os = "macos")]
-    let (mx_px, my_px) = (mx * scale, my * scale);
+    let (mx_px, my_px) = {
+        let scale = window.scale_factor().unwrap_or(1.0);
+        (mx * scale, my * scale)
+    };
     // Windows/Linux: GetCursorPos / XQueryPointer already return physical px.
     #[cfg(not(target_os = "macos"))]
     let (mx_px, my_px) = (mx, my);
