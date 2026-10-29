@@ -413,6 +413,13 @@ pub fn run() {
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Some(vec!["--hidden"]),
         ))
+        .on_window_event(|window, event| {
+            // 误关窗口时隐藏到托盘，而不是直接退出；退出请用托盘菜单的“退出”
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = window.hide();
+            }
+        })
         .on_tray_icon_event(|app, event| {
             if let TrayIconEvent::Click {
                 button,
