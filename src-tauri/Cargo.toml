@@ -1,0 +1,43 @@
+[package]
+name = "focus-island"
+version = "2.10.0"
+edition = "2021"
+
+[lib]
+name = "focus_island_lib"
+# 纯桌面应用只需 rlib；staticlib/cdylib 仅供 iOS/Android，桌面构建会白白生成 400M+ 产物
+crate-type = ["rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["macos-private-api", "tray-icon", "image-ico", "image-png"] }
+tauri-plugin-fs = "2"
+tauri-plugin-shell = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri-plugin-clipboard-manager = "2.3.2"
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-autostart = "2"
+tauri-plugin-single-instance = "2.4.2"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+core-graphics = "0.25.0"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.61.3", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_System_Threading"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+x11 = { version = "2.21", features = ["xlib"] }
+
+# dev 产物瘦身：只保留行号表(断点/backtrace 仍可用)，去掉完整 DWARF 符号，体积减半以上
+[profile.dev]
+debug = "line-tables-only"
+
+# thin LTO + 默认 codegen-units：CI 编译明显更快，体积只略增
+[profile.release]
+panic = "abort"
+lto = "thin"
+opt-level = "s"
+strip = true
