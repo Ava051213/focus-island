@@ -23,6 +23,39 @@ let unlistenPanelMotion: (() => void) | null = null;
 let unlistenNotification: (() => void) | null = null;
 
 const notificationType = ref<NotificationType>(null);
+const hoverActive = ref(false);
+let hoverTimer: ReturnType<typeof setInterval> | null = null;
+
+// 通知横幅可见，或鼠标正悬停在岛上时，关闭鼠标穿透以便接收点击。
+function syncClickThrough() {
+    const interactive = notificationType.value !== null || hoverActive.value;
+    invoke("set_click_through", { ignore: !interactive });
+}
+
+// 穿透状态下 webview 收不到 mousemove，只能轮询系统光标位置来判断悬停。
+function startHoverPolling() {
+    if (hoverTimer !== null) return;
+    hoverTimer = window.setInterval(async () => {
+        if (notificationType.value !== null) return;
+        try {
+            const over = await invoke<boolean>("is_mouse_over_window", { pad: 0 });
+            if (over !== hoverActive.value) {
+                hoverActive.value = over;
+                syncClickThrough();
+            }
+        } catch {
+            // 命令不可用时忽略
+        }
+    }, 100);
+}
+
+async function onIslandClick() {
+    try {
+        await invoke("toggle_panel");
+    } catch {
+        // 忽略
+    }
+}
 
 // Compute and apply the main window size based on notification / dock / capsule state.
 function applyWindowSize() {
@@ -46,9 +79,8 @@ function applyWindowSize() {
 
 // Watch notification visibility and toggle click-through + resize window
 watch(notificationType, (val) => {
-    const visible = val !== null;
-    setNotificationVisible(visible);
-    invoke("set_click_through", { ignore: !visible });
+    setNotificationVisible(val !== null);
+    syncClickThrough();
     applyWindowSize();
 });
 
@@ -151,8 +183,9 @@ function startLocalCountdown(endAt: number) {
 }
 
 onMounted(async () => {
-    invoke("set_click_through", { ignore: true });
-    
+    syncClickThrough();
+    startHoverPolling();
+
     // 初始化时应用窗口尺寸（胶囊 / 停靠细条 / 通知）
     applyWindowSize();
 
@@ -205,6 +238,10 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+    if (hoverTimer !== null) {
+        window.clearInterval(hoverTimer);
+        hoverTimer = null;
+    }
     unlisten?.();
     unlistenPanelMotion?.();
     unlistenNotification?.();
@@ -234,7 +271,9 @@ onUnmounted(() => {
                         'ring-break':
                             timer.phase.value === 'break' && timer.running.value,
                         'strip-mode': showStrip,
+                        interactive: hoverActive,
                     }"
+                    @click="onIslandClick"
                     :style="{
                         '--ring-progress': progressScale,
                         '--ring-color': ringColor,
@@ -313,6 +352,10 @@ onUnmounted(() => {
     background: rgba(0, 0, 0, var(--island-opacity, 0.95));
     transition: width 0.3s ease, height 0.3s ease;
     contain: layout style paint;
+}
+
+.capsule-shell.interactive {
+    cursor: pointer;
 }
 
 .capsule-shell.strip-mode {

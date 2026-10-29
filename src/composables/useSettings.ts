@@ -46,7 +46,7 @@ const DEFAULT_SETTINGS: Settings = {
   colorMode: 'system',
   activeThemeId: 'classic',
   idleMottos: [],
-  shortcutKey: 'Alt+Space',
+  shortcutKey: 'Ctrl+Alt+Space',
   notificationSound: true,
   autoLaunch: true,
 }
@@ -108,6 +108,10 @@ const store = createPersistedStore({
       ...DEFAULT_SETTINGS,
       ...parsed,
       colorMode: normalizeColorMode(parsed.colorMode),
+      // Alt+Space 被 Windows 系统菜单占用，旧默认值迁移到新默认
+      shortcutKey: parsed.shortcutKey === 'Alt+Space'
+        ? DEFAULT_SETTINGS.shortcutKey
+        : (parsed.shortcutKey ?? DEFAULT_SETTINGS.shortcutKey),
     }
   },
   syncEvent: 'settings-changed',
