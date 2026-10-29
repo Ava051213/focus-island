@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { emit, listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
+import { currentMonitor, getCurrentWindow, PhysicalPosition } from "@tauri-apps/api/window";
 import { useIslandState } from "../composables/useIslandState";
 import { useTimer, type NotificationType } from "../composables/useTimer";
 import { useSettings } from "../composables/useSettings";
@@ -14,7 +15,7 @@ import type { TimerStatePayload } from "../composables/useTimerBridge";
 
 const { state, setState, setNotificationVisible } = useIslandState();
 const timer = useTimer();
-const { settings } = useSettings();
+const { settings, settingsReady } = useSettings();
 const { dockCollapsed, stripProgress, stripColor, DOCK_STRIP_WINDOW_H } = useDockMode();
 const showStrip = computed(() => dockCollapsed.value);
 
@@ -37,6 +38,8 @@ function startHoverPolling() {
     if (hoverTimer !== null) return;
     hoverTimer = window.setInterval(async () => {
         if (notificationType.value !== null) return;
+        // 拖动中保持可交互，否则指针短暂离开窗口会重新开启穿透并打断拖动
+        if (dragging.value) return;
         try {
             const over = await invoke<boolean>("is_mouse_over_window", { pad: 0 });
             if (over !== hoverActive.value) {
@@ -50,6 +53,10 @@ function startHoverPolling() {
 }
 
 async function onIslandClick() {
+    if (dragMoved) {
+        dragMoved = false;
+        return;
+    }
     try {
         await invoke("toggle_panel");
     } catch {
@@ -57,24 +64,126 @@ async function onIslandClick() {
     }
 }
 
+// ===== 顶部水平拖动 =====
+const islandWindow = getCurrentWindow();
+const dragging = ref(false);
+let dragPointerId: number | null = null;
+let dragStartScreenX = 0;
+let dragStartWindowX = 0;
+let dragMoved = false;
+
+let monitorLeft = 0;
+let monitorTop = 0;
+let monitorWidth = 0;
+let windowWidth = 0;
+let currentWindowX = 0;
+
+async function refreshIslandGeometry() {
+    try {
+        const monitor = await currentMonitor();
+        const size = await islandWindow.outerSize();
+        const pos = await islandWindow.outerPosition();
+        if (monitor) {
+            monitorLeft = monitor.position.x;
+            monitorTop = monitor.position.y;
+            monitorWidth = monitor.size.width;
+        }
+        windowWidth = size.width;
+        currentWindowX = pos.x;
+    } catch {
+        // 平台不支持时保持旧值
+    }
+}
+
+// 尺寸变化后（Rust 会强制水平居中）按保存的比例贴回原来的位置。
+async function restoreIslandX() {
+    await refreshIslandGeometry();
+    const ratio = settings.value.islandXRatio;
+    if (ratio === null || monitorWidth <= 0) return;
+    const maxX = monitorWidth - windowWidth;
+    if (maxX <= 0) return;
+    const x = Math.round(monitorLeft + ratio * maxX);
+    try {
+        await islandWindow.setPosition(new PhysicalPosition(x, monitorTop));
+        currentWindowX = x;
+    } catch {
+        // 忽略
+    }
+}
+
+function clampIslandX(x: number) {
+    const maxX = monitorWidth - windowWidth;
+    if (maxX <= 0) return monitorLeft;
+    return Math.round(Math.min(Math.max(x, monitorLeft), monitorLeft + maxX));
+}
+
+function onCapsulePointerDown(e: PointerEvent) {
+    if (e.button !== 0) return;
+    const el = e.currentTarget as HTMLElement | null;
+    try {
+        el?.setPointerCapture(e.pointerId);
+    } catch {
+        // 忽略
+    }
+    dragPointerId = e.pointerId;
+    dragStartScreenX = e.screenX;
+    dragStartWindowX = currentWindowX;
+    dragMoved = false;
+}
+
+function onCapsulePointerMove(e: PointerEvent) {
+    if (dragPointerId !== e.pointerId) return;
+    const dxCss = e.screenX - dragStartScreenX;
+    // 小于阈值视为点击，避免手抖把单击变成微移
+    if (!dragMoved && Math.abs(dxCss) < 4) return;
+    dragMoved = true;
+    dragging.value = true;
+    const dpr = window.devicePixelRatio || 1;
+    const x = clampIslandX(dragStartWindowX + dxCss * dpr);
+    currentWindowX = x;
+    islandWindow.setPosition(new PhysicalPosition(x, monitorTop)).catch(() => {});
+}
+
+async function onCapsulePointerUp(e: PointerEvent) {
+    if (dragPointerId !== e.pointerId) return;
+    const el = e.currentTarget as HTMLElement | null;
+    try {
+        el?.releasePointerCapture(e.pointerId);
+    } catch {
+        // 忽略
+    }
+    dragPointerId = null;
+    if (!dragging.value) return;
+    dragging.value = false;
+    await refreshIslandGeometry();
+    const maxX = monitorWidth - windowWidth;
+    if (maxX > 0) {
+        settings.value.islandXRatio = Math.min(
+            Math.max((currentWindowX - monitorLeft) / maxX, 0),
+            1,
+        );
+    }
+}
+
 // Compute and apply the main window size based on notification / dock / capsule state.
-function applyWindowSize() {
+async function applyWindowSize() {
     const scale = settings.value.islandScale ?? 1;
     if (notificationType.value !== null) {
         // Expand window to fit capsule + gap + notification banner
         const width = 360 * scale;
         const height = (BASE_HEIGHT + 6 + 60) * scale;
-        invoke("set_island_custom_size", { width, height });
+        await invoke("set_island_custom_size", { width, height });
     } else if (showStrip.value) {
         // Docked thin strip at the top edge
-        invoke("set_island_custom_size", {
+        await invoke("set_island_custom_size", {
             width: 360 * scale,
             height: DOCK_STRIP_WINDOW_H * scale,
         });
     } else {
         // Normal capsule size
-        invoke("set_island_size", { scale });
+        await invoke("set_island_size", { scale });
     }
+    await restoreIslandX();
 }
 
 // Watch notification visibility and toggle click-through + resize window
@@ -86,6 +195,11 @@ watch(notificationType, (val) => {
 
 // Resize when dock strip state or island scale changes
 watch([showStrip, () => settings.value.islandScale], applyWindowSize);
+
+// 设置加载完成后按保存的水平位置贴回（启动时可能先按默认居中）
+watch(settingsReady, (ready) => {
+    if (ready) applyWindowSize();
+});
 
 function playNotificationSound() {
     if (!settings.value.notificationSound) return;
@@ -272,8 +386,13 @@ onUnmounted(() => {
                             timer.phase.value === 'break' && timer.running.value,
                         'strip-mode': showStrip,
                         interactive: hoverActive,
+                        dragging: dragging,
                     }"
                     @click="onIslandClick"
+                    @pointerdown="onCapsulePointerDown"
+                    @pointermove="onCapsulePointerMove"
+                    @pointerup="onCapsulePointerUp"
+                    @pointercancel="onCapsulePointerUp"
                     :style="{
                         '--ring-progress': progressScale,
                         '--ring-color': ringColor,
@@ -355,7 +474,11 @@ onUnmounted(() => {
 }
 
 .capsule-shell.interactive {
-    cursor: pointer;
+    cursor: grab;
+}
+
+.capsule-shell.dragging {
+    cursor: grabbing;
 }
 
 .capsule-shell.strip-mode {

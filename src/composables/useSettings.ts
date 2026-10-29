@@ -19,6 +19,7 @@ export interface Settings {
   islandOpacity: number      // 透明度 0~0.7，值越大越透明，CSS alpha = 1 - value
   islandScale: number        // 灵动岛缩放比例 0.5~1.5
   islandDisplayMode: IslandDisplayMode  // 灵动岛显示方式：常驻 / 边缘停靠
+  islandXRatio: number | null            // 顶部水平位置比例 0~1，null 表示居中
   focusDuration: number
   breakDuration: number
   colorMode: ColorMode
@@ -41,6 +42,7 @@ const DEFAULT_SETTINGS: Settings = {
   islandOpacity: 0.25,
   islandScale: 1.0,
   islandDisplayMode: 'resident',
+  islandXRatio: null,
   focusDuration: 25,
   breakDuration: 5,
   colorMode: 'system',

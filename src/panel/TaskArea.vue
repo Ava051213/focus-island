@@ -335,8 +335,8 @@ function handleDoneTask(taskId: string) {
 
 .quick-add-input {
   width: 100%;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: 8px;
   padding: 10px 14px;
   color: #fff;
@@ -677,15 +677,15 @@ function handleDoneTask(taskId: string) {
   gap: 10px;
   padding: 12px;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.035);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.07);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background 0.2s, border-color 0.2s, transform 0.2s;
   font-family: inherit;
 }
 
 .task-card:hover {
-  background: rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.075);
   border-color: rgba(255, 255, 255, 0.12);
   transform: translateY(-1px);
 }
@@ -702,6 +702,7 @@ function handleDoneTask(taskId: string) {
   height: 36px;
   border-radius: 8px;
   flex-shrink: 0;
+  filter: saturate(0.82);
 }
 
 .today-icon {

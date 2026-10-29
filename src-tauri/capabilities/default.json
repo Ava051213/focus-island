@@ -4,6 +4,7 @@
   "windows": ["main", "panel"],
   "permissions": [
     "core:default",
+    "core:window:allow-set-position",
     "fs:default",
     "fs:allow-read-text-file",
     "fs:allow-write-text-file",
