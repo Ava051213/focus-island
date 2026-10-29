@@ -53,17 +53,14 @@
 
 ## 📦 安装
 
-前往 [Releases](../../releases) 页面下载对应平台的安装包：
+本项目为个人精简版，暂未发布预编译安装包。如需使用，请按下方「本地开发」自行构建：
 
-| 平台 | 文件 |
-|------|------|
-| macOS (Apple Silicon) | `专注岛_x.x.x_aarch64.dmg` |
-| macOS (Intel) | `专注岛_x.x.x_x64.dmg` |
-| Windows | `专注岛_x.x.x_x64-setup.exe` |
-| Linux | `专注岛_x.x.x_amd64.AppImage` |
-| Linux (ARM64) | `专注岛_x.x.x_aarch64.AppImage` |
+```bash
+npm install
+npm run build
+```
 
-> Linux 用户下载后需添加执行权限：`chmod +x 专注岛_*.AppImage`
+构建产物位于 `src-tauri/target/release/bundle/`。
 
 ### macOS 常见问题
 
@@ -84,7 +81,7 @@ xattr -cr /Applications/专注岛.app
 
 ### 快速开始
 
-1. **点击灵动岛** 或通过 **系统托盘** 打开专注清单面板
+1. 通过 **系统托盘** 或全局快捷键 **Alt+Space** 打开专注清单面板（待机与专注状态下灵动岛为鼠标穿透，点击不会响应，只有计时结束的通知横幅可点击）
 2. 添加任务，点击任务开始专注（默认 25 分钟）
 3. 计时结束后自动进入休息（默认 5 分钟）
 
@@ -143,4 +140,6 @@ Thanks for the support and feedback from the friends at [LINUX DO](https://linux
 ## 📄 License
 
 Apache License 2.0
+
+本项目基于 [ipfred/focus-island](https://github.com/ipfred/focus-island) 二次开发，已移除原项目的电台音频、自动更新等模块，仅保留番茄计时、任务清单、备忘录与成就统计等核心功能。原始版权归原作者所有，二次开发部分同样以 Apache License 2.0 发布。
 

@@ -8,7 +8,7 @@ const emit = defineEmits<{ close: [] }>()
 const appName = ref('专注岛')
 const appVersion = ref('')
 
-const githubUrl = 'https://github.com/ipfred/focus-island'
+const githubUrl = 'https://github.com/Ava051213/focus-island'
 import appIcon from '../../src-tauri/icons/128x128.png'
 
 onMounted(async () => {
