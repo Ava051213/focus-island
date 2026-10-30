@@ -12,12 +12,14 @@ import { useTaskGroups } from '../composables/useTaskGroups'
 import { useMemos } from '../composables/useMemos'
 import { useDailyStats } from '../composables/useDailyStats'
 import { useAchievements } from '../composables/useAchievements'
+import { startAiButler, useAiButler } from '../composables/useAiButler'
 import TodoPage from './TodoPage.vue'
 import TaskArea from './TaskArea.vue'
 import TaskDetailPage from './TaskDetailPage.vue'
 import SettingsPage from './SettingsPage.vue'
 import MemoPage from './MemoPage.vue'
 import StatsPage from './StatsPage.vue'
+import AiButlerPage from './AiButlerPage.vue'
 import PanelTitleBar from './PanelTitleBar.vue'
 
 interface PanelTransitionMetrics {
@@ -34,7 +36,6 @@ interface PanelTransitionMetrics {
 const { startBridge } = useTimerBridge()
 useSettings()
 useShortcut()
-
 function prewarmPanelData() {
   useTasks()
   useTaskGroups()
@@ -50,13 +51,16 @@ const PANEL_CLOSE_DURATION = 240
 const CLOSE_FALLBACK_BUFFER = 140
 const IS_MACOS = navigator.userAgent.toLowerCase().includes('mac')
 
-const currentView = ref<'tasks' | 'todo' | 'taskDetail' | 'settings' | 'memos' | 'stats'>('tasks')
+const { hasUnread, markSeen: markButlerSeen } = useAiButler()
+startAiButler()
+
+const currentView = ref<'tasks' | 'todo' | 'taskDetail' | 'settings' | 'memos' | 'stats' | 'ai'>('tasks')
 const taskIdForDetail = ref<string>('')
 const todoInitialTab = ref<string | undefined>(undefined)
 const todoSearchQuery = ref('')
 const memoSearchQuery = ref('')
 const todoActiveTabLabel = ref('')
-const cachedPanelViews = ['TaskArea', 'TodoPage', 'SettingsPage', 'MemoPage', 'StatsPage']
+const cachedPanelViews = ['TaskArea', 'TodoPage', 'SettingsPage', 'MemoPage', 'StatsPage', 'AiButlerPage']
 
 function navigateToTodo(tab?: string) {
   todoInitialTab.value = tab
@@ -69,6 +73,9 @@ watch(currentView, (v) => {
   }
   if (v !== 'memos') {
     memoSearchQuery.value = ''
+  }
+  if (v === 'ai') {
+    markButlerSeen()
   }
 })
 
@@ -90,6 +97,15 @@ const navItems = [
     label: '备忘',
     title: '备忘录',
     iconPaths: ['M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z', 'M14 2v6h6', 'M9 13h6', 'M9 17h6', 'M9 9h1'],
+  },
+  {
+    key: 'ai',
+    label: '管家',
+    title: 'AI 管家',
+    iconPaths: [
+      'M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z',
+      'M18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2z',
+    ],
   },
   {
     key: 'stats',
@@ -348,6 +364,7 @@ async function closeWindow() {
           <SettingsPage v-else-if="currentView === 'settings'" @back="currentView = 'tasks'" />
           <MemoPage v-else-if="currentView === 'memos'" :search-query="memoSearchQuery" @back="currentView = 'tasks'" />
           <StatsPage v-else-if="currentView === 'stats'" @back="currentView = 'tasks'" />
+          <AiButlerPage v-else-if="currentView === 'ai'" @back="currentView = 'tasks'" />
         </KeepAlive>
       </div>
       <nav class="panel-nav">
@@ -366,6 +383,7 @@ async function closeWindow() {
                 :d="path"
               />
             </svg>
+            <span v-if="item.key === 'ai' && hasUnread" class="nav-dot" />
           </span>
           <span class="nav-label">{{ item.label }}</span>
         </button>
@@ -598,6 +616,17 @@ async function closeWindow() {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  position: relative;
+}
+
+.nav-dot {
+  position: absolute;
+  top: -3px;
+  right: -4px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--focus-color);
 }
 
 .nav-icon svg {

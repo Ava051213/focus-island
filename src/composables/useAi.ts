@@ -11,6 +11,13 @@ export interface PlanTaskInput {
   pomodoros: number
 }
 
+export interface CoachContext {
+  tasks: PlanTaskInput[]
+  memos: Array<{ title: string; content: string; updatedAt: number }>
+  todayPomodoros: number
+  completedToday: number
+}
+
 function stripCodeFence(text: string): string {
   return text.replace(/^```(?:json)?/i, '').replace(/```$/, '').trim()
 }
@@ -32,6 +39,25 @@ function parseTaskList(text: string): string[] {
     .map(line => line.replace(/^[\s\-*•\d.、]+/, '').trim())
     .filter(line => line.length > 0)
   return lines.slice(0, 6)
+}
+
+function parseNameList(text: string): string[] {
+  const raw = stripCodeFence(text)
+  try {
+    const data = JSON.parse(raw)
+    const list = Array.isArray(data?.names) ? data.names : []
+    const result = list
+      .map((item: unknown) => String(item ?? '').trim())
+      .filter((item: string) => item.length > 0)
+    if (result.length > 0) return result.slice(0, 3)
+  } catch {
+    // 解析失败时退化为按行拆分
+  }
+  const lines = raw
+    .split('\n')
+    .map(line => line.replace(/^[\s\-*•\d.、]+/, '').trim())
+    .filter(line => line.length > 0)
+  return lines.slice(0, 3)
 }
 
 export function useAi() {
@@ -118,5 +144,30 @@ export function useAi() {
     return chat(system, plain.slice(0, 2000), 0.2)
   }
 
-  return { configured, breakdownGoal, suggestToday, summarizeMemo }
+  async function coachToday(ctx: CoachContext): Promise<string> {
+    return chat(
+      '你是专注小管家。根据用户今天随手记的计划、待办任务和已完成的番茄，给出接下来最值得做的事。要求：最多 3 条，总字数不超过 100 字，直接给动作，不要重复原文，不要输出标题或前言。',
+      JSON.stringify(ctx),
+      0.4,
+    )
+  }
+
+  async function evaluatePlan(plan: string, extra: string, tasks: PlanTaskInput[]): Promise<string> {
+    return chat(
+      '你是计划评估助手。先指出计划里最明显的风险或遗漏（2-3 条），再给出一份按天或按时段的粗略安排。输出分两段：「评估」和「安排」，总字数不超过 400，不要输出多余内容。',
+      JSON.stringify({ plan: plan.slice(0, 2000), extra: extra.slice(0, 500), tasks }),
+      0.5,
+    )
+  }
+
+  async function suggestTaskNames(idea: string): Promise<string[]> {
+    const text = await chat(
+      '你是任务命名助手。把用户粗糙的想法改写成规范的待办标题：动词开头、不超过 16 个字、不加语气词和编号。给出 3 个候选。只输出 JSON：{"names":["候选1","候选2","候选3"]}',
+      idea.slice(0, 200),
+      0.4,
+    )
+    return parseNameList(text)
+  }
+
+  return { configured, breakdownGoal, suggestToday, summarizeMemo, coachToday, evaluatePlan, suggestTaskNames }
 }

@@ -30,6 +30,7 @@ export interface Settings {
   autoLaunch: boolean       // 开机自动启动
   aiApiKey: string          // 智谱开放平台 API Key（仅存本机）
   aiModel: string           // 使用的模型名
+  aiAutoEnabled: boolean    // 是否允许后台自动生成管家建议
 }
 
 export const presetThemes: ThemePreset[] = [
@@ -55,6 +56,7 @@ const DEFAULT_SETTINGS: Settings = {
   autoLaunch: true,
   aiApiKey: '',
   aiModel: 'glm-4.7-flash',
+  aiAutoEnabled: true,
 }
 
 const settings = ref<Settings>({ ...DEFAULT_SETTINGS })

@@ -239,6 +239,16 @@ onUnmounted(() => {
           spellcheck="false"
         />
       </div>
+      <div class="update-toggle-row" style="margin-top: 10px;">
+        <div class="update-copy">
+          <span class="update-label">后台自动建议</span>
+          <span class="update-hint">任务或备忘变化后自动生成，最多每 10 分钟一次</span>
+        </div>
+        <label class="switch" aria-label="后台自动建议">
+          <input v-model="settings.aiAutoEnabled" type="checkbox" />
+          <span class="switch-track"></span>
+        </label>
+      </div>
       <p class="ai-hint">用于目标拆解、今日专注建议与备忘整理。Key 仅保存在本机的 settings.json。</p>
     </div>
 
