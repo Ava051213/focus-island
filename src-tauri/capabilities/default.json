@@ -12,6 +12,12 @@
     "fs:allow-appdata-read-recursive",
     "fs:allow-appdata-write-recursive",
     "shell:default",
+    {
+      "identifier": "http:default",
+      "allow": [
+        { "url": "https://open.bigmodel.cn/*" }
+      ]
+    },
     "clipboard-manager:default",
     "clipboard-manager:allow-read-text",
     "clipboard-manager:allow-write-text",

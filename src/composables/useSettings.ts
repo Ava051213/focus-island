@@ -28,6 +28,8 @@ export interface Settings {
   shortcutKey: string        // 全局快捷键，如 "Alt+Space"
   notificationSound: boolean // 通知提示音开关
   autoLaunch: boolean       // 开机自动启动
+  aiApiKey: string          // 智谱开放平台 API Key（仅存本机）
+  aiModel: string           // 使用的模型名
 }
 
 export const presetThemes: ThemePreset[] = [
@@ -51,6 +53,8 @@ const DEFAULT_SETTINGS: Settings = {
   shortcutKey: 'Ctrl+Alt+Space',
   notificationSound: true,
   autoLaunch: true,
+  aiApiKey: '',
+  aiModel: 'glm-4.7-flash',
 }
 
 const settings = ref<Settings>({ ...DEFAULT_SETTINGS })

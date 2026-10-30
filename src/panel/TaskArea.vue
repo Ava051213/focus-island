@@ -4,6 +4,7 @@ import { useTasks, type Task } from '../composables/useTasks'
 import { useTimerBridge } from '../composables/useTimerBridge'
 import { useTaskGroups } from '../composables/useTaskGroups'
 import { getCategoryColor } from '../composables/useMemos'
+import AiDialog from './AiDialog.vue'
 
 const emit = defineEmits<{ close: []; navigateToTodo: [tab?: string] }>()
 
@@ -34,6 +35,21 @@ const {
 // --- Quick-add state ---
 const newTitle = ref('')
 const quickAddRef = ref<HTMLInputElement | null>(null)
+const aiMode = ref<'breakdown' | 'plan' | null>(null)
+const aiGoal = ref('')
+
+function openBreakdown() {
+  aiGoal.value = newTitle.value.trim()
+  aiMode.value = 'breakdown'
+}
+
+function handleAiAdd({ titles, target }: { titles: string[]; target: 'today' | 'inbox' }) {
+  for (const title of titles) {
+    addTask(title, target === 'today' ? undefined : null)
+  }
+  aiMode.value = null
+  newTitle.value = ''
+}
 
 // --- Title scroll animation ---
 type ScrollPhase = 'start' | 'scroll' | 'end'
@@ -151,13 +167,21 @@ function handleDoneTask(taskId: string) {
   <div class="home-page">
     <!-- Zone 1: Quick-add -->
     <div class="quick-add-zone">
-      <input
-        ref="quickAddRef"
-        v-model="newTitle"
-        class="quick-add-input"
-        placeholder="接下来专注做什么... (Shift+Enter 闪电开始)"
-        @keydown="handleInput"
-      />
+      <div class="quick-add-row">
+        <input
+          ref="quickAddRef"
+          v-model="newTitle"
+          class="quick-add-input"
+          placeholder="接下来专注做什么... (Shift+Enter 闪电开始)"
+          @keydown="handleInput"
+        />
+        <button class="ai-spark-btn" title="AI 拆解目标" @click="openBreakdown">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z"/>
+            <path d="M18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2z"/>
+          </svg>
+        </button>
+      </div>
     </div>
 
     <!-- Zone 2: Focus Queue (Recent 3) -->
@@ -247,7 +271,10 @@ function handleDoneTask(taskId: string) {
 
     <!-- Zone 4: Task cards -->
     <div class="cards-zone">
-      <div class="zone-header">任务清单</div>
+      <div class="zone-header zone-header-row">
+        <span>任务清单</span>
+        <button class="ai-link" @click="aiMode = 'plan'">AI 建议</button>
+      </div>
       <div class="card-grid">
         <button class="task-card" @click="emit('navigateToTodo', 'today')">
           <span class="card-icon today-icon">
@@ -299,6 +326,14 @@ function handleDoneTask(taskId: string) {
         </button>
       </div>
     </div>
+
+    <AiDialog
+      v-if="aiMode"
+      :mode="aiMode"
+      :initial-text="aiGoal"
+      @close="aiMode = null"
+      @add-tasks="handleAiAdd"
+    />
   </div>
 </template>
 
@@ -333,7 +368,58 @@ function handleDoneTask(taskId: string) {
   flex-shrink: 0;
 }
 
+.quick-add-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ai-spark-btn {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.55);
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s, background 0.2s;
+}
+
+.ai-spark-btn:hover {
+  color: var(--focus-color);
+  border-color: color-mix(in srgb, var(--focus-color) 45%, transparent);
+  background: color-mix(in srgb, var(--focus-color) 12%, transparent);
+}
+
+.zone-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ai-link {
+  margin-bottom: 6px;
+  padding: 0;
+  font-size: 11px;
+  font-family: inherit;
+  color: rgba(255, 255, 255, 0.4);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.ai-link:hover {
+  color: var(--focus-color);
+}
+
 .quick-add-input {
+  flex: 1;
+  min-width: 0;
   width: 100%;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.09);

@@ -215,6 +215,33 @@ onUnmounted(() => {
       </div>
     </div>
 
+    <!-- AI 助手 -->
+    <div class="settings-section">
+      <div class="section-title">AI 助手</div>
+      <div class="ai-field">
+        <span class="ai-label">API Key</span>
+        <input
+          v-model="settings.aiApiKey"
+          class="ai-input"
+          type="password"
+          placeholder="智谱开放平台 API Key"
+          autocomplete="off"
+          spellcheck="false"
+        />
+      </div>
+      <div class="ai-field">
+        <span class="ai-label">模型</span>
+        <input
+          v-model="settings.aiModel"
+          class="ai-input"
+          type="text"
+          placeholder="glm-4.7-flash"
+          spellcheck="false"
+        />
+      </div>
+      <p class="ai-hint">用于目标拆解、今日专注建议与备忘整理。Key 仅保存在本机的 settings.json。</p>
+    </div>
+
     <!-- 外观 -->
     <div class="settings-section">
       <div class="section-title">外观</div>
@@ -375,6 +402,45 @@ onUnmounted(() => {
 .settings-section {
   padding: 10px 14px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.ai-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.ai-label {
+  flex-shrink: 0;
+  width: 56px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.ai-input {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  padding: 0 9px;
+  font-size: 12px;
+  font-family: inherit;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  outline: none;
+}
+
+.ai-input:focus {
+  border-color: color-mix(in srgb, var(--focus-color) 55%, transparent);
+}
+
+.ai-hint {
+  margin: 8px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.35);
 }
 
 .section-title {

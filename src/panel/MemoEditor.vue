@@ -3,6 +3,7 @@ import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { readText } from '@tauri-apps/plugin-clipboard-manager'
 import type { Memo, MemoCategory } from '../composables/useMemos'
 import MemoCategoryDropdown from './MemoCategoryDropdown.vue'
+import AiDialog from './AiDialog.vue'
 import { sanitizeHtml } from '../utils/sanitizeHtml'
 
 const props = defineProps<{
@@ -22,6 +23,8 @@ const localContent = ref(props.memo.content)
 const localCategoryId = ref(props.memo.categoryId)
 const localIsPinned = ref(props.memo.isPinned)
 const saveStatus = ref<'saved' | 'saving' | 'unsaved'>('saved')
+const showAi = ref(false)
+const memoAiText = ref('')
 const editorRef = ref<HTMLDivElement | null>(null)
 const titleInputRef = ref<HTMLInputElement | null>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
@@ -380,6 +383,22 @@ function onContentChange() {
     localContent.value = editorRef.value.innerHTML
   }
   scheduleSave()
+}
+
+// AI 整理：把编辑器纯文本交给 AI，结果插入光标处
+function openMemoAi() {
+  memoAiText.value = editorRef.value?.innerText ?? ''
+  showAi.value = true
+}
+
+function escapeAiHtml(text: string) {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+function insertAiText(text: string) {
+  const html = text.split('\n').map(line => escapeAiHtml(line)).join('<br>')
+  execCommand('insertHTML', html)
+  showAi.value = false
 }
 
 // Handle paste - support text, HTML, and images (screenshots)
@@ -794,6 +813,15 @@ function formatUpdateTime(timestamp: number): string {
           <polyline points="21 15 16 10 5 21"/>
         </svg>
       </button>
+
+      <div class="toolbar-divider"></div>
+
+      <button class="toolbar-btn" @click="openMemoAi" title="AI 整理">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z"/>
+          <path d="M18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2z"/>
+        </svg>
+      </button>
     </div>
 
     <!-- Editor Content -->
@@ -872,6 +900,14 @@ function formatUpdateTime(timestamp: number): string {
         </button>
       </div>
     </div>
+
+    <AiDialog
+      v-if="showAi"
+      mode="memo"
+      :memo-content="memoAiText"
+      @close="showAi = false"
+      @insert="insertAiText"
+    />
   </div>
 </template>
 
