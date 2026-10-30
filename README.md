@@ -107,7 +107,7 @@ xattr -cr /Applications/专注岛.app
 
 ### AI 助手（可选）
 
-在「设置 → AI 助手」填写智谱开放平台 API Key 后启用，默认模型 `glm-4.7-flash`。Key 仅保存在本机的 `settings.json`。
+在「设置 → AI 助手」填写智谱开放平台 API Key 后启用，默认模型 `glm-4.7-flash`（[模型说明](https://docs.bigmodel.cn/cn/guide/models/free/glm-4.7-flash)，免费）。Key 仅保存在本机的 `settings.json`。
 
 - **目标拆解**：首页输入框右侧的星形按钮，把一句目标拆成 3~6 条任务，预览后可加入今天或收件箱
 - **今日建议**：首页「任务清单」标题右侧的「AI 建议」，根据待办、优先级和今日番茄给出先做什么

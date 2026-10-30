@@ -58,6 +58,9 @@ export function useAi() {
             { role: 'system', content: system },
             { role: 'user', content: user },
           ],
+          // 任务都很短，关闭深度思考以减少等待；限制输出避免失控
+          thinking: { type: 'disabled' },
+          max_tokens: 1024,
           temperature,
           stream: false,
         }),
