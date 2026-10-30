@@ -1,30 +1,39 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useAiButler } from '../composables/useAiButler'
+import { useAi } from '../composables/useAi'
+import { useMemos } from '../composables/useMemos'
 import { useTasks } from '../composables/useTasks'
 
 const emit = defineEmits<{ back: [] }>()
 
-const { addTask } = useTasks()
+const { addTask, activeTasks } = useTasks()
+const { addMemo, updateMemo } = useMemos()
+const { generatePlan } = useAi()
+
 const {
   insights,
   coachInsight,
-  reviewInsight,
   configured,
   autoEnabled,
   markSeen,
   refreshCoach,
-  reviewPlan,
   nameIdeas,
 } = useAiButler()
 
 const coachLoading = ref(false)
 const coachError = ref('')
 
-const planText = ref('')
+const planPrompt = ref('')
 const planExtra = ref('')
 const planLoading = ref(false)
 const planError = ref('')
+const planMessage = ref('')
+const planGenerated = ref(false)
+const planTasks = ref<string[]>([])
+const planSelected = ref<boolean[]>([])
+const memoTitle = ref('')
+const memoContent = ref('')
 
 const idea = ref('')
 const names = ref<string[]>([])
@@ -58,21 +67,77 @@ async function handleRefreshCoach() {
 
 async function handleReviewPlan() {
   if (planLoading.value) return
-  const plan = planText.value.trim()
-  if (!plan) {
-    planError.value = '先粘贴或写下你的计划'
+  const prompt = planPrompt.value.trim()
+  if (!prompt) {
+    planError.value = '先描述你想做的事'
     return
   }
   planError.value = ''
+  planMessage.value = ''
   planLoading.value = true
   try {
-    await reviewPlan(plan, planExtra.value.trim())
-    markSeen()
+    const tasks = activeTasks.value.slice(0, 12).map(task => ({
+      title: task.title,
+      dueDate: task.dueDate ?? null,
+      priority: task.priority ?? 0,
+      pomodoros: task.pomodoroCount ?? 0,
+    }))
+    const result = await generatePlan(prompt, planExtra.value.trim(), tasks)
+    planTasks.value = result.tasks
+    planSelected.value = result.tasks.map(() => true)
+    memoTitle.value = result.memoTitle
+    memoContent.value = result.memoContent
+    planGenerated.value = true
+    if (result.tasks.length === 0 && result.memoContent.length === 0) {
+      planError.value = '没有生成内容，换个说法再试'
+    }
   } catch (e) {
     planError.value = e instanceof Error ? e.message : String(e)
   } finally {
     planLoading.value = false
   }
+}
+
+function escapeHtml(text: string) {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+async function refreshQuietly() {
+  try {
+    await refreshCoach()
+    markSeen()
+  } catch {
+    // 忽略自动刷新失败
+  }
+}
+
+function writePlanTasks() {
+  const selected = planTasks.value.filter((_, index) => planSelected.value[index])
+  if (selected.length === 0) {
+    planMessage.value = '没有勾选任务'
+    return
+  }
+  for (const title of selected) addTask(title, null)
+  planTasks.value = []
+  planSelected.value = []
+  planMessage.value = `已写入 ${selected.length} 个任务到「想做」`
+  void refreshQuietly()
+}
+
+function writePlanMemo() {
+  const body = memoContent.value.trim()
+  if (!body) {
+    planMessage.value = '备忘内容为空'
+    return
+  }
+  const title = memoTitle.value.trim() || '计划草稿'
+  const memo = addMemo()
+  updateMemo(memo.id, {
+    title,
+    content: escapeHtml(body).split('\n').join('<br>'),
+  })
+  planMessage.value = '已保存到备忘录'
+  void refreshQuietly()
 }
 
 async function handleNameIdeas() {
@@ -131,24 +196,43 @@ function useName(name: string) {
 
     <section class="card">
       <div class="card-head">
-        <span class="card-title">计划评估</span>
+        <span class="card-title">AI 规划</span>
       </div>
       <textarea
-        v-model="planText"
+        v-model="planPrompt"
         class="textarea"
-        rows="4"
-        placeholder="粘贴你的计划，例如：一周内完成 Redis 基础和项目重构，每天可投入 3 小时"
+        rows="3"
+        placeholder="描述你想做的事，例如：这周把 Redis 基础过完，再推进项目重构"
       ></textarea>
       <textarea
         v-model="planExtra"
         class="textarea small"
         rows="2"
-        placeholder="补充说明（可选）：硬性截止日、每天可投入时长、不能动的安排"
+        placeholder="补充（可选）：每天能投入多久、硬性截止、不能动的安排"
       ></textarea>
       <button class="primary-btn" :disabled="!configured || planLoading" @click="handleReviewPlan">
-        {{ planLoading ? '评估中…' : '评估并给出粗略安排' }}
+        {{ planLoading ? '生成中…' : '生成任务与备忘' }}
       </button>
-      <pre v-if="reviewInsight" class="result">{{ reviewInsight.content }}</pre>
+
+      <div v-if="planTasks.length > 0" class="plan-list">
+        <label v-for="(task, index) in planTasks" :key="index" class="plan-row">
+          <input type="checkbox" :checked="planSelected[index]" @change="planSelected[index] = !planSelected[index]" />
+          <span>{{ task }}</span>
+        </label>
+      </div>
+
+      <template v-if="planGenerated">
+        <input v-model="memoTitle" class="input" placeholder="备忘标题" />
+        <textarea v-model="memoContent" class="textarea" rows="5" placeholder="备忘内容"></textarea>
+        <div class="plan-actions">
+          <button class="small-btn" :disabled="planLoading" @click="writePlanMemo">保存备忘</button>
+          <button class="primary-btn compact" :disabled="planLoading || planTasks.length === 0" @click="writePlanTasks">
+            写入想做
+          </button>
+        </div>
+        <p v-if="planMessage" class="meta">{{ planMessage }}</p>
+      </template>
+
       <p v-if="planError" class="error">{{ planError }}</p>
     </section>
 
@@ -375,6 +459,39 @@ function useName(name: string) {
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 8px;
+}
+
+.plan-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.plan-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 7px 9px;
+  font-size: 12px;
+  line-height: 1.5;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.plan-row input {
+  margin-top: 2px;
+  accent-color: var(--focus-color);
+}
+
+.plan-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.primary-btn.compact {
+  padding: 0 12px;
 }
 
 .name-row {

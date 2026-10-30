@@ -18,6 +18,12 @@ export interface CoachContext {
   completedToday: number
 }
 
+export interface PlanArtifacts {
+  tasks: string[]
+  memoTitle: string
+  memoContent: string
+}
+
 function stripCodeFence(text: string): string {
   return text.replace(/^```(?:json)?/i, '').replace(/```$/, '').trim()
 }
@@ -65,7 +71,12 @@ export function useAi() {
 
   const configured = computed(() => settings.value.aiApiKey.trim().length > 0)
 
-  async function chat(system: string, user: string, temperature = 0.3): Promise<string> {
+  async function chat(
+    system: string,
+    user: string,
+    temperature = 0.3,
+    options: { thinking?: boolean; maxTokens?: number } = {},
+  ): Promise<string> {
     const key = settings.value.aiApiKey.trim()
     if (!key) throw new Error('请先在「设置 → AI 助手」中填写 API Key')
     const model = settings.value.aiModel.trim() || 'glm-4.7-flash'
@@ -84,9 +95,9 @@ export function useAi() {
             { role: 'system', content: system },
             { role: 'user', content: user },
           ],
-          // 任务都很短，关闭深度思考以减少等待；限制输出避免失控
-          thinking: { type: 'disabled' },
-          max_tokens: 1024,
+          // 短任务默认关闭深度思考以减少等待；复杂规划单独开启
+          thinking: { type: options.thinking ? 'enabled' : 'disabled' },
+          max_tokens: options.maxTokens ?? 1024,
           temperature,
           stream: false,
         }),
@@ -169,5 +180,30 @@ export function useAi() {
     return parseNameList(text)
   }
 
-  return { configured, breakdownGoal, suggestToday, summarizeMemo, coachToday, evaluatePlan, suggestTaskNames }
+  async function generatePlan(prompt: string, extra: string, tasks: PlanTaskInput[]): Promise<PlanArtifacts> {
+    const text = await chat(
+      '你是计划助手。把用户的想法整理成可执行的待办任务和一份简短备忘。只输出 JSON：{"tasks":["任务1","任务2"],"memo":{"title":"标题","content":"正文"}}。任务 3~8 条，动词开头，每条不超过 18 个字；备忘标题不超过 12 个字，正文用短行列出关键安排。不要编造用户没提过的事实。',
+      JSON.stringify({ idea: prompt.slice(0, 1500), extra: extra.slice(0, 300), existingTasks: tasks }),
+      0.5,
+      { thinking: true, maxTokens: 2048 },
+    )
+    const raw = stripCodeFence(text)
+    try {
+      const data = JSON.parse(raw)
+      const taskList = Array.isArray(data?.tasks)
+        ? data.tasks.map((t: unknown) => String(t ?? '').trim()).filter(Boolean).slice(0, 8)
+        : []
+      const memo = data?.memo ?? {}
+      const memoTitle = String(memo.title ?? '').trim() || '计划草稿'
+      const memoContent = String(memo.content ?? '').trim()
+      if (taskList.length > 0 || memoContent.length > 0) {
+        return { tasks: taskList, memoTitle, memoContent }
+      }
+    } catch {
+      // 解析失败时按纯文本兜底
+    }
+    return { tasks: parseTaskList(text), memoTitle: '计划草稿', memoContent: raw }
+  }
+
+  return { configured, breakdownGoal, suggestToday, summarizeMemo, coachToday, evaluatePlan, suggestTaskNames, generatePlan }
 }
