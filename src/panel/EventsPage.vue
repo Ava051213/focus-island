@@ -200,16 +200,16 @@ function removeEvent() {
       <input
         v-model="draft"
         class="quick-input"
-        placeholder="记一件事，回车整理成日程"
+        placeholder="想到什么事？回车就帮你整理成日程呀～"
         @keydown.enter="submitDraft"
       />
 
-      <div v-if="aiLoading" class="ai-hint">正在整理…</div>
+      <div v-if="aiLoading" class="ai-hint">小管家正在整理…</div>
 
       <div v-else-if="preview" class="ai-preview">
         <div class="preview-head">
-          <span>将创建这条日程</span>
-          <span class="source-tag">{{ preview.source === 'ai' ? 'AI 整理' : '本地规则' }}</span>
+          <span>要记成这条喔</span>
+          <span class="source-tag">{{ preview.source === 'ai' ? '小管家整理的' : '我自己理的' }}</span>
         </div>
         <div class="preview-title">{{ preview.title }}</div>
         <div class="preview-meta">
@@ -224,17 +224,17 @@ function removeEvent() {
       </div>
 
       <span v-else-if="parseHint" class="quick-hint">
-        {{ looksLikeSentence ? '回车整理成一条日程，预计：' : '' }}{{ parseHint }}
+        {{ looksLikeSentence ? '回车就帮你整理好，大概是这样：' : '' }}{{ parseHint }}
       </span>
     </div>
 
     <div class="event-list">
       <div v-if="upcoming.length === 0 && overdue.length === 0" class="empty-state">
-        还没有排期的事。想记一件未来会发生的事，直接在上面打一行。
+        还没有约定呢～想到以后要做的事，就在上面写一句嘛
       </div>
 
       <template v-if="upcoming.length > 0">
-        <div class="section-label">接下来</div>
+        <div class="section-label">这几天的约定</div>
         <EventCard
           v-for="event in upcoming"
           :key="event.id"
@@ -245,7 +245,7 @@ function removeEvent() {
       </template>
 
       <template v-if="overdue.length > 0">
-        <div class="section-label">已过期</div>
+        <div class="section-label">已经过时啦</div>
         <EventCard
           v-for="event in overdue"
           :key="event.id"
@@ -257,7 +257,7 @@ function removeEvent() {
 
       <template v-if="handledEvents.length > 0">
         <button class="handled-toggle" @click="showHandled = !showHandled">
-          {{ showHandled ? '收起' : '查看' }}已处理（{{ handledEvents.length }}）
+          {{ showHandled ? '收起来' : '看看处理过的' }}（{{ handledEvents.length }}）
         </button>
         <template v-if="showHandled">
           <EventCard
@@ -274,14 +274,14 @@ function removeEvent() {
     <teleport to=".panel-inner">
       <div v-if="editing" class="editor-mask" @click.self="editing = null">
         <div class="editor-card" @click.stop>
-          <input v-model="form.title" class="editor-title" placeholder="事件名称" />
+          <input v-model="form.title" class="editor-title" placeholder="要做的事" />
 
           <div class="editor-row">
             <input v-model="form.date" type="date" class="editor-input" />
             <input v-model="form.time" type="time" class="editor-input" />
           </div>
 
-          <textarea v-model="form.note" class="editor-note" placeholder="描述（可选）" rows="3"></textarea>
+          <textarea v-model="form.note" class="editor-note" placeholder="补充两句（可选）" rows="3"></textarea>
 
           <div class="editor-tags">
             <button
@@ -297,10 +297,10 @@ function removeEvent() {
           </div>
 
           <div class="editor-actions">
-            <button class="btn danger" @click="removeEvent">删除</button>
+            <button class="btn danger" @click="removeEvent">不要了</button>
             <div class="spacer"></div>
-            <button class="btn" @click="editing = null">取消</button>
-            <button class="btn primary" @click="saveEditor">保存</button>
+            <button class="btn" @click="editing = null">算了</button>
+            <button class="btn primary" @click="saveEditor">记下来</button>
           </div>
         </div>
       </div>

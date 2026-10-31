@@ -74,8 +74,8 @@ watch(currentView, (v) => {
 const navItems = [
   {
     key: 'tasks',
-    label: '首页',
-    title: '首页',
+    label: '今天',
+    title: '今天',
     iconPaths: ['M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z', 'M9 22V12h6v10'],
   },
   {
@@ -91,14 +91,14 @@ const navItems = [
   },
   {
     key: 'memos',
-    label: '备忘',
-    title: '备忘录',
+    label: '小记',
+    title: '小记',
     iconPaths: ['M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z', 'M14 2v6h6', 'M9 13h6', 'M9 17h6', 'M9 9h1'],
   },
   {
     key: 'ai',
-    label: '管家',
-    title: 'AI 管家',
+    label: '小管家',
+    title: '小管家',
     iconPaths: [
       'M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z',
       'M18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2z',
@@ -106,8 +106,8 @@ const navItems = [
   },
   {
     key: 'stats',
-    label: '统计',
-    title: '统计',
+    label: '记录',
+    title: '记录',
     iconPaths: ['M3 3v18h18', 'M8 16v-6', 'M13 16V8', 'M18 16v-3'],
   },
   {
@@ -418,7 +418,7 @@ async function closeWindow() {
         :icon-paths="[...currentTitleMeta.iconPaths]"
         :show-search="currentView === 'memos'"
         :search-query="memoSearchQuery"
-        :search-placeholder="'搜索备忘录...'"
+        :search-placeholder="'找找小记…'"
         @update:search-query="memoSearchQuery = $event"
         @close="closeWindow"
       />

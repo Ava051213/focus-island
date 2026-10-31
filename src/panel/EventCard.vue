@@ -42,7 +42,7 @@ const tag = computed(() => EVENT_TAGS.find(t => t.id === props.event.tag) ?? EVE
       class="event-check"
       :class="{ checked: event.handled }"
       @click.stop="emit('toggle')"
-      :title="event.handled ? '标记为未处理' : '标记为已处理'"
+      :title="event.handled ? '还没做完' : '做完啦'"
     >
       <svg v-if="event.handled" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>
     </button>

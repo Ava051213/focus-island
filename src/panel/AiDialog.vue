@@ -22,9 +22,9 @@ const { upcoming } = useEvents()
 const { todayStat } = useDailyStats()
 
 const titles = {
-  breakdown: 'AI 拆解目标',
-  plan: 'AI 今日建议',
-  memo: 'AI 整理备忘录',
+  breakdown: '陪你拆一拆',
+  plan: '今天先做点什么呀',
+  memo: '帮你理一理',
 } as const
 
 const title = computed(() => titles[props.mode])
@@ -53,13 +53,13 @@ async function generate() {
     if (props.mode === 'breakdown') {
       const goal = prompt.value.trim()
       if (!goal) {
-        error.value = '先输入一个目标，例如「准备下周的组会汇报」'
+        error.value = '先写一句想做的事嘛，比如「准备下周的组会汇报」'
         return
       }
       const existing = upcoming.value.map(event => event.title)
       const list = await breakdownGoal(goal, existing)
       if (list.length === 0) {
-        error.value = 'AI 没有返回可用的任务，请换个说法再试'
+        error.value = '这次没拆出来，换个说法再试试呀'
         return
       }
       resultTasks.value = list
@@ -72,7 +72,7 @@ async function generate() {
         pomodoros: 0,
       }))
       if (input.length === 0) {
-        error.value = '日程里还没有排期，先记几件事再让 AI 安排'
+        error.value = '日程还空空的，先记几件事再让我安排嘛'
         return
       }
       resultText.value = await suggestToday(input, todayStat.value?.pomodoros ?? 0)
@@ -105,7 +105,7 @@ async function copyResult() {
     copied.value = true
     window.setTimeout(() => { copied.value = false }, 1500)
   } catch {
-    error.value = '复制失败，请手动选择文本'
+    error.value = '没抄上呀，手动选一下好不好'
   }
 }
 
@@ -128,11 +128,11 @@ function onBackdropClick(event: MouseEvent) {
     <div class="ai-panel" @click.stop>
       <header class="ai-header">
         <span class="ai-title">{{ title }}</span>
-        <button class="ai-close" title="关闭" @click="emit('close')">✕</button>
+        <button class="ai-close" title="关了呀" @click="emit('close')">✕</button>
       </header>
 
       <div v-if="!configured" class="ai-empty">
-        还没有配置 API Key。请到「设置 → AI 助手」填写后再试。
+        我还没拿到钥匙呢～去「设置 → 小管家」填一下呀
       </div>
 
       <template v-else>
@@ -141,10 +141,10 @@ function onBackdropClick(event: MouseEvent) {
             v-model="prompt"
             class="ai-input"
             rows="2"
-            placeholder="输入一个目标，例如「准备下周的组会汇报」"
+            placeholder="想做什么呀？比如「准备下周的组会汇报」"
           ></textarea>
           <button class="ai-primary" :disabled="loading" @click="generate">
-            {{ loading ? '拆解中…' : (hasResult ? '重新拆解' : '开始拆解') }}
+            {{ loading ? '拆着呢…' : (hasResult ? '再拆一次' : '拆一拆') }}
           </button>
 
           <div v-if="resultTasks.length > 0" class="ai-list">
@@ -159,20 +159,20 @@ function onBackdropClick(event: MouseEvent) {
           </div>
 
           <div v-if="resultTasks.length > 0" class="ai-actions">
-            <button class="ai-ghost" @click="addTo('inbox')">加入收件箱</button>
-            <button class="ai-primary" @click="addTo('today')">加入今天（{{ selectedTitles.length }}）</button>
+            <button class="ai-ghost" @click="addTo('inbox')">先放一边</button>
+            <button class="ai-primary" @click="addTo('today')">放进今天（{{ selectedTitles.length }}）</button>
           </div>
         </div>
 
         <div v-else-if="mode === 'plan'" class="ai-body">
-          <p class="ai-desc">根据当前待办、优先级和今日已完成番茄，给出先做什么的建议。</p>
+          <p class="ai-desc">看看现在先做哪件最合适呀。</p>
           <button class="ai-primary" :disabled="loading" @click="generate">
-            {{ loading ? '思考中…' : (hasResult ? '重新生成' : '生成今日建议') }}
+            {{ loading ? '想着呢…' : (hasResult ? '再想一次' : '想想先做什么') }}
           </button>
           <pre v-if="resultText" class="ai-result">{{ resultText }}</pre>
           <div v-if="resultText" class="ai-actions">
-            <button class="ai-ghost" @click="copyResult">{{ copied ? '已复制' : '复制' }}</button>
-            <button class="ai-primary" @click="emit('close')">知道了</button>
+            <button class="ai-ghost" @click="copyResult">{{ copied ? '抄好啦' : '抄一份' }}</button>
+            <button class="ai-primary" @click="emit('close')">知道啦</button>
           </div>
         </div>
 
@@ -190,13 +190,13 @@ function onBackdropClick(event: MouseEvent) {
               :disabled="loading"
               @click="changeMemoStyle('summary')"
             >摘要</button>
-            <button class="ai-ghost" :disabled="loading" @click="generate">重新生成</button>
+            <button class="ai-ghost" :disabled="loading" @click="generate">再理一遍</button>
           </div>
           <pre v-if="resultText" class="ai-result">{{ resultText }}</pre>
-          <p v-else-if="!loading" class="ai-desc">选择「要点清单」或「摘要」后会自动生成结果。</p>
+          <p v-else-if="!loading" class="ai-desc">点「要点清单」或「摘要」，我就开始理啦～</p>
           <div v-if="resultText" class="ai-actions">
-            <button class="ai-ghost" @click="copyResult">{{ copied ? '已复制' : '复制' }}</button>
-            <button class="ai-primary" @click="insertResult">插入到光标处</button>
+            <button class="ai-ghost" @click="copyResult">{{ copied ? '抄好啦' : '抄一份' }}</button>
+            <button class="ai-primary" @click="insertResult">放进小记里</button>
           </div>
         </div>
 

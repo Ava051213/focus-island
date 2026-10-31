@@ -146,7 +146,7 @@ function canRunAuto(): boolean {
 async function generateCoach(): Promise<string> {
   const { coachToday } = useAi()
   const content = await coachToday(buildContext())
-  addInsight('coach', '今日管家', content)
+  addInsight('coach', '小管家说', content)
   return content
 }
 

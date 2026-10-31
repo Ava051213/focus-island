@@ -36,17 +36,17 @@ const extendColor = computed(() => isFocusDone.value ? '#e85d3a' : '#3a9e6e')
     >
       <div class="notif-icon">{{ isFocusDone ? '✅' : '⏰' }}</div>
       <div class="notif-text">
-        <div class="notif-title">{{ isFocusDone ? '完成了一个番茄' : '休息结束' }}</div>
-        <div class="notif-sub">{{ isFocusDone ? '休息一下吧' : '准备开启下一个番茄钟吗' }}</div>
+        <div class="notif-title">{{ isFocusDone ? '一颗番茄熟啦～' : '休息时间到啦～' }}</div>
+        <div class="notif-sub">{{ isFocusDone ? '歇一小会儿好不好呀' : '开始下一颗番茄嘛' }}</div>
       </div>
       <div class="notif-actions">
         <button class="notif-btn primary" @click="emit('confirm')">
-          {{ isFocusDone ? '休息' : '专注' }}
+          {{ isFocusDone ? '歇一下' : '专注嘛' }}
         </button>
         <button class="notif-btn extend" @click="emit('extend')">
-          {{ isFocusDone ? '专注' : '休息' }}
+          {{ isFocusDone ? '接着做' : '再歇歇' }}
         </button>
-        <button class="notif-btn dismiss" @click="emit('dismiss')">退出</button>
+        <button class="notif-btn dismiss" @click="emit('dismiss')">先不了</button>
       </div>
     </div>
   </transition>

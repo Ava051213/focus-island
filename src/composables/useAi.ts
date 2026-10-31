@@ -184,9 +184,9 @@ export function useAi() {
       })
     } catch {
       if (controller.signal.aborted) {
-        throw new Error(`${provider.label} 超过 ${Math.round(timeoutMs / 1000)} 秒未响应`)
+        throw new Error(`${provider.label} 那边超过 ${Math.round(timeoutMs / 1000)} 秒没回我呀`)
       }
-      throw new Error(`${provider.label} 连接失败，请检查网络或代理`)
+      throw new Error(`${provider.label} 连不上呀，看看网络或代理嘛`)
     } finally {
       clearTimeout(timer)
     }
@@ -201,15 +201,15 @@ export function useAi() {
         // 忽略解析失败
       }
       if (response.status === 402) {
-        throw new Error(`${provider.label} 账户余额不足（402），请先到平台充值${detail ? '：' + detail : ''}`)
+        throw new Error(`${provider.label} 那边说余额不够啦（402），先充一点点嘛${detail ? '：' + detail : ''}`)
       }
-      throw new Error(`${provider.label} 请求失败（${response.status}）${detail ? '：' + detail : ''}`)
+      throw new Error(`${provider.label} 没答应我（${response.status}）${detail ? '：' + detail : ''}`)
     }
 
     const data = await response.json()
     const content = data?.choices?.[0]?.message?.content
     if (typeof content !== 'string' || content.trim().length === 0) {
-      throw new Error(`${provider.label} 返回内容为空`)
+      throw new Error(`${provider.label} 这次什么都没写出来呀`)
     }
     return content.trim()
   }
@@ -222,7 +222,7 @@ export function useAi() {
     options: ChatOptions = {},
   ): Promise<string> {
     const providers = collectProviders()
-    if (providers.length === 0) throw new Error('请先在「设置 → AI 助手」中填写 API Key')
+    if (providers.length === 0) throw new Error('我还没拿到钥匙呢～去「设置 → 小管家」填一下 Key 呀')
 
     const failures: string[] = []
     for (const provider of providers) {
@@ -238,7 +238,7 @@ export function useAi() {
   /** 设置页的连通性测试，只看这一家的实际耗时，不走兜底 */
   async function testProvider(id: ProviderId): Promise<{ ok: boolean; ms: number; message: string }> {
     const provider = collectProviders().find(p => p.id === id)
-    if (!provider) return { ok: false, ms: 0, message: '未填写 Key' }
+    if (!provider) return { ok: false, ms: 0, message: '还没填 Key 呀' }
 
     const started = Date.now()
     try {
@@ -246,7 +246,7 @@ export function useAi() {
         maxTokens: 16,
         timeoutMs: 15000,
       })
-      return { ok: true, ms: Date.now() - started, message: '连接正常' }
+      return { ok: true, ms: Date.now() - started, message: '连上啦' }
     } catch (err) {
       return {
         ok: false,
@@ -278,7 +278,7 @@ export function useAi() {
 
   async function summarizeMemo(content: string, style: 'summary' | 'checklist'): Promise<string> {
     const plain = content.trim()
-    if (!plain) throw new Error('备忘录内容为空')
+    if (!plain) throw new Error('这条小记还空空的呀')
     const system = style === 'summary'
       ? '你是笔记整理助手。用中文把内容压缩成不超过 150 字的摘要，保留关键结论和数字，不要编造，不要输出标题。'
       : '你是笔记整理助手。把内容整理成要点清单，每行一条并以「• 」开头，保留原有事实和数字，不要编造，不要输出标题。'
@@ -287,7 +287,7 @@ export function useAi() {
 
   async function coachToday(ctx: CoachContext): Promise<string> {
     return chat(
-      '你是专注小管家。根据用户今天随手记的计划、待办任务和已完成的番茄，给出接下来最值得做的事。要求：最多 3 条，总字数不超过 100 字，直接给动作，不要重复原文，不要输出标题或前言。',
+      '你是专注小管家。根据用户今天随手记的计划、待办任务和已完成的番茄，给出接下来最值得做的事。要求：最多 3 条，总字数不超过 100 字，直接给动作，不要重复原文，不要输出标题或前言。语气轻轻软软的，可以带一点点撒娇，但别浮夸。',
       JSON.stringify(ctx),
       0.4,
     )
@@ -353,10 +353,10 @@ export function useAi() {
     try {
       data = JSON.parse(json) as Record<string, unknown>
     } catch {
-      throw new Error('AI 返回的内容无法解析，请重试')
+      throw new Error('它写乱啦，再试一次好不好～')
     }
     const title = String(data.title ?? '').trim()
-    if (!title) throw new Error('AI 没有提炼出事件名，请重试')
+    if (!title) throw new Error('这次没整理出名字，再试一次嘛')
     const rawAt = String(data.at ?? '').trim()
     const at = /^\d{4}-\d{2}-\d{2}/.test(rawAt) ? rawAt.slice(0, 16) : today
     const tag = String(data.tag ?? 'other')

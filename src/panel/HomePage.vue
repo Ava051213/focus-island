@@ -38,41 +38,41 @@ function startMemo(memo: Memo) {
 <template>
   <div class="home-page">
     <section class="zone">
-      <div class="zone-title">现在专注</div>
+      <div class="zone-title">现在陪你做</div>
 
       <div v-if="activeTaskId" class="running-card">
         <div class="running-main">
-          <span class="running-phase">{{ phase === 'focus' ? '专注中' : '休息中' }}</span>
-          <span class="running-title">{{ activeTaskTitle ?? '未命名' }}</span>
+          <span class="running-phase">{{ phase === 'focus' ? '陪你专注中' : '陪你歇着' }}</span>
+          <span class="running-title">{{ activeTaskTitle ?? '还没想好名字' }}</span>
         </div>
         <span class="running-time">{{ displayTime }}</span>
         <div class="running-actions">
           <button class="round-btn" @click="running ? pause() : resume()">
-            {{ running ? '暂停' : '继续' }}
+            {{ running ? '歇一下' : '继续呀' }}
           </button>
-          <button class="round-btn stop" @click="abandon()">停止</button>
+          <button class="round-btn stop" @click="abandon()">不做了</button>
         </div>
       </div>
 
       <div v-else-if="recentMemos.length > 0" class="memo-list">
         <div v-for="memo in recentMemos" :key="memo.id" class="memo-row">
           <span class="memo-title">{{ getDisplayTitle(memo) }}</span>
-          <button class="play-btn" @click="startMemo(memo)" title="开始一轮专注">
+          <button class="play-btn" @click="startMemo(memo)" title="陪我专注一会儿呀">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg>
           </button>
         </div>
-        <p class="memo-hint">点右边的播放键，就从这条备忘开始 25 分钟。</p>
+        <p class="memo-hint">戳右边的 ▶，我们就安静 25 分钟好不好～</p>
       </div>
 
       <div v-else class="empty">
-        还没有备忘。先去「备忘」随手记一条，回来就能从它开始专注。
+        还没有小记呢～先去「小记」随手写一条，回来我陪你开始呀
       </div>
     </section>
 
     <section class="zone">
       <div class="zone-title">
-        接下来
-        <button class="link-btn" @click="emit('navigateEvents')">全部 ›</button>
+        这几天要做的
+        <button class="link-btn" @click="emit('navigateEvents')">都看看 ›</button>
       </div>
 
       <div v-if="upcomingEvents.length > 0" class="event-list">
@@ -89,7 +89,7 @@ function startMemo(memo: Memo) {
       </div>
 
       <div v-else class="empty small">
-        未来七天没有排期的事。
+        这七天干干净净的，正好留给想做的事呀～
       </div>
     </section>
   </div>

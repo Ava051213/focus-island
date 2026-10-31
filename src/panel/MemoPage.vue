@@ -62,7 +62,7 @@ function formatTime(timestamp: number): string {
 // Extract plain text preview from HTML content
 function getContentPreview(content: string, maxLength: number = 40): string {
   const plainText = content.replace(/<[^>]+>/g, '').trim()
-  if (plainText.length === 0) return '无内容'
+  if (plainText.length === 0) return '还没写什么呢～'
   if (plainText.length <= maxLength) return plainText
   return plainText.slice(0, maxLength) + '...'
 }
@@ -196,21 +196,21 @@ function handleCloseCategoryDialog() {
             @new-category="handleManageCategories"
           />
           <!-- 条数显示 -->
-          <span class="memo-count-badge">{{ memoCount }} 条</span>
+          <span class="memo-count-badge">{{ memoCount }} 条小记</span>
           <!-- 分类设置 -->
-          <button class="header-icon-btn" @click="handleManageCategories" title="管理分类">
+          <button class="header-icon-btn" @click="handleManageCategories" title="整理一下分类">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="12" cy="12" r="3"/>
               <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l-.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
             </svg>
           </button>
           <!-- 新建 -->
-          <button class="header-new-btn" @click="handleNewMemo" title="新建备忘录">
+          <button class="header-new-btn" @click="handleNewMemo" title="写一条新的呀">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="12" y1="5" x2="12" y2="19"/>
               <line x1="5" y1="12" x2="19" y2="12"/>
             </svg>
-            <span>新建</span>
+            <span>写一条</span>
           </button>
         </div>
       </div>
@@ -229,7 +229,7 @@ function handleCloseCategoryDialog() {
             <button
               class="memo-play-btn"
               @click="(e) => handleStartFocus(memo, e)"
-              title="开始一轮专注"
+              title="陪我专注一会儿呀"
             >
               <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg>
             </button>
@@ -238,7 +238,7 @@ function handleCloseCategoryDialog() {
                 class="action-btn pin-btn"
                 :class="{ 'is-pinned': memo.isPinned }"
                 @click="(e) => handleTogglePin(memo, e)"
-                :title="memo.isPinned ? '取消置顶' : '置顶'"
+                :title="memo.isPinned ? '不用钉着了' : '钉在最上面'"
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none">
                   <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
@@ -247,7 +247,7 @@ function handleCloseCategoryDialog() {
               <button
                 class="action-btn delete-btn"
                 @click="(e) => handleDeleteMemo(memo, e)"
-                title="删除"
+                title="不要这条了"
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <polyline points="3 6 5 6 21 6"/>
@@ -270,13 +270,13 @@ function handleCloseCategoryDialog() {
             <line x1="21" y1="21" x2="16.65" y2="16.65"/>
           </svg>
           <div v-else class="empty-icon">📝</div>
-          <div class="empty-text">{{ searchQuery ? '没有匹配的备忘录' : '还没有备忘录' }}</div>
+          <div class="empty-text">{{ searchQuery ? '翻不到呀，换个词试试？' : '还没有小记呢' }}</div>
           <button v-if="!searchQuery" class="empty-action-btn" @click="handleNewMemo">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="12" y1="5" x2="12" y2="19"/>
               <line x1="5" y1="12" x2="19" y2="12"/>
             </svg>
-            新建一条
+            写一条嘛
           </button>
         </div>
       </div>
@@ -297,11 +297,11 @@ function handleCloseCategoryDialog() {
     <!-- Delete Confirmation Dialog -->
     <div v-if="showDeleteConfirm" class="delete-dialog-overlay" @click="cancelDeleteMemo">
       <div class="delete-dialog" @click.stop>
-        <div class="delete-dialog-title">🗑️ 删除备忘录</div>
-        <div class="delete-dialog-content">确定要删除这条备忘录吗？此操作无法撤销。</div>
+        <div class="delete-dialog-title">🗑️ 真的要丢掉这条小记吗</div>
+        <div class="delete-dialog-content">丢掉就捡不回来啦，再想想好不好～</div>
         <div class="delete-dialog-actions">
-          <button class="dialog-btn cancel-btn" @click="cancelDeleteMemo">取消</button>
-          <button class="dialog-btn confirm-btn" @click="confirmDeleteMemo">删除</button>
+          <button class="dialog-btn cancel-btn" @click="cancelDeleteMemo">再想想</button>
+          <button class="dialog-btn confirm-btn" @click="confirmDeleteMemo">丢掉吧</button>
         </div>
       </div>
     </div>

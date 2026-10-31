@@ -686,7 +686,7 @@ function formatUpdateTime(timestamp: number): string {
   <div class="memo-editor">
     <!-- Top Bar -->
     <div class="editor-top-bar">
-      <button class="top-bar-btn back-btn" @click="handleBack" title="返回">
+      <button class="top-bar-btn back-btn" @click="handleBack" title="回去啦">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M19 12H5M12 19l-7-7 7-7"/>
         </svg>
@@ -701,14 +701,14 @@ function formatUpdateTime(timestamp: number): string {
           class="top-bar-btn pin-btn"
           :class="{ 'is-pinned': localIsPinned }"
           @click="togglePin"
-          :title="localIsPinned ? '取消置顶' : '置顶'"
+          :title="localIsPinned ? '不用钉着了' : '钉在最上面'"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 2v8M5 10h14M9 21h6M12 10v11"/>
           </svg>
         </button>
 
-        <button class="top-bar-btn delete-btn" @click="handleDelete" title="删除">
+        <button class="top-bar-btn delete-btn" @click="handleDelete" title="不要了">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
           </svg>
@@ -729,7 +729,7 @@ function formatUpdateTime(timestamp: number): string {
         ref="titleInputRef"
         v-model="localTitle"
         class="title-input"
-        placeholder="输入标题..."
+        placeholder="给它起个名字…"
         @input="onTitleInput"
         @keydown="onTitleKeydown"
       />
@@ -793,20 +793,20 @@ function formatUpdateTime(timestamp: number): string {
 
       <div class="toolbar-divider"></div>
 
-      <button class="toolbar-btn" @click="insertCheckbox" title="插入复选框">
+      <button class="toolbar-btn" @click="insertCheckbox" title="打个勾选框">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
           <path d="M9 12l2 2 4-4"/>
         </svg>
       </button>
 
-      <button class="toolbar-btn" @click="insertDivider" title="插入分割线">
+      <button class="toolbar-btn" @click="insertDivider" title="画条分割线">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <line x1="5" y1="12" x2="19" y2="12"/>
         </svg>
       </button>
 
-      <button class="toolbar-btn" @click="triggerImageUpload" title="插入图片">
+      <button class="toolbar-btn" @click="triggerImageUpload" title="放张图">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
           <circle cx="8.5" cy="8.5" r="1.5"/>
@@ -816,7 +816,7 @@ function formatUpdateTime(timestamp: number): string {
 
       <div class="toolbar-divider"></div>
 
-      <button class="toolbar-btn" @click="openMemoAi" title="AI 整理">
+      <button class="toolbar-btn" @click="openMemoAi" title="理一理">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z"/>
           <path d="M18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2z"/>

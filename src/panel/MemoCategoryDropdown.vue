@@ -164,7 +164,7 @@ onBeforeUnmount(() => {
           </span>
         </span>
         <span class="trigger-text">
-          {{ currentCategory?.name || placeholder || '选择分类' }}
+          {{ currentCategory?.name || placeholder || '挑个分类' }}
         </span>
       </span>
       <svg
@@ -239,7 +239,7 @@ onBeforeUnmount(() => {
               <line x1="12" y1="5" x2="12" y2="19"/>
               <line x1="5" y1="12" x2="19" y2="12"/>
             </svg>
-            <span>新建分类</span>
+            <span>新建分类嘛</span>
           </button>
         </div>
       </div>

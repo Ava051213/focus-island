@@ -28,7 +28,7 @@ const phaseColor = computed(() =>
       <span
         class="text-white/90 font-medium truncate block"
         :style="{ fontSize: `calc(12px * var(--island-scale, 1))` }"
-      >{{ resolvedTitle ?? (phase === 'break' ? '休息一下' : '专注中') }}</span>
+      >{{ resolvedTitle ?? (phase === 'break' ? '歇一会儿呀' : '专注中呀') }}</span>
     </div>
 
     <!-- Countdown -->

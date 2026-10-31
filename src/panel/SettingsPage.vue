@@ -19,7 +19,7 @@ async function runAiTest(id: 'silicon' | 'zhipu') {
   const result = await testProvider(id)
   testMessages.value = {
     ...testMessages.value,
-    [id]: result.ok ? `连接正常，耗时 ${(result.ms / 1000).toFixed(1)} 秒` : result.message,
+    [id]: result.ok ? `连上啦，用了 ${(result.ms / 1000).toFixed(1)} 秒` : result.message,
   }
   testingProvider.value = ''
 }
@@ -30,14 +30,14 @@ const showAbout = ref(false)
 const isRecording = ref(false)
 
 const colorModeOptions: Array<{ id: ColorMode; label: string }> = [
-  { id: 'dark', label: '深色' },
-  { id: 'light', label: '浅色' },
-  { id: 'system', label: '跟随系统' },
+  { id: 'dark', label: '暗暗的' },
+  { id: 'light', label: '亮亮的' },
+  { id: 'system', label: '跟着系统' },
 ]
 
 const displayModeOptions: Array<{ id: IslandDisplayMode; label: string; hint: string }> = [
-  { id: 'resident', label: '常驻', hint: '胶囊始终显示在屏幕顶部' },
-  { id: 'dock', label: '边缘停靠', hint: '贴边收起为专注条，鼠标悬停时展开' },
+  { id: 'resident', label: '常驻', hint: '一直在屏幕上面陪着你呀' },
+  { id: 'dock', label: '边缘停靠', hint: '贴边藏成一条，鼠标来了才展开喔' },
 ]
 
 function formatShortcut(key: string): string {
@@ -177,7 +177,7 @@ onUnmounted(() => {
     </div>
 
     <div class="settings-section">
-      <div class="section-title">显示模式</div>
+      <div class="section-title">长什么样</div>
       <div class="mode-toggle" role="group" aria-label="主题模式">
         <button
           v-for="option in colorModeOptions"
@@ -209,23 +209,23 @@ onUnmounted(() => {
 
     <!-- 更新 -->
     <div class="settings-section">
-      <div class="section-title">通用</div>
+      <div class="section-title">日常小设置</div>
       <div class="update-toggle-row">
         <div class="update-copy">
-          <span class="update-label">通知提示音</span>
-          <span class="update-hint">番茄钟或休息结束时播放提示音</span>
+          <span class="update-label">结束提示音</span>
+          <span class="update-hint">每颗番茄结束都会叮一下呀</span>
         </div>
-        <label class="switch" aria-label="通知提示音">
+        <label class="switch" aria-label="结束提示音">
           <input v-model="settings.notificationSound" type="checkbox" />
           <span class="switch-track"></span>
         </label>
       </div>
       <div class="update-toggle-row" style="margin-top: 8px;">
         <div class="update-copy">
-          <span class="update-label">开机自动启动</span>
-          <span class="update-hint">系统启动时自动运行 Focus Island</span>
+          <span class="update-label">开机就来陪你</span>
+          <span class="update-hint">开机自动出现，不用你找我啦</span>
         </div>
-        <label class="switch" aria-label="开机自动启动">
+        <label class="switch" aria-label="开机就来陪你">
           <input v-model="settings.autoLaunch" type="checkbox" />
           <span class="switch-track"></span>
         </label>
@@ -234,7 +234,7 @@ onUnmounted(() => {
 
     <!-- AI 助手 -->
     <div class="settings-section">
-      <div class="section-title">AI 助手</div>
+      <div class="section-title">小管家</div>
 
       <div class="section-subtitle">主力 · 硅基流动</div>
       <div class="ai-field">
@@ -252,7 +252,7 @@ onUnmounted(() => {
           :disabled="testingProvider === 'silicon'"
           @click="runAiTest('silicon')"
         >
-          {{ testingProvider === 'silicon' ? '测试中' : '测试' }}
+          {{ testingProvider === 'silicon' ? '测着呢' : '测一下' }}
         </button>
       </div>
       <div class="ai-field">
@@ -283,7 +283,7 @@ onUnmounted(() => {
           :disabled="testingProvider === 'zhipu'"
           @click="runAiTest('zhipu')"
         >
-          {{ testingProvider === 'zhipu' ? '测试中' : '测试' }}
+          {{ testingProvider === 'zhipu' ? '测着呢' : '测一下' }}
         </button>
       </div>
       <div class="ai-field">
@@ -300,22 +300,22 @@ onUnmounted(() => {
 
       <div class="update-toggle-row" style="margin-top: 10px;">
         <div class="update-copy">
-          <span class="update-label">后台自动建议</span>
-          <span class="update-hint">任务或备忘变化后自动生成，最多每 10 分钟一次</span>
+          <span class="update-label">自己悄悄想建议</span>
+          <span class="update-hint">小记或日程有变化，我就自己想一想，十分钟最多一次喔</span>
         </div>
-        <label class="switch" aria-label="后台自动建议">
+        <label class="switch" aria-label="自己悄悄想建议">
           <input v-model="settings.aiAutoEnabled" type="checkbox" />
           <span class="switch-track"></span>
         </label>
       </div>
-      <p class="ai-hint">硅基流动优先，超时、限流或返回异常时自动切到智谱；只填一家 Key 就只用那一家。Key 仅保存在本机的 settings.json。</p>
+      <p class="ai-hint">先找硅基流动，它掉线了再换智谱，只填一家就用那一家～Key 只放在本机，不会外传的喔</p>
     </div>
 
     <!-- 外观 -->
     <div class="settings-section">
-      <div class="section-title">外观</div>
+      <div class="section-title">岛的样子</div>
       <div class="slider-row">
-        <label class="slider-label">透明度</label>
+        <label class="slider-label">通透感</label>
         <input
           type="range"
           class="opacity-slider"
@@ -342,7 +342,7 @@ onUnmounted(() => {
 
     <!-- 番茄钟 -->
     <div class="settings-section">
-      <div class="section-title">番茄钟</div>
+      <div class="section-title">专注和休息</div>
       <div class="duration-grid">
         <div class="duration-cell">
           <label class="duration-label">专注</label>
@@ -367,25 +367,25 @@ onUnmounted(() => {
 
     <!-- 快捷操作 -->
     <div class="settings-section">
-      <div class="section-title">快捷操作</div>
+      <div class="section-title">顺手一点</div>
       <div class="shortcut-row">
-        <span class="shortcut-label">打开面板</span>
+        <span class="shortcut-label">叫出我</span>
         <button
           class="shortcut-recorder"
           :class="{ recording: isRecording }"
           @click="startRecording"
           tabindex="0"
         >
-          <span v-if="isRecording" class="recording-hint">按下组合键...</span>
+          <span v-if="isRecording" class="recording-hint">按一个组合键嘛…</span>
           <span v-else>{{ formatShortcut(settings.shortcutKey) }}</span>
         </button>
-        <span class="shortcut-hint" v-if="!isRecording">推荐: Ctrl+P、Alt+Space;默认Esc 关闭面板</span>
+        <span class="shortcut-hint" v-if="!isRecording">推荐 Ctrl+P 或 Alt+Space，按 Esc 就把我收起来～</span>
       </div>
     </div>
 
     <!-- 色彩主题 -->
     <div class="settings-section">
-      <div class="section-title">色彩主题</div>
+      <div class="section-title">挑个颜色</div>
       <div class="theme-grid">
         <button
           v-for="theme in presetThemes"
