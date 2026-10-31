@@ -7,9 +7,11 @@
 - 顶部胶囊实时显示专注进度，鼠标移开即穿透，不挡下方操作
 - 备忘即专注对象，每轮番茄自动累计次数
 - 日程、每日统计与成就
+- 可选 AI：小管家建议、日程解析、备忘整理，Key 只存本机
+
 ## 安装
 
-Windows 安装包构建后位于 src-tauri/target/release/bundle/nsis/。macOS 与 Linux 需自行构建：
+Windows 安装包见 [Releases](https://github.com/Ava051213/focus-island/releases/latest)，下载后双击安装。macOS 与 Linux 需自行构建：
 
 ```bash
 npm install
