@@ -94,7 +94,7 @@ alert → 恢复（窗口内有鼠标/键盘活动）
 
 ### Panel 页面路由
 
-`PanelApp.vue` 通过 `currentView` ref 切换 6 个视图：`tasks`（HomePage，首页）、`events`（EventsPage，日程）、`memos`（MemoPage）、`stats`（StatsPage）、`ai`（AiButlerPage）、`settings`（SettingsPage）。底部导航 `navItems` 的顺序与图标也定义在这里。
+`PanelApp.vue` 通过 `currentView` ref 切换 5 个视图：`tasks`（HomePage，首页）、`events`（EventsPage，日程）、`memos`（MemoPage）、`stats`（StatsPage）、`settings`（SettingsPage）。底部导航 `navItems` 的顺序与图标也定义在这里。AI 不单独占页面：首页顶部有「小管家说」卡片，备忘与日程各自内嵌整理入口。
 
 ### 专注对象
 
@@ -115,8 +115,7 @@ alert → 恢复（窗口内有鼠标/键盘活动）
   - 短任务把 `max_tokens` 压到 1024；只有 `generatePlan` 开启思考、给 2048
   - `parseTaskList` / `parseNameList` 先按 JSON 解析，失败后退化为按行拆分，容忍模型返回代码围栏
 - **`useAiButler.ts`**：后台自动建议调度 + `ai-insights.json`。四道闸门按顺序拦：`aiAutoEnabled` → 7:00–23:00 → 距上次 ≥10 分钟 → 当日 <30 次。触发源是 upcoming 事件 / memos / 今日番茄的 `watch`，90 秒防抖；失败也写 `lastAutoAt`，避免网络异常时反复重试。
-  - 结果只进 `insights` 列表（保留最近 50 条，分 `coach` / `review` 两类）
-  - 导航红点靠 `lastSeenAt` 与条目 `createdAt` 比较，`markSeen()` 在进入管家页时调用
+  - 结果只取最新一条 coach 建议，显示在首页「小管家说」卡片；旧的 insights 仍保留在 `ai-insights.json` 里，最多 50 条
 
 ### Rust 后端（src-tauri/src/lib.rs）
 

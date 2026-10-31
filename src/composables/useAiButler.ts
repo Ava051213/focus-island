@@ -211,16 +211,6 @@ export function useAiButler() {
   const coachInsight = computed(() =>
     state.value.insights.find(item => item.kind === 'coach') ?? null,
   )
-  const reviewInsight = computed(() =>
-    state.value.insights.find(item => item.kind === 'review') ?? null,
-  )
-  const hasUnread = computed(() =>
-    state.value.insights.some(item => item.createdAt > state.value.lastSeenAt),
-  )
-
-  function markSeen() {
-    state.value.lastSeenAt = Date.now()
-  }
 
   async function refreshCoach(): Promise<void> {
     const content = await generateCoach()
@@ -234,29 +224,11 @@ export function useAiButler() {
     void content
   }
 
-  async function reviewPlan(plan: string, extra: string): Promise<string> {
-    const { evaluatePlan } = useAi()
-    const ctx = buildContext()
-    const content = await evaluatePlan(plan, extra, ctx.tasks)
-    addInsight('review', '计划评估', content)
-    return content
-  }
-
-  async function nameIdeas(idea: string): Promise<string[]> {
-    const { suggestTaskNames } = useAi()
-    return suggestTaskNames(idea)
-  }
-
   return {
     insights: computed(() => state.value.insights),
     coachInsight,
-    reviewInsight,
-    hasUnread,
     configured,
     autoEnabled: computed(() => settings.value.aiAutoEnabled),
-    markSeen,
     refreshCoach,
-    reviewPlan,
-    nameIdeas,
   }
 }

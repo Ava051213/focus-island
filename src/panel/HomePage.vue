@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useMemos, type Memo } from '../composables/useMemos'
 import { useTimerBridge } from '../composables/useTimerBridge'
 import { eventRelativeLabel, eventTime, useEvents } from '../composables/useEvents'
+import { useAiButler } from '../composables/useAiButler'
 
 const emit = defineEmits<{ navigateEvents: [] }>()
 
@@ -33,10 +34,40 @@ const upcomingEvents = computed(() => withinDays(7).slice(0, 5))
 function startMemo(memo: Memo) {
   start(memo.id, getDisplayTitle(memo))
 }
+
+/** 小管家建议直接放在首页，不再单独占一个页面 */
+const { coachInsight, refreshCoach, configured } = useAiButler()
+const coachLoading = ref(false)
+const coachError = ref('')
+
+async function handleRefreshCoach() {
+  if (coachLoading.value) return
+  coachLoading.value = true
+  coachError.value = ''
+  try {
+    await refreshCoach()
+  } catch (e) {
+    coachError.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    coachLoading.value = false
+  }
+}
 </script>
 
 <template>
   <div class="home-page">
+    <section v-if="configured" class="coach-card">
+      <div class="coach-head">
+        <span class="coach-title">小管家说</span>
+        <button class="link-btn" :disabled="coachLoading" @click="handleRefreshCoach">
+          {{ coachLoading ? '想着呢…' : '再想想' }}
+        </button>
+      </div>
+      <p v-if="coachInsight" class="coach-content">{{ coachInsight.content }}</p>
+      <p v-else class="coach-empty">记点小记或日程，我就悄悄帮你想办法呀～</p>
+      <p v-if="coachError" class="coach-error">{{ coachError }}</p>
+    </section>
+
     <section class="zone">
       <div class="zone-title">现在陪你做</div>
 
@@ -114,6 +145,52 @@ function startMemo(memo: Memo) {
   gap: 7px;
 }
 
+/* 小管家建议卡：一句话就够，不再单独占一页 */
+.coach-card {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 9px 11px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--focus-color) 9%, rgba(255, 255, 255, 0.03));
+  border: 1px solid color-mix(in srgb, var(--focus-color) 22%, transparent);
+}
+
+.coach-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.coach-title {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--focus-color) 82%, transparent);
+}
+
+.coach-content {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.coach-empty {
+  margin: 0;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.coach-error {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #f87171;
+}
+
 .zone-title {
   display: flex;
   align-items: center;
@@ -139,6 +216,11 @@ function startMemo(memo: Memo) {
 
 .link-btn:hover {
   color: var(--focus-color);
+}
+
+.link-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 .running-card {
