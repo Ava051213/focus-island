@@ -218,7 +218,7 @@ fn panel_config_values<R: Runtime>(app: &AppHandle<R>) -> (f64, f64, f64, f64) {
         let min_height = cfg.min_height.unwrap_or(height);
         return (width, height, min_width, min_height);
     }
-    (420.0, 600.0, 400.0, 480.0)
+    (420.0, 520.0, 360.0, 420.0)
 }
 
 fn position_panel_under_island_inner<R: Runtime>(app: &AppHandle<R>) {
