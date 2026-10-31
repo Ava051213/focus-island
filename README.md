@@ -2,15 +2,11 @@
 
 屏幕顶部的灵动岛番茄钟。专注时在，需要时隐，从不打扰。
 
-![专注岛演示](image/focus-island_v2-ezgif.com-optimize.gif)
-
 ## 功能
 
 - 顶部胶囊实时显示专注进度，鼠标移开即穿透，不挡下方操作
 - 备忘即专注对象，每轮番茄自动累计次数
 - 日程、每日统计与成就
-- 可选 AI：小管家建议、日程解析、备忘整理，Key 只存本机
-
 ## 安装
 
 Windows 安装包构建后位于 src-tauri/target/release/bundle/nsis/。macOS 与 Linux 需自行构建：
@@ -38,4 +34,4 @@ npm run build  # 构建 release 安装包
 
 ## 许可
 
-Apache License 2.0。本项目基于 [ipfred/focus-island](https://github.com/ipfred/focus-island) 二次开发，移除了原项目的电台音频、自动更新等模块；原始版权归原作者所有，二次开发部分同样以 Apache License 2.0 发布。
+Apache License 2.0。本项目基于 [ipfred/focus-island](https://github.com/ipfred/focus-island) 二次开发；原始版权归原作者所有，二次开发部分同样以 Apache License 2.0 发布。
