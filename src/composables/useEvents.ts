@@ -349,3 +349,21 @@ export function parseQuickEvent(input: string, now: Date = new Date()): QuickEve
     tag,
   }
 }
+
+/**
+ * 决定事件的最终时间。
+ * 一句话式的短输入以本地换算为准（模型推算「下周三」不可靠）；
+ * 粘贴的长通知里常有多个日期和无关时间，交给 AI 判断。
+ */
+export function resolveEventAt(aiAt: string, raw: string, now: Date = new Date()): string {
+  const text = raw.trim()
+  const isQuickInput = text.length <= 40 && !/[\n，。；：]/.test(text)
+  if (!isQuickInput || !hasExplicitSchedule(text)) return aiAt
+
+  const local = parseQuickEvent(text, now)
+  const localDate = local.at.split('T')[0]
+  const localTime = local.at.split('T')[1]
+  if (!localDate) return aiAt
+  // 原文没写时间就不要让 AI 补一个时钟时间
+  return localTime ? `${localDate}T${localTime}` : localDate
+}

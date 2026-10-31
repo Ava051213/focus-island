@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { parseQuickEvent, useEvents } from '../useEvents'
+import { parseQuickEvent, resolveEventAt, useEvents } from '../useEvents'
 
 vi.mock('@tauri-apps/plugin-fs', () => ({
   BaseDirectory: { AppData: 'AppData' },
@@ -106,6 +106,30 @@ describe('parseQuickEvent', () => {
     const parsed = parseQuickEvent('11-12节 上课', NOW)
     expect(parsed.title).toBe('11-12节 上课')
     expect(parsed.at).toBe('2026-10-31')
+  })
+})
+
+describe('resolveEventAt', () => {
+  const longNotice = '助教通知：原上课时间 2026年11月20日 星期五 11-12节，现调整至 2026年11月13日 星期五 11-12节，地点不变。发送于 2026年10月30日 14:59'
+
+  it('长段粘贴直接用 AI 的日期', () => {
+    expect(resolveEventAt('2026-11-13', longNotice, NOW)).toBe('2026-11-13')
+  })
+
+  it('短句本地换算优先', () => {
+    expect(resolveEventAt('2026-11-12T09:00', '周五 10:00 交报告', NOW)).toBe('2026-11-06T10:00')
+  })
+
+  it('短句没写时间就不补时钟时间', () => {
+    expect(resolveEventAt('2026-11-06T09:00', '周五 交报告', NOW)).toBe('2026-11-06')
+  })
+
+  it('短句里的中文日期覆盖 AI 日期', () => {
+    expect(resolveEventAt('2026-11-12', '2026年11月13日 交报告', NOW)).toBe('2026-11-13')
+  })
+
+  it('没有日期线索时保留 AI 结果', () => {
+    expect(resolveEventAt('2026-11-12', '交报告', NOW)).toBe('2026-11-12')
   })
 })
 

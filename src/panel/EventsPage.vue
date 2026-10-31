@@ -2,8 +2,8 @@
 import { computed, reactive, ref, watch } from 'vue'
 import {
   EVENT_TAGS,
-  hasExplicitSchedule,
   parseQuickEvent,
+  resolveEventAt,
   useEvents,
   type CalendarEvent,
   type EventTag,
@@ -73,19 +73,8 @@ async function extractWithAi() {
     // 等待期间内容被改过或又发起了一次，丢弃这次结果
     if (seq !== requestSeq || draft.value.trim() !== text) return
 
-    // 日期和时间以本地规则为准，但只限一句话式的短输入。
-    // 粘贴的长通知里常有多個日期和无关时间，本地规则容易挑错，交给 AI 判断。
-    let at = result.at
-    const isQuickInput = text.length <= 40 && !/[\n，。；：]/.test(text)
-    if (isQuickInput && hasExplicitSchedule(text)) {
-      const local = parseQuickEvent(text)
-      const localDate = local.at.split('T')[0]
-      const localTime = local.at.split('T')[1]
-      if (localDate) {
-        // 原文没写时间就不要让 AI 补一个时钟时间
-        at = localTime ? `${localDate}T${localTime}` : localDate
-      }
-    }
+    // 短句以本地换算为准，长段粘贴交给 AI；规则本身在 useEvents 里有单测
+    const at = resolveEventAt(result.at, text)
 
     preview.value = {
       title: result.title,
