@@ -2,7 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { emit, listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
-import { currentMonitor, getCurrentWindow, PhysicalPosition } from "@tauri-apps/api/window";
+import { availableMonitors, getCurrentWindow, PhysicalPosition } from "@tauri-apps/api/window";
 import { useIslandState } from "../composables/useIslandState";
 import { useTimer, type NotificationType } from "../composables/useTimer";
 import { useSettings } from "../composables/useSettings";
@@ -72,49 +72,80 @@ let dragStartScreenX = 0;
 let dragStartWindowX = 0;
 let dragMoved = false;
 
-let monitorLeft = 0;
+interface ScreenRect {
+    left: number;
+    top: number;
+    width: number;
+}
+
+let screens: ScreenRect[] = [];
+let virtualLeft = 0;
+let virtualRight = 0;
 let monitorTop = 0;
-let monitorWidth = 0;
 let windowWidth = 0;
 let currentWindowX = 0;
 
+/** 按窗口中心的横坐标找屏幕；落在缝隙里就取最近的一块 */
+function screenForX(centerX: number): ScreenRect | null {
+    if (screens.length === 0) return null;
+    const hit = screens.find(s => centerX >= s.left && centerX <= s.left + s.width);
+    if (hit) return hit;
+    let nearest = screens[0];
+    for (const s of screens) {
+        const d = Math.abs(s.left + s.width / 2 - centerX);
+        const best = Math.abs(nearest.left + nearest.width / 2 - centerX);
+        if (d < best) nearest = s;
+    }
+    return nearest;
+}
+
 async function refreshIslandGeometry() {
     try {
-        const monitor = await currentMonitor();
+        const list = await availableMonitors();
+        screens = list.map(m => ({
+            left: m.position.x,
+            top: m.position.y,
+            width: m.size.width,
+        }));
+        if (screens.length > 0) {
+            virtualLeft = Math.min(...screens.map(s => s.left));
+            virtualRight = Math.max(...screens.map(s => s.left + s.width));
+        }
         const size = await islandWindow.outerSize();
         const pos = await islandWindow.outerPosition();
-        if (monitor) {
-            monitorLeft = monitor.position.x;
-            monitorTop = monitor.position.y;
-            monitorWidth = monitor.size.width;
-        }
         windowWidth = size.width;
         currentWindowX = pos.x;
+        const screen = screenForX(pos.x + windowWidth / 2);
+        if (screen) monitorTop = screen.top;
     } catch {
         // 平台不支持时保持旧值
     }
 }
 
-// 尺寸变化后（Rust 会强制水平居中）按保存的比例贴回原来的位置。
+// 尺寸变化后（Rust 会按当前屏幕水平居中）按保存的比例贴回原来的位置。
 async function restoreIslandX() {
     await refreshIslandGeometry();
     const ratio = settings.value.islandXRatio;
-    if (ratio === null || monitorWidth <= 0) return;
-    const maxX = monitorWidth - windowWidth;
+    if (ratio === null || screens.length === 0) return;
+    const screen = screenForX(currentWindowX + windowWidth / 2);
+    if (!screen) return;
+    const maxX = screen.width - windowWidth;
     if (maxX <= 0) return;
-    const x = Math.round(monitorLeft + ratio * maxX);
+    const x = Math.round(screen.left + ratio * maxX);
     try {
-        await islandWindow.setPosition(new PhysicalPosition(x, monitorTop));
+        await islandWindow.setPosition(new PhysicalPosition(x, screen.top));
         currentWindowX = x;
+        monitorTop = screen.top;
     } catch {
         // 忽略
     }
 }
 
+// 拖动范围放宽到整个虚拟桌面，胶囊可以跨到副屏
 function clampIslandX(x: number) {
-    const maxX = monitorWidth - windowWidth;
-    if (maxX <= 0) return monitorLeft;
-    return Math.round(Math.min(Math.max(x, monitorLeft), monitorLeft + maxX));
+    const maxX = virtualRight - virtualLeft - windowWidth;
+    if (maxX <= 0) return virtualLeft;
+    return Math.round(Math.min(Math.max(x, virtualLeft), virtualLeft + maxX));
 }
 
 function onCapsulePointerDown(e: PointerEvent) {
@@ -140,6 +171,9 @@ function onCapsulePointerMove(e: PointerEvent) {
     dragging.value = true;
     const dpr = window.devicePixelRatio || 1;
     const x = clampIslandX(dragStartWindowX + dxCss * dpr);
+    // 跨到另一块屏时，纵向跟着那块屏的顶边，别停在半空
+    const screen = screenForX(x + windowWidth / 2);
+    if (screen) monitorTop = screen.top;
     currentWindowX = x;
     islandWindow.setPosition(new PhysicalPosition(x, monitorTop)).catch(() => {});
 }
@@ -156,10 +190,11 @@ async function onCapsulePointerUp(e: PointerEvent) {
     if (!dragging.value) return;
     dragging.value = false;
     await refreshIslandGeometry();
-    const maxX = monitorWidth - windowWidth;
-    if (maxX > 0) {
+    const screen = screenForX(currentWindowX + windowWidth / 2);
+    const maxX = screen ? screen.width - windowWidth : 0;
+    if (screen && maxX > 0) {
         settings.value.islandXRatio = Math.min(
-            Math.max((currentWindowX - monitorLeft) / maxX, 0),
+            Math.max((currentWindowX - screen.left) / maxX, 0),
             1,
         );
     }
