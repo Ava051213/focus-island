@@ -42,8 +42,7 @@
         "skipTaskbar": false,
         "shadow": false,
         "visible": false,
-        "center": true,
-        "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-renderer-backgrounding"
+        "center": true
       }
     ],
     "security": {
