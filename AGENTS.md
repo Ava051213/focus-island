@@ -158,4 +158,7 @@ alert → 恢复（窗口内有鼠标/键盘活动）
 
 ## Windows 启动脚本
 
-`start-app.vbs`（推荐，无控制台）与 `start-app.cmd`（有控制台，排查用）做同一件事：检查 1420 端口有没有 vite 在跑，没有就后台拉起，再启动调试版 exe。启动步骤记到 `%TEMP%\focus-island-launch.log`。
+`start-app.vbs`（推荐，无控制台）与 `start-app.cmd`（有控制台，排查用）做同一件事：启动调试版 exe。启动步骤记到 `%TEMP%\focus-island-launch.log`。
+
+- 脚本不再拉起 vite：成品 exe 用内置资源，改前端要重新构建；热更新请用 `npm run dev`
+- `main.rs` 固定 `windows_subsystem = "windows"`，调试版也不会弹控制台；需要看 Rust 输出时临时去掉这一行
