@@ -10,6 +10,8 @@
     "vite:build": "vite build",
     "vite:dev": "vite",
     "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "version": "node scripts/sync-version.mjs && git add src-tauri/Cargo.toml"
   },
   "dependencies": {
@@ -29,10 +31,13 @@
     "@tailwindcss/vite": "^4.2.1",
     "@tauri-apps/cli": "^2.8.4",
     "@vitejs/plugin-vue": "^6.0.5",
+    "@vue/test-utils": "^2.5.1",
     "@vue/tsconfig": "^0.7.0",
+    "happy-dom": "^21.0.4",
     "tailwindcss": "^4.2.1",
     "typescript": "^5.8.2",
     "vite": "^6.3.5",
+    "vitest": "^5.0.5",
     "vue-tsc": "^2.2.8"
   }
 }

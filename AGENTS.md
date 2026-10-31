@@ -2,6 +2,8 @@
 
 This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
 
+> 本文件是仓库唯一的架构说明。`CLAUDE.md` 只指向这里，改架构时只改这一份。
+
 ## Commands
 
 ```bash
@@ -14,10 +16,9 @@ npm run vite:build   # 仅构建前端到 dist/
 cargo tauri build --debug   # 构建调试版（跳过安装包打包）
 npm run build        # 完整 Tauri 生产构建
 
-# 类型检查
+# 检查
 npx vue-tsc --noEmit
-
-# Rust 检查
+npm run test         # vitest 单测（不涉及 Tauri 运行时）
 cd src-tauri && cargo check
 ```
 
@@ -29,12 +30,14 @@ cd src-tauri && cargo check
 ### 双窗口架构
 
 应用由两个 Tauri 窗口组成，通过事件通信：
-- **main 窗口**（灵动岛）：`App.vue` → `Island.vue`，屏幕顶部居中的小胶囊，置顶+透明+无边框，默认鼠标穿透
-- **panel 窗口**（专注清单）：`PanelApp.vue`，从灵动岛弹出的面板，有打开/关闭动画
+- **main 窗口**（灵动岛）：`App.vue` → `Island.vue`，360×42，置顶+透明+无边框，默认鼠标穿透
+- **panel 窗口**（专注清单）：`PanelApp.vue`，420×600，从灵动岛弹出的面板，有打开/关闭动画
 
 计时器逻辑运行在 panel 窗口（`useTimerBridge.ts`），在关键状态变化（阶段、运行状态、任务、时长）时通过 `emit('timer-state-update')` 广播快照（含 `syncedAt`）。main 窗口收到后用 `syncedAt + remaining` 推算结束时间，本地自行倒计时。main 窗口启动时会发 `timer-state-request` 拉取一次快照。
 
 计时结束时 panel 设置 `pendingNotification` 并广播 `notification-show`，灵动岛显示通知横幅，用户操作通过 `notification-action`（confirm / extend / dismiss）回传 panel。
+
+两个窗口都**不会真正关闭**：Rust 侧拦截 `CloseRequested` 改为 `hide()`，退出只能走托盘菜单。
 
 ### 状态机
 
@@ -47,7 +50,9 @@ idle → alert（useIdle 5 分钟无操作；注意它只统计灵动岛窗口�
 alert → 恢复（窗口内有鼠标/键盘活动）
 ```
 
-`hide` 状态是遗留定义，目前没有代码进入该状态。`state`、`prevState` 以及 `useTimer` 的状态都是**模块级单例 ref**，同一窗口内所有组件共享；两个窗口各有一份独立实例。
+`hide` 仍是遗留定义：没有任何 `setState('hide')` 调用，但 `setInteracting(true)` 保留了从 `hide` 恢复到 `prevState` 的分支，改状态机时别把它当成活代码删掉。
+
+`state`、`prevState` 以及 `useTimer` 的状态都是**模块级单例 ref**，同一窗口内所有组件共享；两个窗口各有一份独立实例。
 
 ### 持久化（`src/composables/persistence.ts`）
 
@@ -65,23 +70,43 @@ alert → 恢复（窗口内有鼠标/键盘活动）
 | `memos.json` / `memo-categories.json` | `useMemos` | `memos-updated` / `memo-categories-updated` |
 | `daily-stats.json` | `useDailyStats` | — |
 | `achievements.json` | `useAchievements` | — |
+| `ai-insights.json` | `useAiButler` | —（只在 panel 窗口写入） |
 
 新增持久化数据时请复用 `createPersistedStore`，不要直接调用 `writeTextFile`。
 
 ### Composables 职责
 
 - **`useIslandState.ts`**：灵动岛状态 + 闲置检测（`@vueuse/core useIdle`）
-- **`useTimer.ts`**：计时器纯逻辑，与 UI 解耦，以 `phaseEndAtMs` 计算剩余时间。`onPhaseDoneCallback` 注册阶段结束回调；提供 `skipToBreak()`、`abandon()` 和通知相关的 `confirm/extend/dismissNotification()`
+- **`useTimer.ts`**：计时器纯逻辑，与 UI 解耦，以 `phaseEndAtMs` 计算剩余时间。`onPhaseDoneCallback` 注册阶段结束回调；提供 `skipToBreak()`、`skipBreak()`、`abandon()` 和通知相关的 `confirm/extend/dismissNotification()`
 - **`useTimerBridge.ts`**：panel 窗口专用，包装 useTimer，负责广播状态、记录番茄（任务、每日统计、成就）以及处理通知操作
 - **`useTasks.ts`**：任务 CRUD。任务按 `dueDate`（本地日期 `YYYY-MM-DD`，分为 overdue/today/tomorrow/week/later/nodate）、`groupId` 和 `priority`（0=收件箱，1-3=核心专注区排名）组织
-- **`useSettings.ts`**：主题、时长、透明度、缩放、显示模式（常驻/边缘停靠）、`idleMottos`、快捷键、开机自启等
+- **`useTaskGroups.ts`**：任务分组 CRUD，供 TodoPage 的 tab 与分组下拉使用
+- **`useMemos.ts`**：备忘与分类，同时落 `memos.json` 和 `memo-categories.json`
+- **`useSettings.ts`**：主题、时长、透明度（`islandOpacity`）、缩放（`islandScale`）、显示模式（常驻/边缘停靠）、顶部位置（`islandXRatio`）、`idleMottos`、快捷键、开机自启、AI Key/模型/自动建议开关
 - **`useDockMode.ts`**：边缘停靠模式，轮询 `is_mouse_over_window` 决定展开或收起细条
 - **`useDailyStats.ts` / `useAchievements.ts`**：每日统计与成就，日期一律用 `src/utils/date.ts` 的本地日期
 - **`useShortcut.ts`**：全局快捷键，只在 `Pressed` 时切换面板
+- **`useAi.ts` / `useAiButler.ts`**：见下方「AI 模块」
 
 ### Panel 页面路由
 
-`PanelApp.vue` 通过 `currentView` ref 切换视图：`tasks`（TaskArea）、`todo`（TodoPage）、`taskDetail`（TaskDetailPage）、`settings`、`memos`、`stats`。
+`PanelApp.vue` 通过 `currentView` ref 切换 7 个视图：`tasks`（TaskArea）、`todo`（TodoPage）、`taskDetail`（TaskDetailPage）、`memos`（MemoPage）、`stats`（StatsPage）、`ai`（AiButlerPage）、`settings`（SettingsPage）。底部导航 `navItems` 的顺序与图标也定义在这里。
+
+### 备忘录体系
+
+`MemoPage.vue` 负责列表、搜索与分类筛选，`MemoEditor.vue` 是富文本编辑器（1465 行，全项目最大的单文件），`MemoCategoryDialog` / `MemoCategoryDropdown` / `MemoCategoryTag` 是分类相关 UI。
+
+备忘正文是 HTML，渲染或插入 DOM 前**必须**过 `src/utils/sanitizeHtml.ts`（DOMPurify）。
+
+### AI 模块
+
+- **`useAi.ts`**：封装智谱 GLM 的 `chat/completions`，所有 prompt 都集中在这里，业务侧只调语义化方法。请求走 `@tauri-apps/plugin-http`（Rust 侧发请求），因此不受 CSP 与浏览器跨域限制，也不会产生浏览器网络请求。
+  - 未填 `aiApiKey` 时 `configured` 为 false，任何调用直接抛错
+  - 短任务默认 `thinking: disabled` 并把 `max_tokens` 压到 1024；只有 `generatePlan` 开启思考、给 2048
+  - `parseTaskList` / `parseNameList` 先按 JSON 解析，失败后退化为按行拆分，容忍模型返回代码围栏
+- **`useAiButler.ts`**：后台自动建议调度 + `ai-insights.json`。四道闸门按顺序拦：`aiAutoEnabled` → 7:00–23:00 → 距上次 ≥10 分钟 → 当日 <30 次。触发源是 tasks / memos / 今日番茄的 `watch`，90 秒防抖；失败也写 `lastAutoAt`，避免网络异常时反复重试。
+  - 结果只进 `insights` 列表（保留最近 50 条，分 `coach` / `review` 两类）
+  - 导航红点靠 `lastSeenAt` 与条目 `createdAt` 比较，`markSeen()` 在进入管家页时调用
 
 ### Rust 后端（src-tauri/src/lib.rs）
 
@@ -91,12 +116,15 @@ alert → 恢复（窗口内有鼠标/键盘活动）
 - `set_island_size(scale)` / `set_island_custom_size(width, height)` — 调整灵动岛窗口尺寸并水平居中
 - `toggle_panel` / `animate_panel_close` / `hide_panel` / `is_panel_visible` / `position_panel_under_island` / `get_panel_transition_metrics` / `emit_island_panel_motion` — panel 显示与动画。Rust 端只负责定位、显示，并发出 `panel-window-transition` 事件，动画由前端完成
 
-系统托盘菜单提供"打开专注清单"、"显示/隐藏灵动岛"、"退出"。
+拖动的水平位置完全在前端算：`Island.vue` 监听 `pointerdown/move`，把结果写进 `settings.islandXRatio`（0~1，`null` 表示居中），Rust 没有专门的拖动命令。
+
+系统托盘菜单提供"打开专注清单"、"显示/隐藏灵动岛"、"退出"；托盘图标左键点击直接切换面板。
 
 ### 安全
 
 - `tauri.conf.json` 配置了 CSP（`csp` / `devCsp`）：脚本只允许同源；`style-src` 关闭了 Tauri 的 nonce 注入，以便内联样式生效。新增外部资源（图片、音频、接口）时需要同步调整 CSP
 - 写入 `innerHTML` 的富文本一律先经过 `src/utils/sanitizeHtml.ts`（DOMPurify）
+- AI Key 只存在本机 `settings.json`，不上传；无 Key 时整个 AI 模块静默关闭
 
 ### 跨平台
 
@@ -107,5 +135,17 @@ alert → 恢复（窗口内有鼠标/键盘活动）
 ### TailwindCSS v4 注意事项
 
 - 全局入口：`src/styles.css` 使用 `@import 'tailwindcss'`（无 `tailwind.config.js`）
-- Vue `<style scoped>` 中使用 `@apply` 时，**必须**在块首加 `@reference "../styles.css";`
+- Vue `<style scoped>` 中使用 `@apply` 时，**必须**在块首加 `@reference`，路径按文件位置算（`src/panel/*.vue` 用 `"../styles.css"`，`src/components/*.vue` 同，`src/panel/子目录` 用 `"../../styles.css"`）
 - CSS 变量定义在 `styles.css` 的 `:root` 中（`--focus-color`、`--break-color`、`--idle-color`、`--alert-color`），运行时由 `useSettings.ts` 的 `applyThemeToDOM()` 动态设置
+
+## 测试
+
+- 栈：vitest + happy-dom + @vue/test-utils，配置在 `vite.config.ts` 的 `test` 段
+- 测试文件放 `src/composables/__tests__/`，命令 `npm run test`
+- `useTimer` / `useSettings` / `persistence` 都直接 import 了 Tauri 插件，测试里要先 `vi.mock` 掉 `@tauri-apps/plugin-fs`、`@tauri-apps/api/event`、`@tauri-apps/api/webviewWindow`、`@tauri-apps/plugin-http`
+- `useTimer` 全部状态是**模块级单例**，同一个测试文件内多个用例会互相污染。需要独立状态时用 `vi.resetModules()` 配合动态 `import()`
+- 时钟相关一律 `vi.useFakeTimers()` + `vi.advanceTimersByTime()`，不要真的等
+
+## Windows 启动脚本
+
+`start-app.vbs`（推荐，无控制台）与 `start-app.cmd`（有控制台，排查用）做同一件事：检查 1420 端口有没有 vite 在跑，没有就后台拉起，再启动调试版 exe。启动步骤记到 `%TEMP%\focus-island-launch.log`。

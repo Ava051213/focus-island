@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import tailwindcss from '@tailwindcss/vite'
@@ -23,5 +24,10 @@ export default defineConfig({
     target: ['es2021', 'chrome105', 'safari15'],
     minify: !process.env.TAURI_ENV_DEBUG ? 'esbuild' : false,
     sourcemap: !!process.env.TAURI_ENV_DEBUG,
+  },
+  test: {
+    environment: 'happy-dom',
+    include: ['src/**/__tests__/**/*.test.ts'],
+    restoreMocks: true,
   },
 })
