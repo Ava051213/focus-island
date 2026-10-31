@@ -1,8 +1,8 @@
-﻿# 一键启动已构建的调试版；重复启动会由单实例机制唤起已有面板。
+﻿# 一键启动已构建的 release 版；重复启动会由单实例机制唤起已有面板。
 # 前端改动需要重新构建才生效；开发热更新请用 npm run dev。
 
 $root = Split-Path -Parent $PSScriptRoot
-$exe = Join-Path $root 'src-tauri\target\debug\focus-island.exe'
+$exe = Join-Path $root 'src-tauri\target\release\focus-island.exe'
 $log = Join-Path $env:TEMP 'focus-island-launch.log'
 
 function Write-Log([string]$message) {
@@ -25,7 +25,7 @@ try {
     Write-Log '启动脚本开始运行'
 
     if (-not (Test-Path $exe)) {
-        Show-Error "未找到可执行文件：`n$exe`n请先运行 npx tauri build --debug --no-bundle。"
+        Show-Error "未找到可执行文件：`n$exe`n请先运行 npx tauri build --no-bundle。"
         exit 1
     }
 
