@@ -34,6 +34,17 @@ export interface ExtractedEvent {
 
 const WEEKDAY_NAMES = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
 
+/** 接下来两周的「日期 → 星期」对照表，让模型查表而不是自己推算 */
+function buildDateTable(now: Date): string {
+  const rows: string[] = []
+  for (let i = 0; i < 14; i++) {
+    const day = new Date(now)
+    day.setDate(day.getDate() + i)
+    rows.push(`${toLocalDateStr(day)} ${WEEKDAY_NAMES[day.getDay()]}`)
+  }
+  return rows.join(' / ')
+}
+
 function stripCodeFence(text: string): string {
   return text.replace(/^```(?:json)?/i, '').replace(/```$/, '').trim()
 }
@@ -216,14 +227,17 @@ export function useAi() {
   }
 
   /**
-   * 把一大段粘贴文字提炼成一条日程。
-   * 模型不知道今天是几号，日期和星期必须写进 system 里。
+   * 把一段口语化的文字提炼成一条日程。
+   * 模型自己推算相对日期会错，所以把未来两周的对照表塞进 system，让它查表。
    */
   async function extractEvent(raw: string, now: Date = new Date()): Promise<ExtractedEvent> {
     const today = toLocalDateStr(now)
-    const system = `你是日程整理助手。把用户粘贴的文字提炼成一条日程，只输出 JSON：
-{"title":"事件名，不超过 20 字","at":"YYYY-MM-DD 或 YYYY-MM-DDTHH:mm","note":"原文里的关键信息，不超过 100 字","tag":"work|life|study|other"}
-今天是 ${today} ${WEEKDAY_NAMES[now.getDay()]}。原文没写日期就用今天，没写时间就只给日期。不要编造原文没有的事实，不要输出 JSON 之外的任何内容。`
+    const system = `你是日程整理助手。把用户这段口语化的文字整理成一条规范日程，只输出 JSON：
+{"title":"事件名，不超过 20 字","at":"YYYY-MM-DD 或 YYYY-MM-DDTHH:mm","note":"关键信息，不超过 100 字","tag":"work|life|study|other"}
+今天是 ${today} ${WEEKDAY_NAMES[now.getDay()]}。
+接下来两周的日期对照：${buildDateTable(now)}
+「明天」「周五」「下周三」这类说法必须按下表换算成具体日期，不要自己推算。
+原文没写日期就用今天，没写时间就只给日期。标题要提炼成能一眼看懂的一件事，不要把整段话塞进去。不要编造原文没有的事实，不要输出 JSON 之外的任何内容。`
     const text = await chat(system, raw.slice(0, 2000), 0.2)
     const json = stripCodeFence(text)
     let data: Record<string, unknown>

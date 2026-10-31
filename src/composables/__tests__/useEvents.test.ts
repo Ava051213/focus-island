@@ -69,6 +69,24 @@ describe('parseQuickEvent', () => {
     expect(parsed.title).toBe('99/99 怪东西')
     expect(parsed.at).toBe('2026-10-31')
   })
+
+  it('「下周三」按下周一开始算，落在 11/4', () => {
+    expect(parseQuickEvent('下周三 开会', NOW).at).toBe('2026-11-04')
+  })
+
+  it('中文时刻：下午三点', () => {
+    expect(parseQuickEvent('下周三下午三点开会', NOW)).toEqual({
+      title: '开会',
+      at: '2026-11-04T15:00',
+      tag: 'other',
+    })
+  })
+
+  it('中文时刻：上午十点、晚上八点半、中午一点', () => {
+    expect(parseQuickEvent('明天上午十点复查牙齿', NOW).at).toBe('2026-11-01T10:00')
+    expect(parseQuickEvent('晚上八点半跑步', NOW).at).toBe('2026-10-31T20:30')
+    expect(parseQuickEvent('中午一点吃饭', NOW).at).toBe('2026-10-31T13:00')
+  })
 })
 
 describe('useEvents 排序与分档', () => {

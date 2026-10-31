@@ -2,6 +2,7 @@
 import { computed, reactive, ref } from 'vue'
 import {
   EVENT_TAGS,
+  hasExplicitSchedule,
   parseQuickEvent,
   useEvents,
   type CalendarEvent,
@@ -16,10 +17,8 @@ const { extractEvent, configured } = useAi()
 const draft = ref('')
 const showHandled = ref(false)
 
-/** 超过这个字数就认为不是「一句话」，考虑交给 AI 提炼 */
-const LONG_TEXT_THRESHOLD = 30
-
-const isLongDraft = computed(() => draft.value.trim().length > LONG_TEXT_THRESHOLD)
+/** 只用来决定提示文案：短句提示解析结果，长句提示会交给 AI 整理 */
+const looksLikeSentence = computed(() => draft.value.trim().length > 20)
 
 const parseHint = computed(() => {
   const text = draft.value.trim()
@@ -31,12 +30,33 @@ const parseHint = computed(() => {
   return `${at} · ${tag}`
 })
 
+interface EventDraft {
+  title: string
+  at: string
+  note: string
+  tag: EventTag
+  source: 'ai' | 'local'
+}
+
 const aiLoading = ref(false)
 const aiError = ref('')
-const aiPreview = ref<{ title: string; at: string; note: string; tag: EventTag } | null>(null)
+const preview = ref<EventDraft | null>(null)
 
 function tagLabel(tag: EventTag): string {
   return EVENT_TAGS.find(t => t.id === tag)?.label ?? '其他'
+}
+
+/** 没有 Key 或 AI 失败时的退路：本地规则同样给出一张条子 */
+function showLocalPreview() {
+  const parsed = parseQuickEvent(draft.value)
+  if (!parsed.title) return
+  preview.value = {
+    title: parsed.title,
+    at: parsed.at,
+    note: '',
+    tag: parsed.tag,
+    source: 'local',
+  }
 }
 
 async function extractWithAi() {
@@ -44,72 +64,92 @@ async function extractWithAi() {
   if (!text || !configured.value || aiLoading.value) return
   aiLoading.value = true
   aiError.value = ''
-  aiPreview.value = null
+  preview.value = null
   try {
     const result = await extractEvent(text)
-    aiPreview.value = {
+
+    // 日期和时间以本地规则为准：模型推算「下周三」并不可靠。
+    // AI 只负责提炼标题、描述和标签，时间轴由代码决定。
+    let at = result.at
+    if (hasExplicitSchedule(text)) {
+      const local = parseQuickEvent(text)
+      const localDate = local.at.split('T')[0]
+      const localTime = local.at.split('T')[1]
+      const aiTime = result.at.split('T')[1]
+      const finalTime = localTime ?? aiTime
+      if (localDate) {
+        at = finalTime ? `${localDate}T${finalTime}` : localDate
+      }
+    }
+
+    preview.value = {
       title: result.title,
-      at: result.at,
+      at,
       note: result.note,
       tag: (['work', 'life', 'study', 'other'].includes(result.tag) ? result.tag : 'other') as EventTag,
+      source: 'ai',
     }
   } catch (e) {
     aiError.value = e instanceof Error ? e.message : String(e)
+    // 失败也别让用户白粘贴一次，给出本地条子
+    showLocalPreview()
   } finally {
     aiLoading.value = false
   }
 }
 
-/** 粘贴后等一拍再判断长度，此时 draft 已经更新 */
+/** 粘贴后等一拍再取内容，此时 draft 已经更新 */
 function onPasteDraft() {
   setTimeout(() => {
-    if (isLongDraft.value && configured.value) void extractWithAi()
+    if (draft.value.trim() && configured.value) void extractWithAi()
   }, 60)
 }
 
-function saveAiPreview() {
-  const preview = aiPreview.value
-  if (!preview) return
-  addEvent({ title: preview.title, at: preview.at, note: preview.note, tag: preview.tag })
-  aiPreview.value = null
+function savePreview() {
+  const item = preview.value
+  if (!item) return
+  addEvent({ title: item.title, at: item.at, note: item.note, tag: item.tag })
+  preview.value = null
   draft.value = ''
+  aiError.value = ''
 }
 
-function adjustAiPreview() {
-  const preview = aiPreview.value
-  if (!preview) return
-  const [date, time] = preview.at.split('T')
+function adjustPreview() {
+  const item = preview.value
+  if (!item) return
+  const [date, time] = item.at.split('T')
   editing.value = {
     id: '',
-    title: preview.title,
-    note: preview.note,
-    at: preview.at,
-    tag: preview.tag,
+    title: item.title,
+    note: item.note,
+    at: item.at,
+    tag: item.tag,
     handled: false,
     createdAt: 0,
     updatedAt: 0,
   }
-  form.title = preview.title
+  form.title = item.title
   form.date = date ?? ''
   form.time = time ?? ''
-  form.note = preview.note
-  form.tag = preview.tag
-  aiPreview.value = null
+  form.note = item.note
+  form.tag = item.tag
+  preview.value = null
   draft.value = ''
 }
 
-function submitDraft() {
+/** 回车：没整理过就整理，整理过就保存 */
+async function submitDraft() {
   const text = draft.value.trim()
   if (!text) return
-  if (aiPreview.value) {
-    saveAiPreview()
+  if (preview.value) {
+    savePreview()
     return
   }
-  const parsed = parseQuickEvent(text)
-  if (!parsed.title) return
-  addEvent(parsed)
-  draft.value = ''
-  aiError.value = ''
+  if (configured.value) {
+    await extractWithAi()
+  } else {
+    showLocalPreview()
+  }
 }
 
 const editing = ref<CalendarEvent | null>(null)
@@ -159,40 +199,33 @@ function removeEvent() {
       <input
         v-model="draft"
         class="quick-input"
-        placeholder="明天 10:00 交季度报告 #工作，或直接粘贴一整段"
+        placeholder="记一件事，回车整理成日程"
         @keydown.enter="submitDraft"
         @paste="onPasteDraft"
       />
 
-      <div v-if="aiLoading" class="ai-hint">正在整理这段…</div>
+      <div v-if="aiLoading" class="ai-hint">正在整理…</div>
 
-      <div v-else-if="aiError" class="ai-hint error">
-        <span>{{ aiError }}</span>
-        <button class="link-btn" @click="extractWithAi">重试</button>
-      </div>
-
-      <div v-else-if="aiPreview" class="ai-preview">
-        <div class="preview-head">将创建这条日程</div>
-        <div class="preview-title">{{ aiPreview.title }}</div>
+      <div v-else-if="preview" class="ai-preview">
+        <div class="preview-head">
+          <span>将创建这条日程</span>
+          <span class="source-tag">{{ preview.source === 'ai' ? 'AI 整理' : '本地规则' }}</span>
+        </div>
+        <div class="preview-title">{{ preview.title }}</div>
         <div class="preview-meta">
-          {{ aiPreview.at.replace('T', ' ') }} · {{ tagLabel(aiPreview.tag) }}
+          {{ preview.at.replace('T', ' ') }} · {{ tagLabel(preview.tag) }}
         </div>
-        <div v-if="aiPreview.note" class="preview-note">{{ aiPreview.note }}</div>
+        <div v-if="preview.note" class="preview-note">{{ preview.note }}</div>
+        <div v-if="aiError" class="preview-error">{{ aiError }}</div>
         <div class="preview-actions">
-          <button class="btn" @click="adjustAiPreview">调整</button>
-          <button class="btn primary" @click="saveAiPreview">保存</button>
+          <button class="btn" @click="adjustPreview">调整</button>
+          <button class="btn primary" @click="savePreview">保存</button>
         </div>
       </div>
 
-      <template v-else>
-        <span v-if="!isLongDraft && parseHint" class="quick-hint">{{ parseHint }}</span>
-        <span v-else-if="isLongDraft && configured" class="quick-hint">
-          这段有点长，<button class="link-btn" @click="extractWithAi">用 AI 提炼成日程</button>
-        </span>
-        <span v-else-if="isLongDraft" class="quick-hint">
-          这段会被整段当成事件名。在「设置 → AI 助手」填 Key 后可以自动提炼。
-        </span>
-      </template>
+      <span v-else-if="parseHint" class="quick-hint">
+        {{ looksLikeSentence ? '回车整理成一条日程，预计：' : '' }}{{ parseHint }}
+      </span>
     </div>
 
     <div class="event-list">
@@ -354,11 +387,30 @@ function removeEvent() {
 }
 
 .preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   font-size: 9px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: rgba(255, 255, 255, 0.3);
   margin-bottom: 4px;
+}
+
+.source-tag {
+  letter-spacing: 0;
+  text-transform: none;
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.preview-error {
+  margin-top: 6px;
+  font-size: 10px;
+  color: #f87171;
 }
 
 .preview-title {

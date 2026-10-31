@@ -192,6 +192,43 @@ const DATE_WORD_RE = /^(今天|明天|后天|大后天|周[一二三四五六日
 const DATE_NUM_RE = /^(\d{4}[-/])?\d{1,2}[-/]\d{1,2}/
 const TIME_RE = /(\d{1,2}):(\d{2})/
 
+const CN_DIGITS: Record<string, number> = {
+  一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6,
+  七: 7, 八: 8, 九: 9, 十: 10, 十一: 11, 十二: 12,
+}
+const CN_TIME_RE = /(凌晨|上午|中午|下午|傍晚|晚上)?([一二两三四五六七八九十]{1,3})点(半|[一二三四五六七八九十]{1,2}分)?/
+
+/** 原文里有没有能确定的日期/时刻，有的话以本地换算为准，不交给模型猜 */
+export function hasExplicitSchedule(text: string): boolean {
+  return /(今天|明天|后天|大后天|周[一二三四五六日天]|下周[一二三四五六日天]|\d{1,2}[-/月]\d{1,2}|\d{1,2}:\d{2}|[一二两三四五六七八九十]{1,3}点)/.test(text)
+}
+
+/** 把「下午三点半」这类说法换算成 HH:mm，认不出返回 null */
+function parseChineseTime(text: string): string | null {
+  const match = text.match(CN_TIME_RE)
+  if (!match) return null
+  const period = match[1] ?? ''
+  const rawHour = CN_DIGITS[match[2]]
+  if (!rawHour) return null
+  let hour = rawHour
+  if (period === '下午' || period === '傍晚' || period === '晚上') {
+    if (hour < 12) hour += 12
+  } else if (period === '中午') {
+    if (hour < 12) hour += 12
+  } else if (period === '凌晨' && hour === 12) {
+    hour = 0
+  }
+  let minute = 0
+  if (match[3] === '半') {
+    minute = 30
+  } else if (match[3]) {
+    const minuteText = match[3].replace('分', '')
+    minute = CN_DIGITS[minuteText] ?? 0
+  }
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null
+  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
+}
+
 function weekdayToOffset(word: string, now: Date): number | null {
   const names = ['日', '一', '二', '三', '四', '五', '六']
   const target = word.slice(-1)
@@ -234,6 +271,15 @@ export function parseQuickEvent(input: string, now: Date = new Date()): QuickEve
     if (hour >= 0 && hour < 24 && minute >= 0 && minute < 60) {
       time = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
       rest = rest.replace(timeMatch[0], ' ').trim()
+    }
+  }
+
+  if (!time) {
+    const chineseTime = parseChineseTime(rest)
+    if (chineseTime) {
+      time = chineseTime
+      const chineseMatch = rest.match(CN_TIME_RE)
+      if (chineseMatch) rest = rest.replace(chineseMatch[0], ' ').trim()
     }
   }
 
