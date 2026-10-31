@@ -16,7 +16,7 @@ import type { TimerStatePayload } from "../composables/useTimerBridge";
 const { state, setState, setNotificationVisible } = useIslandState();
 const timer = useTimer();
 const { settings, settingsReady } = useSettings();
-const { dockCollapsed, stripProgress, stripColor, DOCK_STRIP_WINDOW_H } = useDockMode();
+const { dockCollapsed, stripProgress, stripColor, DOCK_STRIP_WINDOW_H, updatePointerOver } = useDockMode();
 const showStrip = computed(() => dockCollapsed.value);
 
 let unlisten: (() => void) | null = null;
@@ -34,6 +34,7 @@ function syncClickThrough() {
 }
 
 // 穿透状态下 webview 收不到 mousemove，只能轮询系统光标位置来判断悬停。
+// 停靠模式的展开/收起也复用这一次结果，避免两套轮询同时跑。
 function startHoverPolling() {
     if (hoverTimer !== null) return;
     hoverTimer = window.setInterval(async () => {
@@ -41,7 +42,8 @@ function startHoverPolling() {
         // 拖动中保持可交互，否则指针短暂离开窗口会重新开启穿透并打断拖动
         if (dragging.value) return;
         try {
-            const over = await invoke<boolean>("is_mouse_over_window", { pad: 0 });
+            const over = await invoke<boolean>("is_mouse_over_window", { pad: 2 });
+            updatePointerOver(over);
             if (over !== hoverActive.value) {
                 hoverActive.value = over;
                 syncClickThrough();
@@ -49,7 +51,7 @@ function startHoverPolling() {
         } catch {
             // 命令不可用时忽略
         }
-    }, 100);
+    }, 200);
 }
 
 async function onIslandClick() {
@@ -328,7 +330,7 @@ function startLocalCountdown(endAt: number) {
     countdownEndAt = endAt;
     syncRemainingFromEndAt();
     if (countdownTimer !== null) return;
-    countdownTimer = window.setInterval(syncRemainingFromEndAt, 200);
+    countdownTimer = window.setInterval(syncRemainingFromEndAt, 1000);
 }
 
 onMounted(async () => {

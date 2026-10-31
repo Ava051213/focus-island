@@ -10,7 +10,6 @@ export const DOCK_STRIP_WINDOW_H = 14
 
 const dockExpanded = ref(false)
 const panelVisible = ref(false)
-let pollTimer: ReturnType<typeof setInterval> | null = null
 let collapseTimer: ReturnType<typeof setTimeout> | null = null
 let watchInstalled = false
 let panelListenerInstalled = false
@@ -44,55 +43,41 @@ export function useDockMode() {
     return 'var(--idle-color)'
   })
 
-  function ensurePolling() {
-    if (pollTimer !== null) return
-    pollTimer = setInterval(async () => {
-      if (!dockMode.value || forceExpanded.value) {
-        if (dockExpanded.value && !forceExpanded.value) dockExpanded.value = false
-        return
+  // 指针轮询由主窗口统一驱动（与悬停检测共用一次 invoke），这里只消费结果。
+  function updatePointerOver(over: boolean) {
+    if (!dockMode.value || forceExpanded.value) {
+      if (dockExpanded.value && !forceExpanded.value) dockExpanded.value = false
+      return
+    }
+    if (over) {
+      if (collapseTimer !== null) {
+        clearTimeout(collapseTimer)
+        collapseTimer = null
       }
-      try {
-        const over = await invoke<boolean>('is_mouse_over_window', { pad: 2 })
-        if (over) {
-          if (collapseTimer !== null) {
-            clearTimeout(collapseTimer)
-            collapseTimer = null
-          }
-          if (!dockExpanded.value) dockExpanded.value = true
-        } else if (dockExpanded.value && collapseTimer === null) {
-          collapseTimer = setTimeout(() => {
-            dockExpanded.value = false
-            collapseTimer = null
-          }, 350)
-        }
-      } catch {
-        // command unavailable; ignore
-      }
-    }, 120)
+      if (!dockExpanded.value) dockExpanded.value = true
+    } else if (dockExpanded.value && collapseTimer === null) {
+      collapseTimer = setTimeout(() => {
+        dockExpanded.value = false
+        collapseTimer = null
+      }, 350)
+    }
   }
 
-  function stopPolling() {
-    if (pollTimer !== null) {
-      clearInterval(pollTimer)
-      pollTimer = null
-    }
+  function resetDock() {
     if (collapseTimer !== null) {
       clearTimeout(collapseTimer)
       collapseTimer = null
     }
+    dockExpanded.value = false
   }
 
-  // Start/stop polling once for the app lifetime based on dock mode.
+  // 关闭停靠模式时立即收起细条。
   if (!watchInstalled) {
     watchInstalled = true
     watch(
       dockMode,
       (on) => {
-        if (on) ensurePolling()
-        else {
-          stopPolling()
-          dockExpanded.value = false
-        }
+        if (!on) resetDock()
       },
       { immediate: true }
     )
@@ -113,6 +98,7 @@ export function useDockMode() {
     dockExpanded,
     dockCollapsed,
     forceExpanded,
+    updatePointerOver,
     stripProgress,
     stripColor,
     DOCK_STRIP_WINDOW_H,

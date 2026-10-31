@@ -28,7 +28,7 @@ function startTicking() {
     clearInterval(intervalId)
     intervalId = null
   }
-  intervalId = setInterval(tick, 200)
+  intervalId = setInterval(tick, 1000)
 }
 
 function tick() {

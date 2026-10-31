@@ -87,7 +87,7 @@ alert → 恢复（窗口内有鼠标/键盘活动）
 - **`useEvents.ts`**：日程事件 CRUD。每条只有发生时间（`YYYY-MM-DD` 或 `YYYY-MM-DDTHH:mm`）、标题、描述、单个标签、是否已处理，按时间升序排列，过期的单独归档。`parseQuickEvent()` 负责把「周五 10:00 交报告 #工作」这类一句话解析成事件。
 - **`useMemos.ts`**：备忘与分类，同时落 `memos.json` 和 `memo-categories.json`。每条备忘带 `pomodoroCount`，是当前唯一的专注对象
 - **`useSettings.ts`**：主题、时长、透明度（`islandOpacity`）、缩放（`islandScale`）、显示模式（常驻/边缘停靠）、顶部位置（`islandXRatio`）、`idleMottos`、快捷键、开机自启、AI Key（硅基主力 / 智谱兜底）/模型/自动建议开关
-- **`useDockMode.ts`**：边缘停靠模式，轮询 `is_mouse_over_window` 决定展开或收起细条
+- **`useDockMode.ts`**：边缘停靠模式，消费主窗口统一的指针轮询结果（`is_mouse_over_window`）决定展开或收起细条
 - **`useDailyStats.ts` / `useAchievements.ts`**：每日统计与成就，日期一律用 `src/utils/date.ts` 的本地日期
 - **`useShortcut.ts`**：全局快捷键，只在 `Pressed` 时切换面板
 - **`useAi.ts` / `useAiButler.ts`**：见下方「AI 模块」
