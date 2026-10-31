@@ -114,7 +114,8 @@ alert → 恢复（窗口内有鼠标/键盘活动）
   - 每次请求有整体超时（短任务 20 秒，`generatePlan` 40 秒），超时、非 2xx 或空返回都会切下一家
   - 短任务把 `max_tokens` 压到 1024；只有 `generatePlan` 开启思考、给 2048
   - `parseTaskList` / `parseNameList` 先按 JSON 解析，失败后退化为按行拆分，容忍模型返回代码围栏
-- **`useAiButler.ts`**：后台自动建议调度 + `ai-insights.json`。四道闸门按顺序拦：`aiAutoEnabled` → 7:00–23:00 → 距上次 ≥10 分钟 → 当日 <30 次。触发源是 upcoming 事件 / memos / 今日番茄的 `watch`，90 秒防抖；失败也写 `lastAutoAt`，避免网络异常时反复重试。
+- **`useAiButler.ts`**：后台自动建议调度 + `ai-insights.json`。四道闸门按顺序拦：`aiAutoEnabled` → 7:00–23:00 → 距上次 ≥10 分钟 → 当日 <30 次。触发源是 upcoming 事件 / memos / 今日番茄的 `watch`，90 秒防抖；另有一个每小时一次的定时刷新，避免一整天重复同一句。失败也写 `lastAutoAt`，避免网络异常时反复重试。
+  - 上下文包含最近 5 条小记（含番茄轮数）、未来日程与离最近一条还有多少分钟、当前时刻、一个番茄的分钟数，以及上一次的建议（要求模型换角度）
   - 结果只取最新一条 coach 建议，显示在首页「小管家说」卡片；旧的 insights 仍保留在 `ai-insights.json` 里，最多 50 条
 
 ### Rust 后端（src-tauri/src/lib.rs）

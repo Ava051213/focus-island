@@ -1,8 +1,8 @@
 import { computed, ref, watch } from 'vue'
 import { createPersistedStore } from './persistence'
-import { useAi, type CoachContext, type PlanTaskInput } from './useAi'
+import { useAi, type CoachContext } from './useAi'
 import { useSettings } from './useSettings'
-import { useEvents, eventDate } from './useEvents'
+import { useEvents } from './useEvents'
 import { useMemos } from './useMemos'
 import { useDailyStats } from './useDailyStats'
 import { toLocalDateStr } from '../utils/date'
@@ -90,34 +90,50 @@ function addInsight(kind: AiInsightKind, title: string, content: string) {
   }
 }
 
+const WEEKDAY_NAMES = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+
 function buildContext(): CoachContext {
-  const { upcoming } = useEvents()
+  const { upcoming, overdue } = useEvents()
   const { memos } = useMemos()
   const { todayStat } = useDailyStats()
+  const { settings } = useSettings()
 
-  const cutoff = Date.now() - 24 * 60 * 60 * 1000
-  const recentMemos = memos.value
-    .filter(memo => memo.updatedAt >= cutoff)
-    .sort((a, b) => b.updatedAt - a.updatedAt)
-    .slice(0, 3)
+  // 置顶优先，其余按最近更新；不再只取 24 小时内的，否则经常没有素材可建议
+  const ordered = memos.value
+    .slice()
+    .sort((a, b) => (Number(b.isPinned) - Number(a.isPinned)) || (b.updatedAt - a.updatedAt))
+    .slice(0, 5)
 
-  // 排期事件作为「接下来有什么」喂给模型
-  const tasks: PlanTaskInput[] = upcoming.value.slice(0, 12).map(event => ({
-    title: event.title,
-    dueDate: eventDate(event.at),
-    priority: 0,
-    pomodoros: 0,
-  }))
+  const now = new Date()
+  const hh = String(now.getHours()).padStart(2, '0')
+  const mm = String(now.getMinutes()).padStart(2, '0')
+  const nowText = `${toLocalDateStr(now)} ${hh}:${mm} ${WEEKDAY_NAMES[now.getDay()]}`
+
+  const next = upcoming.value[0] ?? null
+  let minutesToNextEvent: number | null = null
+  if (next) {
+    const [datePart, timePart] = next.at.split('T')
+    const [y, m, d] = datePart.split('-').map(Number)
+    const [nh, nm] = (timePart ?? '00:00').split(':').map(Number)
+    const diff = Math.round((new Date(y, m - 1, d, nh, nm).getTime() - now.getTime()) / 60000)
+    if (diff >= 0 && diff <= 1440) minutesToNextEvent = diff
+  }
 
   return {
-    tasks,
-    memos: recentMemos.map(memo => ({
+    now: nowText,
+    minutesToNextEvent,
+    nextEventTitle: next?.title ?? null,
+    focusMinutes: settings.value.focusDuration,
+    memos: ordered.map(memo => ({
       title: memo.title || '未命名',
-      content: stripHtml(memo.content).slice(0, 300),
-      updatedAt: memo.updatedAt,
+      content: stripHtml(memo.content).slice(0, 200),
+      pomodoros: memo.pomodoroCount,
     })),
+    events: upcoming.value.slice(0, 8).map(event => ({ title: event.title, at: event.at })),
+    overdueCount: overdue.value.length,
     todayPomodoros: todayStat.value?.pomodoros ?? 0,
-    completedToday: 0,
+    focusMinutesToday: todayStat.value?.focusMinutes ?? 0,
+    lastCoach: state.value.insights.find(item => item.kind === 'coach')?.content ?? null,
   }
 }
 
@@ -201,6 +217,9 @@ export function startAiButler() {
 
   // 启动时给一次机会：若当天已有变化但还没生成过，稍后补一次
   setTimeout(onChange, 30_000)
+
+  // 每小时主动换一条建议，免得一整天都在复读同一句
+  setInterval(() => scheduleAuto(0), 60 * 60 * 1000)
 }
 
 export function useAiButler() {

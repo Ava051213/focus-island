@@ -34,10 +34,20 @@ export interface PlanTaskInput {
 }
 
 export interface CoachContext {
-  tasks: PlanTaskInput[]
-  memos: Array<{ title: string; content: string; updatedAt: number }>
+  /** 本地时间，例如 2026-10-31 17:10 周五 */
+  now: string
+  /** 离最近一条日程还有多少分钟；超过一天或没有日程则为 null */
+  minutesToNextEvent: number | null
+  nextEventTitle: string | null
+  /** 一个番茄多少分钟 */
+  focusMinutes: number
+  memos: Array<{ title: string; content: string; pomodoros: number }>
+  events: Array<{ title: string; at: string }>
+  overdueCount: number
   todayPomodoros: number
-  completedToday: number
+  focusMinutesToday: number
+  /** 上一次的建议，用来提醒模型换角度 */
+  lastCoach: string | null
 }
 
 export interface PlanArtifacts {
@@ -303,9 +313,20 @@ export function useAi() {
 
   async function coachToday(ctx: CoachContext): Promise<string> {
     return chat(
-      '你是专注小管家。根据用户今天随手记的计划、待办任务和已完成的番茄，给出接下来最值得做的事。要求：最多 3 条，总字数不超过 100 字，直接给动作，不要重复原文，不要输出标题或前言。语气轻轻软软的，可以带一点点撒娇，但别浮夸。',
+      `你是用户的小管家，说话轻轻的，可以偶尔撒一句娇，但别腻。
+根据今天的情况，给出现在最值得做的 1-2 件事。规则：
+1. 每条一行，以「1.」「2.」开头，写清楚做哪条小记或日程、预计多久、为什么。
+2. memos 里的 pomodoros 是这条已经跑过的番茄轮数，0 表示还没开始，不要把它说反。
+3. 时长按一个番茄 ${ctx.focusMinutes} 分钟算，可以说「一个番茄」或「半个番茄」。
+4. 理由只能使用数据里的事实：番茄轮数、更新时间、日程时间；不要编造兴趣、进度或原文没有的信息。
+5. 给了你上次的建议时，这次必须换个角度，不要重复上次说的事。
+6. 总字数不超过 120 字，不要标题、不要复述原文，不要 Markdown。
+7. 最后一行单独写一句软软的关心，每次换个说法，不要和上次或示例重复。
+格式示例（只演示格式，不要照抄文字）：
+1. 先做「洗衣服」，半个番茄，它还没开始过，顺手就能完成。
+2. 再做「倒垃圾」，一个番茄，今天截止，别拖到明天。`,
       JSON.stringify(ctx),
-      0.4,
+      0.6,
     )
   }
 
