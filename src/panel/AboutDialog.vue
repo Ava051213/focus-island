@@ -2,13 +2,20 @@
 import { onMounted, ref } from 'vue'
 import { open } from '@tauri-apps/plugin-shell'
 import { getName, getVersion } from '@tauri-apps/api/app'
+import { fetch } from '@tauri-apps/plugin-http'
 
 const emit = defineEmits<{ close: [] }>()
 
 const appName = ref('专注岛')
 const appVersion = ref('')
 
+const checking = ref(false)
+const updateHint = ref('')
+const latestUrl = ref('')
+
 const githubUrl = 'https://github.com/Ava051213/focus-island'
+// GitHub API 对小额未认证请求限流严格，改用仓库里的静态版本文件
+const releasesApi = 'https://raw.githubusercontent.com/Ava051213/focus-island/clean-main/latest.json'
 import appIcon from '../../src-tauri/icons/128x128.png'
 
 onMounted(async () => {
@@ -23,6 +30,46 @@ onMounted(async () => {
 
 function openGitHub() {
   open(githubUrl)
+}
+
+function isNewer(latest: string, current: string) {
+  const a = latest.replace(/^v/, '').split('.').map(Number)
+  const b = current.replace(/^v/, '').split('.').map(Number)
+  for (let i = 0; i < 3; i++) {
+    if ((a[i] || 0) > (b[i] || 0)) return true
+    if ((a[i] || 0) < (b[i] || 0)) return false
+  }
+  return false
+}
+
+async function checkUpdate() {
+  if (checking.value) return
+  checking.value = true
+  updateHint.value = ''
+  latestUrl.value = ''
+  try {
+    const res = await fetch(releasesApi, {
+      headers: { 'User-Agent': 'focus-island' },
+    })
+    if (!res.ok) throw new Error(String(res.status))
+    const data = await res.json() as { version?: string; url?: string }
+    const tag = data.version ?? ''
+    if (!tag) throw new Error('no version')
+    if (isNewer(tag, appVersion.value)) {
+      updateHint.value = `发现新版本 v${tag}`
+      latestUrl.value = data.url || githubUrl
+    } else {
+      updateHint.value = '已是最新版本'
+    }
+  } catch {
+    updateHint.value = '检查失败，稍后再试'
+  } finally {
+    checking.value = false
+  }
+}
+
+function openLatest() {
+  open(latestUrl.value || githubUrl)
 }
 
 function onBackdropClick(event: MouseEvent) {
@@ -53,6 +100,17 @@ function onBackdropClick(event: MouseEvent) {
         </svg>
         <span>GitHub</span>
       </button>
+
+      <!-- 更新检查 -->
+      <div class="update-block">
+        <button v-if="latestUrl" class="update-link" @click="openLatest">
+          {{ updateHint }}，前往下载
+        </button>
+        <span v-else-if="updateHint" class="update-hint">{{ updateHint }}</span>
+        <button class="link-btn update-check" :disabled="checking" @click="checkUpdate">
+          {{ checking ? '检查中…' : '检查更新' }}
+        </button>
+      </div>
     </div>
   </div>
 </template>
@@ -160,5 +218,36 @@ function onBackdropClick(event: MouseEvent) {
 .link-btn .icon {
   width: 16px;
   height: 16px;
+}
+
+.update-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin-top: -4px;
+}
+
+.update-hint {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.update-link {
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-size: 12px;
+  color: var(--focus-color);
+  cursor: pointer;
+}
+
+.update-link:hover {
+  opacity: 0.8;
+}
+
+.update-check {
+  padding: 2px 8px;
+  font-size: 12px;
 }
 </style>

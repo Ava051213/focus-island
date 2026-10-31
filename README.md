@@ -34,6 +34,8 @@ npm run test   # 单元测试
 npm run build  # 构建 release 安装包
 ```
 
+发版时同步修改 latest.json 的 version，应用内的检查更新读取它。
+
 ## 许可
 
 Apache License 2.0。本项目基于 [ipfred/focus-island](https://github.com/ipfred/focus-island) 二次开发；原始版权归原作者所有，二次开发部分同样以 Apache License 2.0 发布。
