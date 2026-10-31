@@ -25,6 +25,12 @@ cd src-tauri && cargo check
 > **注意**：`package.json` 中 `build` = `tauri build`，`vite:build` = `vite build`。
 > Tauri 的 `beforeBuildCommand` 调用 `vite:build` 以避免递归。
 
+## CI
+
+`.github/workflows/ci.yml`：push 到 clean-main 或开 PR 时跑前端三项检查（`vue-tsc --noEmit`、`npm run test`、`vite:build`）。
+
+故意不跑 Rust：`cargo check` 在 GitHub 的 Windows runner 上要现装工具链、拉几百个 crate，一轮十几分钟还容易超时；前端三项一分多钟，足以拦住绝大多数改坏。
+
 ## 架构概览
 
 ### 双窗口架构
