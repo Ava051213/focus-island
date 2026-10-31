@@ -195,9 +195,13 @@ export function useAi() {
       let detail = ''
       try {
         const data = await response.json()
-        detail = data?.error?.message ?? ''
+        // 硅基流动的错误体是 {code, message}，智谱是 {error: {message}}，两种都取
+        detail = data?.error?.message ?? data?.message ?? ''
       } catch {
         // 忽略解析失败
+      }
+      if (response.status === 402) {
+        throw new Error(`${provider.label} 账户余额不足（402），请先到平台充值${detail ? '：' + detail : ''}`)
       }
       throw new Error(`${provider.label} 请求失败（${response.status}）${detail ? '：' + detail : ''}`)
     }
