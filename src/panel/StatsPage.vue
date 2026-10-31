@@ -2,18 +2,17 @@
 import { ref, computed } from 'vue'
 import { useDailyStats } from '../composables/useDailyStats'
 import { useAchievements } from '../composables/useAchievements'
-import { eventDate, useEvents } from '../composables/useEvents'
+import { useEvents } from '../composables/useEvents'
 
 type TimeRange = 'today' | 'week' | 'month' | 'all'
 
 const emit = defineEmits<{ back: [] }>()
 
-const { todayStat, weekStats, monthStats, allTimeStats, summarizeStats, getDateString, getMonthStats } = useDailyStats()
+const { todayStat, weekStats, monthStats, allTimeStats, summarizeStats, getDateString, dailyStats } = useDailyStats()
 const { starAchievements, streakAchievements, specialAchievements, state } = useAchievements()
 const { upcoming, overdue } = useEvents()
 
 const timeRange = ref<TimeRange>('today')
-const currentMonth = ref(new Date())
 
 const timeRangeOptions: { value: TimeRange; label: string }[] = [
   { value: 'today', label: '今日' },
@@ -42,77 +41,51 @@ const formatDuration = (minutes: number) => {
   return mins > 0 ? `${hours}.${Math.round(mins / 6)}h` : `${hours}h`
 }
 
-const monthYear = computed(() => {
-  const d = currentMonth.value
-  return `${d.getFullYear()}年${d.getMonth() + 1}月`
-})
+/** GitHub 风格热力图：最近 26 周，一列一周、一行一个礼拜几，格子只保留色块 */
+const HEATMAP_WEEKS = 26
 
-const prevMonth = () => {
-  currentMonth.value = new Date(currentMonth.value.getFullYear(), currentMonth.value.getMonth() - 1, 1)
+interface HeatDay {
+  date: string
+  pomodoros: number
+  intensity: number
+  label: string
 }
 
-const nextMonth = () => {
-  currentMonth.value = new Date(currentMonth.value.getFullYear(), currentMonth.value.getMonth() + 1, 1)
-}
+const heatmapDays = computed<HeatDay[]>(() => {
+  const now = new Date()
+  now.setHours(0, 0, 0, 0)
+  const start = new Date(now)
+  start.setDate(start.getDate() - (HEATMAP_WEEKS * 7 - 1))
+  // 对齐到周日，保证每列是完整的一周
+  start.setDate(start.getDate() - start.getDay())
 
-const selectedMonthStats = computed(() => {
-  const year = currentMonth.value.getFullYear()
-  const month = currentMonth.value.getMonth()
-  return getMonthStats(year, month)
-})
-
-const calendarDays = computed(() => {
-  const year = currentMonth.value.getFullYear()
-  const month = currentMonth.value.getMonth()
-  const firstDay = new Date(year, month, 1)
-  const lastDay = new Date(year, month + 1, 0)
-  const startPadding = firstDay.getDay()
-  const daysInMonth = lastDay.getDate()
-
-  const days: { date: string; day: number; intensity: number; pomodoros: number }[] = []
-
-  const monthStatsMap = new Map(selectedMonthStats.value.map(s => [s.date, s]))
-
-  for (let i = 0; i < startPadding; i++) {
-    days.push({ date: '', day: 0, intensity: 0, pomodoros: 0 })
+  const statMap = new Map(dailyStats.value.map(s => [s.date, s.pomodoros]))
+  const days: HeatDay[] = []
+  const cursor = new Date(start)
+  while (cursor <= now) {
+    const pomodoros = statMap.get(getDateString(cursor)) ?? 0
+    days.push({
+      date: getDateString(cursor),
+      pomodoros,
+      intensity: pomodoros >= 5 ? 3 : pomodoros >= 3 ? 2 : pomodoros >= 1 ? 1 : 0,
+      label: `${cursor.getMonth() + 1}-${cursor.getDate()}`,
+    })
+    cursor.setDate(cursor.getDate() + 1)
   }
-
-  for (let d = 1; d <= daysInMonth; d++) {
-    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-    const stat = monthStatsMap.get(dateStr)
-    const pomodoros = stat?.pomodoros ?? 0
-    let intensity = 0
-    if (pomodoros >= 5) intensity = 3
-    else if (pomodoros >= 3) intensity = 2
-    else if (pomodoros >= 1) intensity = 1
-    days.push({ date: dateStr, day: d, intensity, pomodoros })
-  }
-
   return days
 })
 
+const hoveredDay = ref<HeatDay | null>(null)
+
+const allAchievements = computed(() => [
+  ...starAchievements.value,
+  ...streakAchievements.value,
+  ...specialAchievements.value,
+])
+
 const weekDays = ['日', '一', '二', '三', '四', '五', '六']
 
-const hoveredIndex = ref<number | null>(null)
-
 const pendingEventCount = computed(() => upcoming.value.length + overdue.value.length)
-
-const eventDistribution = computed(() => {
-  const now = new Date()
-  now.setHours(0, 0, 0, 0)
-  const daysUntil = (at: string) => {
-    const [y, m, d] = eventDate(at).split('-').map(Number)
-    return Math.round((new Date(y, m - 1, d).getTime() - now.getTime()) / 86400000)
-  }
-  const total = upcoming.value.length || 1
-  const within7 = upcoming.value.filter(e => daysUntil(e.at) <= 7).length
-  const within30 = upcoming.value.filter(e => daysUntil(e.at) <= 30).length
-  return [
-    { label: '7 天内', value: within7, percent: Math.round((within7 / total) * 100) },
-    { label: '8–30 天', value: within30 - within7, percent: Math.round(((within30 - within7) / total) * 100) },
-    { label: '更远', value: upcoming.value.length - within30, percent: Math.round(((upcoming.value.length - within30) / total) * 100) },
-  ]
-})
 
 const weekTrend = computed(() => {
   const now = new Date()
@@ -160,30 +133,27 @@ const maxPomodoros = computed(() => Math.max(...weekTrend.value.map(d => d.pomod
     <div class="stats-cards">
       <div class="stat-card">
         <div class="stat-value">{{ currentStats.pomodoros }}</div>
-        <div class="stat-label">番茄</div>
+        <div class="stat-label">番茄个数</div>
       </div>
       <div class="stat-card">
         <div class="stat-value">{{ formatDuration(currentStats.focusMinutes) }}</div>
-        <div class="stat-label">专注时长</div>
+        <div class="stat-label">陪你多久</div>
       </div>
       <div class="stat-card">
         <div class="stat-value">{{ pendingEventCount }}</div>
-        <div class="stat-label">待办事件</div>
+        <div class="stat-label">还没做的事</div>
       </div>
       <div class="stat-card">
         <div class="stat-value">{{ state.streakDays }}</div>
-        <div class="stat-label">连续天数</div>
+        <div class="stat-label">连着几天</div>
       </div>
     </div>
 
     <!-- Heatmap -->
     <div class="section">
       <div class="section-header">
-        <span class="section-title">专注热力图 · {{ monthYear }}</span>
-        <div class="month-nav">
-          <button class="nav-btn" @click="prevMonth">&lt;</button>
-          <button class="nav-btn" @click="nextMonth">&gt;</button>
-        </div>
+        <span class="section-title">一起专注的日子</span>
+        <span class="heatmap-range">最近半年</span>
       </div>
       <div class="heatmap">
         <div class="heatmap-weekdays">
@@ -191,15 +161,14 @@ const maxPomodoros = computed(() => Math.max(...weekTrend.value.map(d => d.pomod
         </div>
         <div class="heatmap-grid">
           <div
-            v-for="(day, i) in calendarDays"
-            :key="i"
-            :class="['heat-cell', `intensity-${day.intensity}`, { empty: !day.day }]"
-            @mouseenter="hoveredIndex = day.day ? i : null"
-            @mouseleave="hoveredIndex = null"
+            v-for="day in heatmapDays"
+            :key="day.date"
+            :class="['heat-cell', `intensity-${day.intensity}`]"
+            @mouseenter="hoveredDay = day"
+            @mouseleave="hoveredDay = null"
           >
-            <span v-if="day.day" class="day-number">{{ day.day }}</span>
-            <div v-if="hoveredIndex === i && day.pomodoros > 0" class="cell-tooltip">
-              {{ day.pomodoros }}🍅
+            <div v-if="hoveredDay?.date === day.date" class="cell-tooltip">
+              {{ day.date.slice(5).replace('-', '月') }}日 · {{ day.pomodoros }} 颗番茄
             </div>
           </div>
         </div>
@@ -212,42 +181,23 @@ const maxPomodoros = computed(() => Math.max(...weekTrend.value.map(d => d.pomod
       </div>
     </div>
 
-    <!-- Charts Row -->
-    <div class="charts-row">
-      <!-- Week Trend -->
-      <div class="section chart-section">
-        <div class="section-title">本周趋势</div>
-        <div class="trend-chart">
-          <div class="trend-bars">
+    <!-- Week Trend -->
+    <div class="section">
+      <div class="section-title">这一周的样子</div>
+      <div class="trend-chart">
+        <div class="trend-bars">
+          <div
+            v-for="d in weekTrend"
+            :key="d.day"
+            class="trend-bar-wrapper"
+          >
             <div
-              v-for="d in weekTrend"
-              :key="d.day"
-              class="trend-bar-wrapper"
+              class="trend-bar"
+              :style="{ height: `${(d.pomodoros / maxPomodoros) * 100}%` }"
             >
-              <div
-                class="trend-bar"
-                :style="{ height: `${(d.pomodoros / maxPomodoros) * 100}%` }"
-              >
-                <span v-if="d.pomodoros > 0" class="bar-value">{{ d.pomodoros }}</span>
-              </div>
-              <span class="bar-label">{{ d.day }}</span>
+              <span v-if="d.pomodoros > 0" class="bar-value">{{ d.pomodoros }}</span>
             </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Event Distribution -->
-      <div class="section chart-section">
-        <div class="section-title">排期分布</div>
-        <div class="distribution">
-          <div v-for="item in eventDistribution" :key="item.label" class="dist-item">
-            <div class="dist-label">
-              <span>{{ item.label }}</span>
-              <span class="dist-percent">{{ item.percent }}%</span>
-            </div>
-            <div class="dist-bar-bg">
-              <div class="dist-bar" :style="{ width: `${item.percent}%` }"></div>
-            </div>
+            <span class="bar-label">{{ d.day }}</span>
           </div>
         </div>
       </div>
@@ -255,56 +205,16 @@ const maxPomodoros = computed(() => Math.max(...weekTrend.value.map(d => d.pomod
 
     <!-- Achievements -->
     <div class="section">
-      <div class="section-title">成就里程碑</div>
-
-      <div class="achievement-group">
-        <div class="achievement-row">
-          <div
-            v-for="a in starAchievements"
-            :key="a.id"
-            :class="['achievement-badge', { unlocked: a.unlockedAt }]"
-          >
-            <div class="badge-icon">{{ a.icon }}</div>
-            <div class="badge-name">{{ a.name }}</div>
-            <div class="badge-progress">
-              <template v-if="a.unlockedAt">已达成</template>
-              <template v-else>{{ a.progress }}/{{ a.target }}</template>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="achievement-group">
-        <div class="achievement-row">
-          <div
-            v-for="a in streakAchievements"
-            :key="a.id"
-            :class="['achievement-badge', { unlocked: a.unlockedAt }]"
-          >
-            <div class="badge-icon">{{ a.icon }}</div>
-            <div class="badge-name">{{ a.name }}</div>
-            <div class="badge-progress">
-              <template v-if="a.unlockedAt">已达成</template>
-              <template v-else>{{ a.progress }}/{{ a.target }}</template>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="achievement-group special">
-        <div class="achievement-row">
-          <div
-            v-for="a in specialAchievements"
-            :key="a.id"
-            :class="['achievement-badge', { unlocked: a.unlockedAt }]"
-          >
-            <div class="badge-icon">{{ a.icon }}</div>
-            <div class="badge-name">{{ a.name }}</div>
-            <div class="badge-progress">
-              <template v-if="a.unlockedAt">已达成</template>
-              <template v-else>未解锁</template>
-            </div>
-          </div>
+      <div class="section-title">小勋章</div>
+      <div class="achievement-row">
+        <div
+          v-for="a in allAchievements"
+          :key="a.id"
+          :class="['achievement-badge', { unlocked: a.unlockedAt }]"
+          :title="`${a.description} · ${a.unlockedAt ? '已达成' : a.progress + '/' + a.target}`"
+        >
+          <div class="badge-icon">{{ a.icon }}</div>
+          <div class="badge-name">{{ a.name }}</div>
         </div>
       </div>
     </div>
@@ -434,71 +344,49 @@ const maxPomodoros = computed(() => Math.max(...weekTrend.value.map(d => d.pomod
   color: rgba(255, 255, 255, 0.8);
 }
 
-.month-nav {
-  display: flex;
-  gap: 4px;
-}
-
-.nav-btn {
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 6px;
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.nav-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.8);
+.heatmap-range {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.3);
 }
 
 .heatmap {
-  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
 }
 
 .heatmap-weekdays {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-rows: repeat(7, 11px);
   gap: 2px;
-  margin-bottom: 4px;
+  flex-shrink: 0;
 }
 
 .weekday {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.3);
+  width: 12px;
+  font-size: 9px;
+  line-height: 11px;
+  color: rgba(255, 255, 255, 0.28);
   text-align: center;
 }
 
 .heatmap-grid {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 3px;
+  grid-template-rows: repeat(7, 11px);
+  grid-auto-flow: column;
+  grid-auto-columns: 11px;
+  gap: 2px;
 }
 
 .heat-cell {
-  aspect-ratio: 1;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  width: 11px;
+  height: 11px;
+  border-radius: 2px;
   position: relative;
-  position: relative;
-  transition: all 0.15s;
 }
 
-.heat-cell.empty {
-  background: transparent;
-}
-
-.heat-cell:not(.empty):hover {
-  transform: scale(1.15);
+.heat-cell:hover {
+  outline: 1px solid rgba(255, 255, 255, 0.35);
   z-index: 1;
 }
 
@@ -518,18 +406,9 @@ const maxPomodoros = computed(() => Math.max(...weekTrend.value.map(d => d.pomod
   background: var(--focus-color);
 }
 
-.day-number {
-  font-size: 9px;
-  color: rgba(255, 255, 255, 0.4);
-}
-
-.heat-cell.intensity-3 .day-number {
-  color: rgba(255, 255, 255, 0.9);
-}
-
 .cell-tooltip {
   position: absolute;
-  bottom: calc(100% + 4px);
+  top: calc(100% + 4px);
   left: 50%;
   transform: translateX(-50%);
   background: rgba(30, 30, 35, 0.95);
@@ -581,16 +460,6 @@ const maxPomodoros = computed(() => Math.max(...weekTrend.value.map(d => d.pomod
   background: var(--focus-color);
 }
 
-.charts-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
-
-.chart-section {
-  min-height: 140px;
-}
-
 .trend-chart {
   flex: 1;
   display: flex;
@@ -601,7 +470,7 @@ const maxPomodoros = computed(() => Math.max(...weekTrend.value.map(d => d.pomod
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  height: 90px;
+  height: 68px;
   gap: 6px;
   padding-top: 8px;
 }
@@ -640,68 +509,29 @@ const maxPomodoros = computed(() => Math.max(...weekTrend.value.map(d => d.pomod
   margin-top: 6px;
 }
 
-.distribution {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.dist-item {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.dist-label {
-  display: flex;
-  justify-content: space-between;
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.6);
-}
-
-.dist-percent {
-  color: rgba(255, 255, 255, 0.4);
-}
-
-.dist-bar-bg {
-  height: 6px;
-  background: rgba(255, 255, 255, 0.06);
-  border-radius: 3px;
-  overflow: hidden;
-}
-
-.dist-bar {
-  height: 100%;
-  background: var(--focus-color);
-  border-radius: 3px;
-  transition: width 0.3s ease;
-}
-
-.achievement-group {
-  margin-bottom: 12px;
-}
-
-.achievement-group:last-child {
-  margin-bottom: 0;
-}
-
-.achievement-group.special .achievement-row {
-  justify-content: flex-start;
-  gap: 16px;
-}
-
 .achievement-row {
   display: flex;
-  justify-content: space-between;
-  gap: 8px;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.achievement-row::-webkit-scrollbar {
+  height: 4px;
+}
+
+.achievement-row::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 2px;
 }
 
 .achievement-badge {
-  flex: 1;
+  flex: 0 0 auto;
+  width: 58px;
+  padding: 6px 4px;
+  border-radius: 8px;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 10px;
-  padding: 10px 8px;
   text-align: center;
   transition: all 0.2s;
 }
@@ -712,8 +542,8 @@ const maxPomodoros = computed(() => Math.max(...weekTrend.value.map(d => d.pomod
 }
 
 .badge-icon {
-  font-size: 16px;
-  margin-bottom: 4px;
+  font-size: 14px;
+  margin-bottom: 2px;
   filter: grayscale(1) opacity(0.4);
 }
 
@@ -723,23 +553,16 @@ const maxPomodoros = computed(() => Math.max(...weekTrend.value.map(d => d.pomod
 }
 
 .badge-name {
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 500;
   color: rgba(255, 255, 255, 0.4);
-  margin-bottom: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .achievement-badge.unlocked .badge-name {
   color: rgba(255, 255, 255, 0.9);
-}
-
-.badge-progress {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.25);
-}
-
-.achievement-badge.unlocked .badge-progress {
-  color: var(--focus-color);
 }
 
 /* Custom scrollbar */
