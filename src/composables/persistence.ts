@@ -15,6 +15,16 @@ const DATA_DIR = 'focus-island'
 const baseDir = BaseDirectory.AppData
 const WRITE_DEBOUNCE_MS = 300
 
+/** 有文件写不进去时给界面用的提示；恢复写入后自动清空 */
+export const saveError = ref<string | null>(null)
+const failingFiles = new Set<string>()
+
+function refreshSaveError() {
+  saveError.value = failingFiles.size > 0
+    ? `数据没存上（${Array.from(failingFiles).join('、')}），检查一下磁盘空间或权限`
+    : null
+}
+
 let dataDirReady: Promise<void> | null = null
 
 function ensureDataDir(): Promise<void> {
@@ -67,6 +77,8 @@ function createJsonFile(name: string): JsonFile {
       })
     } catch (e) {
       writeBlocked = true
+      failingFiles.add(name)
+      refreshSaveError()
       console.error(`[persistence] failed to back up ${name}; saving disabled to protect it`, e)
     }
   }
@@ -85,8 +97,13 @@ function createJsonFile(name: string): JsonFile {
         // Write-then-rename keeps the previous file intact if the app dies mid-write.
         await writeTextFile(tmpPath, json, { baseDir })
         await rename(tmpPath, path, { oldPathBaseDir: baseDir, newPathBaseDir: baseDir })
+        if (failingFiles.delete(name)) refreshSaveError()
       })
-      .catch((e) => console.error(`[persistence] failed to save ${name}`, e))
+      .catch((e) => {
+        failingFiles.add(name)
+        refreshSaveError()
+        console.error(`[persistence] failed to save ${name}`, e)
+      })
   }
 
   function write(json: string) {

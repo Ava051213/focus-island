@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import { useMemos, type Memo } from '../composables/useMemos'
 import { useTimerBridge } from '../composables/useTimerBridge'
-import { eventRelativeLabel, eventTime, useEvents } from '../composables/useEvents'
+import { eventRelativeLabel, eventTime, eventsNow, useEvents } from '../composables/useEvents'
 import { useAiButler } from '../composables/useAiButler'
 
 const emit = defineEmits<{ navigateEvents: [] }>()
@@ -120,7 +120,7 @@ async function handleRefreshCoach() {
           class="event-line"
           @click="emit('navigateEvents')"
         >
-          <span class="event-day">{{ eventRelativeLabel(event.at) }}</span>
+          <span class="event-day">{{ eventRelativeLabel(event.at, eventsNow) }}</span>
           <span v-if="eventTime(event.at)" class="event-clock">{{ eventTime(event.at) }}</span>
           <span class="event-title">{{ event.title }}</span>
         </button>

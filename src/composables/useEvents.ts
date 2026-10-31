@@ -25,6 +25,18 @@ export interface CalendarEvent {
 
 const events = ref<CalendarEvent[]>([])
 
+/** 每分钟刷新一次，让跨午夜后的分组和相对日期标签自动更新 */
+export const eventsNow = ref(new Date())
+let clockStarted = false
+
+function startEventClock() {
+  if (clockStarted) return
+  clockStarted = true
+  setInterval(() => {
+    eventsNow.value = new Date()
+  }, 60_000)
+}
+
 function normalizeTag(raw: unknown): EventTag {
   const tag = String(raw ?? '')
   return (EVENT_TAGS.some(t => t.id === tag) ? tag : 'other') as EventTag
@@ -102,12 +114,13 @@ function compareByAt(a: CalendarEvent, b: CalendarEvent): number {
 
 export function useEvents() {
   void store.ensureLoaded()
+  startEventClock()
 
   const pending = computed(() => events.value.filter(e => !e.handled))
 
   /** 今天及以后，早的在前 */
   const upcoming = computed(() => {
-    const now = new Date()
+    const now = eventsNow.value
     return pending.value
       .filter(e => !isPast(e, now))
       .slice()
@@ -116,7 +129,7 @@ export function useEvents() {
 
   /** 已经过去的，最近的在前 */
   const overdue = computed(() => {
-    const now = new Date()
+    const now = eventsNow.value
     return pending.value
       .filter(e => isPast(e, now))
       .slice()
@@ -129,7 +142,7 @@ export function useEvents() {
 
   /** 未来 N 天内的事件，供首页使用 */
   function withinDays(days: number): CalendarEvent[] {
-    const now = new Date()
+    const now = eventsNow.value
     const limit = new Date(now)
     limit.setDate(limit.getDate() + days)
     const limitStr = toLocalDateStr(limit)

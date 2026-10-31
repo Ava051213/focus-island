@@ -18,6 +18,7 @@ import SettingsPage from './SettingsPage.vue'
 import MemoPage from './MemoPage.vue'
 import StatsPage from './StatsPage.vue'
 import PanelTitleBar from './PanelTitleBar.vue'
+import { saveError } from '../composables/persistence'
 
 interface PanelTransitionMetrics {
   island_x: number
@@ -399,6 +400,7 @@ async function closeWindow() {
     <div class="panel-sheen" />
     <div class="panel-vignette" />
     <div class="panel-inner">
+      <div v-if="saveError" class="save-error">{{ saveError }}</div>
       <PanelTitleBar
         :title="currentTitleMeta.title"
         :icon-paths="[...currentTitleMeta.iconPaths]"
@@ -499,6 +501,16 @@ async function closeWindow() {
   min-height: 0;
   overflow: hidden;
   filter: var(--panel-root-filter, none);
+}
+
+.save-error {
+  flex-shrink: 0;
+  padding: 5px 12px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.12);
+  border-bottom: 1px solid rgba(248, 113, 113, 0.2);
 }
 
 .motion-opening {

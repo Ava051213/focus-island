@@ -4,6 +4,7 @@ import {
   EVENT_TAGS,
   eventRelativeLabel,
   eventTime,
+  eventsNow,
   type CalendarEvent,
 } from '../composables/useEvents'
 
@@ -16,7 +17,7 @@ const emit = defineEmits<{
   toggle: []
 }>()
 
-const dayLabel = computed(() => eventRelativeLabel(props.event.at))
+const dayLabel = computed(() => eventRelativeLabel(props.event.at, eventsNow.value))
 const clock = computed(() => eventTime(props.event.at))
 const tag = computed(() => EVENT_TAGS.find(t => t.id === props.event.tag) ?? EVENT_TAGS[3])
 </script>
