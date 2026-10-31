@@ -5,11 +5,15 @@
 import { emit, listen } from '@tauri-apps/api/event'
 import { watch } from 'vue'
 import { useTimer, type TimerPhase, type NotificationType } from './useTimer'
-import { useTasks } from './useTasks'
+import { useMemos } from './useMemos'
 import { useDailyStats } from './useDailyStats'
 import { useAchievements } from './useAchievements'
 import { useSettings } from './useSettings'
 
+/**
+ * 注意：activeTaskId / activeTaskTitle 沿用旧字段名，
+ * 实际含义已经是「当前专注的对象」——它现在指向一条备忘，不再是任务。
+ */
 export interface TimerStatePayload {
   phase: TimerPhase
   remaining: number
@@ -26,7 +30,7 @@ let bridgeStarted = false
 
 export function useTimerBridge() {
   const timer = useTimer()
-  const { tasks, incrementPomodoro, touchTask } = useTasks()
+  const { incrementPomodoro } = useMemos()
   const { recordPomodoro } = useDailyStats()
   const { recordPomodoro: recordAchievementPomodoro, recordEarlyBird, recordNightOwl } = useAchievements()
   const { settings } = useSettings()
@@ -39,10 +43,7 @@ export function useTimerBridge() {
       totalDuration: timer.totalDuration.value,
       running: timer.running.value,
       activeTaskId: timer.activeTaskId.value,
-      activeTaskTitle:
-        timer.activeTaskTitle.value ??
-        tasks.value.find(t => t.id === timer.activeTaskId.value)?.title ??
-        null,
+      activeTaskTitle: timer.activeTaskTitle.value,
       activeSubtaskId: timer.activeSubtaskId.value,
       activeSubtaskTitle: timer.activeSubtaskTitle.value,
     }
@@ -65,9 +66,9 @@ export function useTimerBridge() {
     if (bridgeStarted) return
     bridgeStarted = true
 
-    timer.onPhaseDoneCallback((phase, taskId) => {
-      if (phase === 'focus' && taskId) {
-        incrementPomodoro(taskId)
+    timer.onPhaseDoneCallback((phase, targetId) => {
+      if (phase === 'focus' && targetId) {
+        incrementPomodoro(targetId)
         const focusMinutes = settings.value.focusDuration
         recordPomodoro(focusMinutes)
         recordAchievementPomodoro()
@@ -121,15 +122,13 @@ export function useTimerBridge() {
 
     watch(
       () => timer.activeTaskId.value,
-      (taskId) => {
-        if (taskId) touchTask(taskId)
+      (targetId) => {
+        // 专注对象就是备忘本身，开跑即视为「最近在动它」
+        if (targetId) {
+          const memo = useMemos().memos.value.find(m => m.id === targetId)
+          if (memo) memo.updatedAt = Date.now()
+        }
       },
-    )
-
-    // 任务标题被编辑时（activeTaskTitle 为空、依赖 tasks 回退）也要同步到灵动岛。
-    watch(
-      () => tasks.value.find(t => t.id === timer.activeTaskId.value)?.title ?? null,
-      () => emitTimerState(),
     )
 
     // 灵动岛窗口重启/晚启动时，允许主动请求一次当前快照。

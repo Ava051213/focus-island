@@ -3,13 +3,19 @@ import { onMounted, ref } from 'vue'
 import { useAiButler } from '../composables/useAiButler'
 import { useAi } from '../composables/useAi'
 import { useMemos } from '../composables/useMemos'
-import { useTasks } from '../composables/useTasks'
+import { eventDate, useEvents } from '../composables/useEvents'
 
 const emit = defineEmits<{ back: [] }>()
 
-const { addTask, activeTasks } = useTasks()
+const { upcoming } = useEvents()
 const { addMemo, updateMemo } = useMemos()
 const { generatePlan } = useAi()
+
+/** AI 产出的条目统一落成备忘标题，不直接造事件（事件需要具体日期） */
+function createMemoFromTitle(title: string) {
+  const memo = addMemo()
+  updateMemo(memo.id, { title })
+}
 
 const {
   insights,
@@ -76,11 +82,11 @@ async function handleReviewPlan() {
   planMessage.value = ''
   planLoading.value = true
   try {
-    const tasks = activeTasks.value.slice(0, 12).map(task => ({
-      title: task.title,
-      dueDate: task.dueDate ?? null,
-      priority: task.priority ?? 0,
-      pomodoros: task.pomodoroCount ?? 0,
+    const tasks = upcoming.value.slice(0, 12).map(event => ({
+      title: event.title,
+      dueDate: eventDate(event.at),
+      priority: 0,
+      pomodoros: 0,
     }))
     const result = await generatePlan(prompt, planExtra.value.trim(), tasks)
     planTasks.value = result.tasks
@@ -117,10 +123,10 @@ function writePlanTasks() {
     planMessage.value = '没有勾选任务'
     return
   }
-  for (const title of selected) addTask(title, null)
+  for (const title of selected) createMemoFromTitle(title)
   planTasks.value = []
   planSelected.value = []
-  planMessage.value = `已写入 ${selected.length} 个任务到「想做」`
+  planMessage.value = `已写入 ${selected.length} 条备忘`
   void refreshQuietly()
 }
 
@@ -160,7 +166,7 @@ async function handleNameIdeas() {
 }
 
 function useName(name: string) {
-  addTask(name)
+  createMemoFromTitle(name)
   names.value = names.value.filter(item => item !== name)
 }
 </script>

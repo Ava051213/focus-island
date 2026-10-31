@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 import { useAi, type PlanTaskInput } from '../composables/useAi'
-import { useTasks } from '../composables/useTasks'
+import { eventDate, useEvents } from '../composables/useEvents'
 import { useDailyStats } from '../composables/useDailyStats'
 
 const props = defineProps<{
@@ -18,7 +18,7 @@ const emit = defineEmits<{
 }>()
 
 const { configured, breakdownGoal, suggestToday, summarizeMemo } = useAi()
-const { activeTasks } = useTasks()
+const { upcoming } = useEvents()
 const { todayStat } = useDailyStats()
 
 const titles = {
@@ -56,7 +56,7 @@ async function generate() {
         error.value = '先输入一个目标，例如「准备下周的组会汇报」'
         return
       }
-      const existing = activeTasks.value.map(task => task.title)
+      const existing = upcoming.value.map(event => event.title)
       const list = await breakdownGoal(goal, existing)
       if (list.length === 0) {
         error.value = 'AI 没有返回可用的任务，请换个说法再试'
@@ -65,14 +65,14 @@ async function generate() {
       resultTasks.value = list
       selected.value = list.map(() => true)
     } else if (props.mode === 'plan') {
-      const input: PlanTaskInput[] = activeTasks.value.map(task => ({
-        title: task.title,
-        dueDate: task.dueDate ?? null,
-        priority: task.priority ?? 0,
-        pomodoros: task.pomodoroCount ?? 0,
+      const input: PlanTaskInput[] = upcoming.value.map(event => ({
+        title: event.title,
+        dueDate: eventDate(event.at),
+        priority: 0,
+        pomodoros: 0,
       }))
       if (input.length === 0) {
-        error.value = '还没有待办任务，先添加几个再让 AI 安排'
+        error.value = '日程里还没有排期，先记几件事再让 AI 安排'
         return
       }
       resultText.value = await suggestToday(input, todayStat.value?.pomodoros ?? 0)

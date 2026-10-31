@@ -39,7 +39,7 @@ cd src-tauri && cargo check
 - **main 窗口**（灵动岛）：`App.vue` → `Island.vue`，360×42，置顶+透明+无边框，默认鼠标穿透
 - **panel 窗口**（专注清单）：`PanelApp.vue`，420×600，从灵动岛弹出的面板，有打开/关闭动画
 
-计时器逻辑运行在 panel 窗口（`useTimerBridge.ts`），在关键状态变化（阶段、运行状态、任务、时长）时通过 `emit('timer-state-update')` 广播快照（含 `syncedAt`）。main 窗口收到后用 `syncedAt + remaining` 推算结束时间，本地自行倒计时。main 窗口启动时会发 `timer-state-request` 拉取一次快照。
+计时器逻辑运行在 panel 窗口（`useTimerBridge.ts`），在关键状态变化（阶段、运行状态、专注对象、时长）时通过 `emit('timer-state-update')` 广播快照（含 `syncedAt`）。main 窗口收到后用 `syncedAt + remaining` 推算结束时间，本地自行倒计时。main 窗口启动时会发 `timer-state-request` 拉取一次快照。
 
 计时结束时 panel 设置 `pendingNotification` 并广播 `notification-show`，灵动岛显示通知横幅，用户操作通过 `notification-action`（confirm / extend / dismiss）回传 panel。
 
@@ -51,7 +51,7 @@ cd src-tauri && cargo check
 
 ```
 idle → focus / break（收到 running 的计时快照）
-focus / break → idle（计时停止且无活动任务）
+focus / break → idle（计时停止且没有专注对象）
 idle → alert（useIdle 5 分钟无操作；注意它只统计灵动岛窗口内的事件）
 alert → 恢复（窗口内有鼠标/键盘活动）
 ```
@@ -71,8 +71,7 @@ alert → 恢复（窗口内有鼠标/键盘活动）
 | 文件 | composable | 跨窗口事件 |
 |------|-----------|-----------|
 | `settings.json` | `useSettings` | `settings-changed` |
-| `tasks.json` | `useTasks` | `tasks-updated` |
-| `task-groups.json` | `useTaskGroups` | `task-groups-updated` |
+| `events.json` | `useEvents` | —（只有 panel 窗口用） |
 | `memos.json` / `memo-categories.json` | `useMemos` | `memos-updated` / `memo-categories-updated` |
 | `daily-stats.json` | `useDailyStats` | — |
 | `achievements.json` | `useAchievements` | — |
@@ -84,10 +83,9 @@ alert → 恢复（窗口内有鼠标/键盘活动）
 
 - **`useIslandState.ts`**：灵动岛状态 + 闲置检测（`@vueuse/core useIdle`）
 - **`useTimer.ts`**：计时器纯逻辑，与 UI 解耦，以 `phaseEndAtMs` 计算剩余时间。`onPhaseDoneCallback` 注册阶段结束回调；提供 `skipToBreak()`、`skipBreak()`、`abandon()` 和通知相关的 `confirm/extend/dismissNotification()`
-- **`useTimerBridge.ts`**：panel 窗口专用，包装 useTimer，负责广播状态、记录番茄（任务、每日统计、成就）以及处理通知操作
-- **`useTasks.ts`**：任务 CRUD。任务按 `dueDate`（本地日期 `YYYY-MM-DD`，分为 overdue/today/tomorrow/week/later/nodate）、`groupId` 和 `priority`（0=收件箱，1-3=核心专注区排名）组织
-- **`useTaskGroups.ts`**：任务分组 CRUD，供 TodoPage 的 tab 与分组下拉使用
-- **`useMemos.ts`**：备忘与分类，同时落 `memos.json` 和 `memo-categories.json`
+- **`useTimerBridge.ts`**：panel 窗口专用，包装 useTimer，负责广播状态、记录番茄（累加到对应备忘、每日统计、成就）以及处理通知操作
+- **`useEvents.ts`**：日程事件 CRUD。每条只有发生时间（`YYYY-MM-DD` 或 `YYYY-MM-DDTHH:mm`）、标题、描述、单个标签、是否已处理，按时间升序排列，过期的单独归档。`parseQuickEvent()` 负责把「周五 10:00 交报告 #工作」这类一句话解析成事件。
+- **`useMemos.ts`**：备忘与分类，同时落 `memos.json` 和 `memo-categories.json`。每条备忘带 `pomodoroCount`，是当前唯一的专注对象
 - **`useSettings.ts`**：主题、时长、透明度（`islandOpacity`）、缩放（`islandScale`）、显示模式（常驻/边缘停靠）、顶部位置（`islandXRatio`）、`idleMottos`、快捷键、开机自启、AI Key/模型/自动建议开关
 - **`useDockMode.ts`**：边缘停靠模式，轮询 `is_mouse_over_window` 决定展开或收起细条
 - **`useDailyStats.ts` / `useAchievements.ts`**：每日统计与成就，日期一律用 `src/utils/date.ts` 的本地日期
@@ -96,7 +94,11 @@ alert → 恢复（窗口内有鼠标/键盘活动）
 
 ### Panel 页面路由
 
-`PanelApp.vue` 通过 `currentView` ref 切换 7 个视图：`tasks`（TaskArea）、`todo`（TodoPage）、`taskDetail`（TaskDetailPage）、`memos`（MemoPage）、`stats`（StatsPage）、`ai`（AiButlerPage）、`settings`（SettingsPage）。底部导航 `navItems` 的顺序与图标也定义在这里。
+`PanelApp.vue` 通过 `currentView` ref 切换 6 个视图：`tasks`（HomePage，首页）、`events`（EventsPage，日程）、`memos`（MemoPage）、`stats`（StatsPage）、`ai`（AiButlerPage）、`settings`（SettingsPage）。底部导航 `navItems` 的顺序与图标也定义在这里。
+
+### 专注对象
+
+番茄钟现在只挂一条**备忘**：`useTimer()` 的 `activeTaskId` 字段名沿用旧的，实际存的是 `memo.id`，一轮专注结束时 `useTimerBridge` 调 `useMemos().incrementPomodoro()`。日程事件不承担专注，也不统计番茄。
 
 ### 备忘录体系
 
@@ -110,7 +112,7 @@ alert → 恢复（窗口内有鼠标/键盘活动）
   - 未填 `aiApiKey` 时 `configured` 为 false，任何调用直接抛错
   - 短任务默认 `thinking: disabled` 并把 `max_tokens` 压到 1024；只有 `generatePlan` 开启思考、给 2048
   - `parseTaskList` / `parseNameList` 先按 JSON 解析，失败后退化为按行拆分，容忍模型返回代码围栏
-- **`useAiButler.ts`**：后台自动建议调度 + `ai-insights.json`。四道闸门按顺序拦：`aiAutoEnabled` → 7:00–23:00 → 距上次 ≥10 分钟 → 当日 <30 次。触发源是 tasks / memos / 今日番茄的 `watch`，90 秒防抖；失败也写 `lastAutoAt`，避免网络异常时反复重试。
+- **`useAiButler.ts`**：后台自动建议调度 + `ai-insights.json`。四道闸门按顺序拦：`aiAutoEnabled` → 7:00–23:00 → 距上次 ≥10 分钟 → 当日 <30 次。触发源是 upcoming 事件 / memos / 今日番茄的 `watch`，90 秒防抖；失败也写 `lastAutoAt`，避免网络异常时反复重试。
   - 结果只进 `insights` 列表（保留最近 50 条，分 `coach` / `review` 两类）
   - 导航红点靠 `lastSeenAt` 与条目 `createdAt` 比较，`markSeen()` 在进入管家页时调用
 

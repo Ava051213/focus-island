@@ -2,7 +2,7 @@
 import { ref, computed } from 'vue'
 import { useDailyStats } from '../composables/useDailyStats'
 import { useAchievements } from '../composables/useAchievements'
-import { useTasks, getTaskTimeCategory } from '../composables/useTasks'
+import { eventDate, useEvents } from '../composables/useEvents'
 
 type TimeRange = 'today' | 'week' | 'month' | 'all'
 
@@ -10,7 +10,7 @@ const emit = defineEmits<{ back: [] }>()
 
 const { todayStat, weekStats, monthStats, allTimeStats, summarizeStats, getDateString, getMonthStats } = useDailyStats()
 const { starAchievements, streakAchievements, specialAchievements, state } = useAchievements()
-const { tasks } = useTasks()
+const { upcoming, overdue } = useEvents()
 
 const timeRange = ref<TimeRange>('today')
 const currentMonth = ref(new Date())
@@ -95,16 +95,22 @@ const weekDays = ['日', '一', '二', '三', '四', '五', '六']
 
 const hoveredIndex = ref<number | null>(null)
 
-const taskDistribution = computed(() => {
-  const active = tasks.value.filter(t => !t.completed)
-  const today = active.filter(t => getTaskTimeCategory(t) === 'today').length
-  const tomorrow = active.filter(t => getTaskTimeCategory(t) === 'tomorrow').length
-  const week = active.filter(t => getTaskTimeCategory(t) === 'week').length
-  const total = today + tomorrow + week || 1
+const pendingEventCount = computed(() => upcoming.value.length + overdue.value.length)
+
+const eventDistribution = computed(() => {
+  const now = new Date()
+  now.setHours(0, 0, 0, 0)
+  const daysUntil = (at: string) => {
+    const [y, m, d] = eventDate(at).split('-').map(Number)
+    return Math.round((new Date(y, m - 1, d).getTime() - now.getTime()) / 86400000)
+  }
+  const total = upcoming.value.length || 1
+  const within7 = upcoming.value.filter(e => daysUntil(e.at) <= 7).length
+  const within30 = upcoming.value.filter(e => daysUntil(e.at) <= 30).length
   return [
-    { label: '今日', value: today, percent: Math.round((today / total) * 100) },
-    { label: '明日', value: tomorrow, percent: Math.round((tomorrow / total) * 100) },
-    { label: '本周', value: week, percent: Math.round((week / total) * 100) },
+    { label: '7 天内', value: within7, percent: Math.round((within7 / total) * 100) },
+    { label: '8–30 天', value: within30 - within7, percent: Math.round(((within30 - within7) / total) * 100) },
+    { label: '更远', value: upcoming.value.length - within30, percent: Math.round(((upcoming.value.length - within30) / total) * 100) },
   ]
 })
 
@@ -161,8 +167,8 @@ const maxPomodoros = computed(() => Math.max(...weekTrend.value.map(d => d.pomod
         <div class="stat-label">专注时长</div>
       </div>
       <div class="stat-card">
-        <div class="stat-value">{{ currentStats.tasksCompleted }}</div>
-        <div class="stat-label">完成任务</div>
+        <div class="stat-value">{{ pendingEventCount }}</div>
+        <div class="stat-label">待办事件</div>
       </div>
       <div class="stat-card">
         <div class="stat-value">{{ state.streakDays }}</div>
@@ -230,11 +236,11 @@ const maxPomodoros = computed(() => Math.max(...weekTrend.value.map(d => d.pomod
         </div>
       </div>
 
-      <!-- Task Distribution -->
+      <!-- Event Distribution -->
       <div class="section chart-section">
-        <div class="section-title">任务分布</div>
+        <div class="section-title">排期分布</div>
         <div class="distribution">
-          <div v-for="item in taskDistribution" :key="item.label" class="dist-item">
+          <div v-for="item in eventDistribution" :key="item.label" class="dist-item">
             <div class="dist-label">
               <span>{{ item.label }}</span>
               <span class="dist-percent">{{ item.percent }}%</span>

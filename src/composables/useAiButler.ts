@@ -2,7 +2,7 @@ import { computed, ref, watch } from 'vue'
 import { createPersistedStore } from './persistence'
 import { useAi, type CoachContext, type PlanTaskInput } from './useAi'
 import { useSettings } from './useSettings'
-import { useTasks } from './useTasks'
+import { useEvents, eventDate } from './useEvents'
 import { useMemos } from './useMemos'
 import { useDailyStats } from './useDailyStats'
 import { toLocalDateStr } from '../utils/date'
@@ -91,7 +91,7 @@ function addInsight(kind: AiInsightKind, title: string, content: string) {
 }
 
 function buildContext(): CoachContext {
-  const { activeTasks } = useTasks()
+  const { upcoming } = useEvents()
   const { memos } = useMemos()
   const { todayStat } = useDailyStats()
 
@@ -101,11 +101,12 @@ function buildContext(): CoachContext {
     .sort((a, b) => b.updatedAt - a.updatedAt)
     .slice(0, 3)
 
-  const tasks: PlanTaskInput[] = activeTasks.value.slice(0, 12).map(task => ({
-    title: task.title,
-    dueDate: task.dueDate ?? null,
-    priority: task.priority ?? 0,
-    pomodoros: task.pomodoroCount ?? 0,
+  // 排期事件作为「接下来有什么」喂给模型
+  const tasks: PlanTaskInput[] = upcoming.value.slice(0, 12).map(event => ({
+    title: event.title,
+    dueDate: eventDate(event.at),
+    priority: 0,
+    pomodoros: 0,
   }))
 
   return {
@@ -116,7 +117,7 @@ function buildContext(): CoachContext {
       updatedAt: memo.updatedAt,
     })),
     todayPomodoros: todayStat.value?.pomodoros ?? 0,
-    completedToday: todayStat.value?.tasksCompleted ?? 0,
+    completedToday: 0,
   }
 }
 
@@ -182,14 +183,14 @@ export function startAiButler() {
   if (started) return
   started = true
 
-  const { activeTasks } = useTasks()
+  const { upcoming } = useEvents()
   const { memos } = useMemos()
   const { todayStat } = useDailyStats()
 
   const onChange = () => scheduleAuto()
 
   watch(
-    () => activeTasks.value.map(t => `${t.id}:${t.completed}:${t.updatedAt}`).join('|'),
+    () => upcoming.value.map(e => `${e.id}:${e.handled}:${e.updatedAt}`).join('|'),
     onChange,
   )
   watch(

@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from "vue";
-import { useTasks } from "../composables/useTasks";
+import { eventRelativeLabel, eventTime, useEvents } from "../composables/useEvents";
 import { useSettings } from "../composables/useSettings";
 
-const { recentFocusTasks } = useTasks();
+const { upcoming } = useEvents();
 const { settings } = useSettings()
 
 const DEFAULT_MOTTOS = [
@@ -36,28 +36,31 @@ function pickRandomMottos(count: number): string[] {
 
 interface CarouselItem {
     key: string;
-    type: "task" | "motto";
+    type: "event" | "motto";
     text: string;
-    pomodoroCount?: number;
+    when?: string;
 }
 
 const carouselItems = computed<CarouselItem[]>(() => {
-    const tasks = recentFocusTasks.value;
-    if (tasks.length === 0) {
-        // No tasks at all: only mottos
+    const events = upcoming.value.slice(0, 3);
+    if (events.length === 0) {
+        // Nothing scheduled: mottos only
         return mottos.value.map((m, i) => ({
             key: `motto-${i}`,
             type: "motto" as const,
             text: m,
         }));
     }
-    // Tasks + 2 random mottos mixed in
-    const items: CarouselItem[] = tasks.map((t) => ({
-        key: t.id,
-        type: "task" as const,
-        text: t.title,
-        pomodoroCount: t.pomodoroCount,
-    }));
+    // Nearest events + 2 random mottos mixed in
+    const items: CarouselItem[] = events.map((e) => {
+        const clock = eventTime(e.at);
+        return {
+            key: e.id,
+            type: "event" as const,
+            text: e.title,
+            when: clock ? `${eventRelativeLabel(e.at)} ${clock}` : eventRelativeLabel(e.at),
+        };
+    });
     const randomMottos = pickRandomMottos(2);
     randomMottos.forEach((m, i) => {
         items.push({
@@ -113,15 +116,14 @@ onUnmounted(() => {
                 class="absolute inset-0 flex items-center px-4 gap-2"
                 :class="currentItem.type === 'motto' ? 'justify-center' : ''"
             >
-                <!-- Task item -->
-                <template v-if="currentItem.type === 'task'">
+                <!-- Upcoming event -->
+                <template v-if="currentItem.type === 'event'">
                     <span
-                        v-if="currentItem.pomodoroCount && currentItem.pomodoroCount > 0"
+                        v-if="currentItem.when"
                         class="text-[var(--idle-color)] shrink-0 opacity-70"
                         :style="{ fontSize: `calc(10px * var(--island-scale, 1))` }"
                     >
-                        {{ "●".repeat(Math.min(currentItem.pomodoroCount, 3))
-                        }}{{ currentItem.pomodoroCount > 3 ? "+" : "" }}
+                        {{ currentItem.when }}
                     </span>
                     <span class="text-white/90 truncate flex-1" :style="{ fontSize: `calc(12px * var(--island-scale, 1))` }">{{
                         currentItem.text

@@ -1,17 +1,12 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useTimer } from '../composables/useTimer'
-import { useTasks } from '../composables/useTasks'
 
-const { displayTime, phase, activeTaskId, activeTaskTitle, activeSubtaskTitle, running } = useTimer()
-const { tasks } = useTasks()
+const { displayTime, phase, activeTaskTitle, activeSubtaskTitle, running } = useTimer()
 
-const activeTask = computed(() =>
-  tasks.value.find(t => t.id === activeTaskId.value)
-)
 const resolvedTitle = computed(() => {
   if (activeSubtaskTitle.value) return activeSubtaskTitle.value
-  return activeTaskTitle.value ?? activeTask.value?.title ?? null
+  return activeTaskTitle.value ?? null
 })
 
 const phaseColor = computed(() =>

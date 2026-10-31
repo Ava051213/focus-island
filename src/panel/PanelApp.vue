@@ -7,15 +7,13 @@ import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { useTimerBridge } from '../composables/useTimerBridge'
 import { useSettings } from '../composables/useSettings'
 import { useShortcut } from '../composables/useShortcut'
-import { useTasks } from '../composables/useTasks'
-import { useTaskGroups } from '../composables/useTaskGroups'
+import { useEvents } from '../composables/useEvents'
 import { useMemos } from '../composables/useMemos'
 import { useDailyStats } from '../composables/useDailyStats'
 import { useAchievements } from '../composables/useAchievements'
 import { startAiButler, useAiButler } from '../composables/useAiButler'
-import TodoPage from './TodoPage.vue'
-import TaskArea from './TaskArea.vue'
-import TaskDetailPage from './TaskDetailPage.vue'
+import HomePage from './HomePage.vue'
+import EventsPage from './EventsPage.vue'
 import SettingsPage from './SettingsPage.vue'
 import MemoPage from './MemoPage.vue'
 import StatsPage from './StatsPage.vue'
@@ -37,8 +35,7 @@ const { startBridge } = useTimerBridge()
 useSettings()
 useShortcut()
 function prewarmPanelData() {
-  useTasks()
-  useTaskGroups()
+  useEvents()
   useMemos()
   useDailyStats()
   useAchievements()
@@ -54,23 +51,11 @@ const IS_MACOS = navigator.userAgent.toLowerCase().includes('mac')
 const { hasUnread, markSeen: markButlerSeen } = useAiButler()
 startAiButler()
 
-const currentView = ref<'tasks' | 'todo' | 'taskDetail' | 'settings' | 'memos' | 'stats' | 'ai'>('tasks')
-const taskIdForDetail = ref<string>('')
-const todoInitialTab = ref<string | undefined>(undefined)
-const todoSearchQuery = ref('')
+const currentView = ref<'tasks' | 'events' | 'settings' | 'memos' | 'stats' | 'ai'>('tasks')
 const memoSearchQuery = ref('')
-const todoActiveTabLabel = ref('')
-const cachedPanelViews = ['TaskArea', 'TodoPage', 'SettingsPage', 'MemoPage', 'StatsPage', 'AiButlerPage']
-
-function navigateToTodo(tab?: string) {
-  todoInitialTab.value = tab
-  currentView.value = 'todo'
-}
+const cachedPanelViews = ['HomePage', 'EventsPage', 'SettingsPage', 'MemoPage', 'StatsPage', 'AiButlerPage']
 
 watch(currentView, (v) => {
-  if (v !== 'todo' && v !== 'taskDetail') {
-    todoSearchQuery.value = ''
-  }
   if (v !== 'memos') {
     memoSearchQuery.value = ''
   }
@@ -87,10 +72,15 @@ const navItems = [
     iconPaths: ['M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z', 'M9 22V12h6v10'],
   },
   {
-    key: 'todo',
-    label: 'TODO',
-    title: 'TODO',
-    iconPaths: ['M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z', 'M9 12l2 2 4-4'],
+    key: 'events',
+    label: '日程',
+    title: '日程',
+    iconPaths: [
+      'M3 6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z',
+      'M3 10h18',
+      'M8 2v4',
+      'M16 2v4',
+    ],
   },
   {
     key: 'memos',
@@ -125,7 +115,7 @@ const navItems = [
 ] as const
 
 const currentTitleMeta = computed(() =>
-  navItems.find(item => item.key === (currentView.value === 'taskDetail' ? 'todo' : currentView.value)) ?? navItems[0]
+  navItems.find(item => item.key === currentView.value) ?? navItems[0]
 )
 const isClosing = ref(false)
 const panelRootRef = ref<HTMLElement | null>(null)
@@ -358,17 +348,16 @@ async function closeWindow() {
       <PanelTitleBar
         :title="currentTitleMeta.title"
         :icon-paths="[...currentTitleMeta.iconPaths]"
-        :show-search="currentView === 'todo' || currentView === 'memos'"
-        :search-query="currentView === 'memos' ? memoSearchQuery : todoSearchQuery"
-        :search-placeholder="currentView === 'memos' ? '搜索备忘录...' : (todoActiveTabLabel ? `搜索「${todoActiveTabLabel}」...` : '搜索当前分类...')"
-        @update:search-query="currentView === 'memos' ? (memoSearchQuery = $event) : (todoSearchQuery = $event)"
+        :show-search="currentView === 'memos'"
+        :search-query="memoSearchQuery"
+        :search-placeholder="'搜索备忘录...'"
+        @update:search-query="memoSearchQuery = $event"
         @close="closeWindow"
       />
       <div class="panel-body">
         <KeepAlive :include="cachedPanelViews">
-          <TaskArea v-if="currentView === 'tasks'" category="today" @close="closeWindow" @navigate-to-todo="navigateToTodo" />
-          <TodoPage v-else-if="currentView === 'todo'" :initial-tab="todoInitialTab" :search-query="todoSearchQuery" @view-detail="taskId => { taskIdForDetail = taskId; currentView = 'taskDetail' }" @tab-change="tab => { todoInitialTab = tab }" @active-tab-label="todoActiveTabLabel = $event" />
-          <TaskDetailPage v-else-if="currentView === 'taskDetail'" :task-id="taskIdForDetail" @back="currentView = 'todo'" />
+          <HomePage v-if="currentView === 'tasks'" @navigate-events="currentView = 'events'" />
+          <EventsPage v-else-if="currentView === 'events'" />
           <SettingsPage v-else-if="currentView === 'settings'" @back="currentView = 'tasks'" />
           <MemoPage v-else-if="currentView === 'memos'" :search-query="memoSearchQuery" @back="currentView = 'tasks'" />
           <StatsPage v-else-if="currentView === 'stats'" @back="currentView = 'tasks'" />

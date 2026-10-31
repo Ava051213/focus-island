@@ -7,6 +7,8 @@ export interface Memo {
   content: string
   categoryId: string
   isPinned: boolean
+  /** 这条备忘上累计完成的专注轮数 */
+  pomodoroCount: number
   createdAt: number
   updatedAt: number
 }
@@ -57,7 +59,13 @@ const memoStore = createPersistedStore({
   snapshot: () => memos.value,
   restore: (data) => {
     if (!Array.isArray(data)) throw new Error('memos.json is not an array')
-    memos.value = data as Memo[]
+    // 老数据没有 pomodoroCount，这里补默认值避免出现 NaN
+    memos.value = data
+      .filter((raw): raw is Partial<Memo> => !!raw && typeof raw === 'object')
+      .map(raw => ({
+        ...raw,
+        pomodoroCount: Number(raw.pomodoroCount) || 0,
+      })) as Memo[]
   },
   syncEvent: 'memos-updated',
 })
@@ -93,6 +101,7 @@ export function useMemos() {
       content: '',
       categoryId: actualCategoryId,
       isPinned: false,
+      pomodoroCount: 0,
       createdAt: now,
       updatedAt: now,
     }
@@ -116,6 +125,13 @@ export function useMemos() {
     if (!memo) return
     memo.isPinned = !memo.isPinned
     memo.updatedAt = Date.now()
+  }
+
+  /** 一轮专注结束时累加到对应备忘 */
+  function incrementPomodoro(id: string) {
+    const memo = memos.value.find(m => m.id === id)
+    if (!memo) return
+    memo.pomodoroCount = (memo.pomodoroCount ?? 0) + 1
   }
 
   function addCategory(name: string, color: string = 'yellow'): MemoCategory | null {
@@ -202,6 +218,7 @@ export function useMemos() {
     updateMemo,
     deleteMemo,
     togglePin,
+    incrementPomodoro,
     addCategory,
     updateCategory,
     deleteCategory,
