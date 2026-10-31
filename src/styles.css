@@ -112,3 +112,20 @@ html, body, #app {
   transform: translateX(32px);
   opacity: 0;
 }
+
+/* 分组颜色圆点：TodoPage 拆出的多个子组件共用，故放在全局 */
+.group-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.group-dot-sm {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
