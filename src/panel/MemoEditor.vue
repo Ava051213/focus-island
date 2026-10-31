@@ -25,6 +25,7 @@ const localIsPinned = ref(props.memo.isPinned)
 const saveStatus = ref<'saved' | 'saving' | 'unsaved'>('saved')
 const rewriting = ref(false)
 const rewriteError = ref('')
+const rewriteErrorExpanded = ref(false)
 const editorRef = ref<HTMLDivElement | null>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const saveTimeout = ref<number | null>(null)
@@ -390,6 +391,7 @@ async function rewriteAndSave() {
 
   rewriting.value = true
   rewriteError.value = ''
+  rewriteErrorExpanded.value = false
   try {
     const result = await polishMemo(plain)
     localTitle.value = result.title
@@ -835,7 +837,12 @@ function formatUpdateTime(timestamp: number): string {
 
     <!-- 底部确定：回车换行，Shift+回车生成并存回列表 -->
     <div class="editor-bottom">
-      <span v-if="rewriteError" class="rewrite-error">{{ rewriteError }}</span>
+      <span
+        v-if="rewriteError"
+        class="rewrite-error"
+        :class="{ expanded: rewriteErrorExpanded }"
+        @click="rewriteErrorExpanded = !rewriteErrorExpanded"
+      >{{ rewriteError }}</span>
       <span v-else class="rewrite-hint">Shift+回车 整理并存回小记</span>
       <button class="rewrite-btn" :disabled="rewriting" @click="rewriteAndSave">
         {{ rewriting ? '写着呢…' : '确定' }}
@@ -1009,6 +1016,16 @@ function formatUpdateTime(timestamp: number): string {
   font-size: 11px;
   line-height: 1.4;
   color: #f87171;
+  cursor: pointer;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.rewrite-error.expanded {
+  display: block;
+  -webkit-line-clamp: unset;
 }
 
 .rewrite-btn {

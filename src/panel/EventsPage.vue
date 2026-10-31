@@ -40,6 +40,7 @@ interface EventDraft {
 
 const aiLoading = ref(false)
 const aiError = ref('')
+const aiErrorExpanded = ref(false)
 const preview = ref<EventDraft | null>(null)
 
 function tagLabel(tag: EventTag): string {
@@ -67,6 +68,7 @@ async function extractWithAi() {
   const seq = ++requestSeq
   aiLoading.value = true
   aiError.value = ''
+  aiErrorExpanded.value = false
   preview.value = null
   try {
     const result = await extractEvent(text)
@@ -97,6 +99,7 @@ async function extractWithAi() {
 watch(draft, () => {
   if (preview.value) preview.value = null
   aiError.value = ''
+  aiErrorExpanded.value = false
 })
 
 function savePreview() {
@@ -205,7 +208,12 @@ function removeEvent() {
           {{ preview.at.replace('T', ' ') }} · {{ tagLabel(preview.tag) }}
         </div>
         <div v-if="preview.note" class="preview-note">{{ preview.note }}</div>
-        <div v-if="aiError" class="preview-error">{{ aiError }}</div>
+        <div
+          v-if="aiError"
+          class="preview-error"
+          :class="{ expanded: aiErrorExpanded }"
+          @click="aiErrorExpanded = !aiErrorExpanded"
+        >{{ aiError }}</div>
         <div class="preview-actions">
           <button class="btn" @click="adjustPreview">调整</button>
           <button class="btn primary" @click="savePreview">保存</button>
@@ -400,6 +408,16 @@ function removeEvent() {
   margin-top: 6px;
   font-size: 10px;
   color: #f87171;
+  cursor: pointer;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.preview-error.expanded {
+  display: block;
+  -webkit-line-clamp: unset;
 }
 
 .preview-title {

@@ -39,11 +39,13 @@ function startMemo(memo: Memo) {
 const { coachInsight, refreshCoach, configured } = useAiButler()
 const coachLoading = ref(false)
 const coachError = ref('')
+const coachErrorExpanded = ref(false)
 
 async function handleRefreshCoach() {
   if (coachLoading.value) return
   coachLoading.value = true
   coachError.value = ''
+  coachErrorExpanded.value = false
   try {
     await refreshCoach()
   } catch (e) {
@@ -65,7 +67,12 @@ async function handleRefreshCoach() {
       </div>
       <p v-if="coachInsight" class="coach-content">{{ coachInsight.content }}</p>
       <p v-else class="coach-empty">记点小记或日程，我就悄悄帮你想办法呀～</p>
-      <p v-if="coachError" class="coach-error">{{ coachError }}</p>
+      <p
+        v-if="coachError"
+        class="coach-error"
+        :class="{ expanded: coachErrorExpanded }"
+        @click="coachErrorExpanded = !coachErrorExpanded"
+      >{{ coachError }}</p>
     </section>
 
     <section class="zone">
@@ -189,6 +196,16 @@ async function handleRefreshCoach() {
   font-size: 11px;
   line-height: 1.5;
   color: #f87171;
+  cursor: pointer;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.coach-error.expanded {
+  display: block;
+  -webkit-line-clamp: unset;
 }
 
 .zone-title {
