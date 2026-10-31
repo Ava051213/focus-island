@@ -76,7 +76,8 @@ async function generate() {
       }
       resultText.value = await suggestToday(input, todayStat.value?.pomodoros ?? 0)
     } else {
-      resultText.value = await polishMemo(props.memoContent ?? '')
+      const result = await polishMemo(props.memoContent ?? '')
+      resultText.value = result.content
     }
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e)

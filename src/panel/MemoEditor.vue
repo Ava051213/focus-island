@@ -3,7 +3,7 @@ import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { readText } from '@tauri-apps/plugin-clipboard-manager'
 import type { Memo, MemoCategory } from '../composables/useMemos'
 import MemoCategoryDropdown from './MemoCategoryDropdown.vue'
-import AiDialog from './AiDialog.vue'
+import { useAi } from '../composables/useAi'
 import { sanitizeHtml } from '../utils/sanitizeHtml'
 
 const props = defineProps<{
@@ -23,10 +23,9 @@ const localContent = ref(props.memo.content)
 const localCategoryId = ref(props.memo.categoryId)
 const localIsPinned = ref(props.memo.isPinned)
 const saveStatus = ref<'saved' | 'saving' | 'unsaved'>('saved')
-const showAi = ref(false)
-const memoAiText = ref('')
+const rewriting = ref(false)
+const rewriteError = ref('')
 const editorRef = ref<HTMLDivElement | null>(null)
-const titleInputRef = ref<HTMLInputElement | null>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const saveTimeout = ref<number | null>(null)
 const showDeleteConfirm = ref(false)
@@ -160,21 +159,6 @@ function doSave() {
   setTimeout(() => {
     saveStatus.value = 'saved'
   }, 200)
-}
-
-// Title input handlers
-function onTitleInput() {
-  scheduleSave()
-}
-
-function onTitleKeydown(e: KeyboardEvent) {
-  if (e.key === 'Enter') {
-    e.preventDefault()
-    editorRef.value?.focus()
-    if (!restoreSelection() && editorRef.value) {
-      placeCaretAtEnd(editorRef.value)
-    }
-  }
 }
 
 // Category change
@@ -385,20 +369,39 @@ function onContentChange() {
   scheduleSave()
 }
 
-// AI 整理：把编辑器纯文本交给 AI，结果插入光标处
-function openMemoAi() {
-  memoAiText.value = editorRef.value?.innerText ?? ''
-  showAi.value = true
+// AI 生成：把随手写的碎片改写成规范笔记，替换原文并直接存回列表
+const { polishMemo } = useAi()
+
+function textToHtml(text: string): string {
+  return text
+    .split('\n')
+    .map(line => line.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'))
+    .join('<br>')
 }
 
-function escapeAiHtml(text: string) {
-  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-}
+async function rewriteAndSave() {
+  if (rewriting.value) return
+  const plain = (editorRef.value?.innerText ?? '').trim()
+  if (!plain) {
+    rewriteError.value = '先写点什么嘛～'
+    editorRef.value?.focus()
+    return
+  }
 
-function insertAiText(text: string) {
-  const html = text.split('\n').map(line => escapeAiHtml(line)).join('<br>')
-  execCommand('insertHTML', html)
-  showAi.value = false
+  rewriting.value = true
+  rewriteError.value = ''
+  try {
+    const result = await polishMemo(plain)
+    localTitle.value = result.title
+    localContent.value = textToHtml(result.content)
+    if (editorRef.value) editorRef.value.innerHTML = localContent.value
+    doSave()
+    emit('back', false)
+  } catch (e) {
+    rewriteError.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    rewriting.value = false
+  }
 }
 
 // Handle paste - support text, HTML, and images (screenshots)
@@ -486,6 +489,13 @@ function handleBack() {
 // Keyboard shortcuts
 function onEditorKeydown(e: KeyboardEvent) {
   if (e.isComposing || e.keyCode === 229) return
+
+  // Shift+回车 = AI 整理并存回列表；普通回车照常换行
+  if (e.key === 'Enter' && e.shiftKey) {
+    e.preventDefault()
+    void rewriteAndSave()
+    return
+  }
 
   // Ctrl/Cmd + B for bold
   if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
@@ -656,8 +666,9 @@ function onSelectionChange() {
 onMounted(() => {
   if (editorRef.value) {
     editorRef.value.innerHTML = sanitizeHtml(localContent.value) || '<div><br></div>'
+    editorRef.value.focus()
+    placeCaretAtEnd(editorRef.value)
   }
-  titleInputRef.value?.focus()
   document.addEventListener('click', onDocumentClick)
   document.addEventListener('selectionchange', onSelectionChange)
 })
@@ -716,7 +727,7 @@ function formatUpdateTime(timestamp: number): string {
       </div>
     </div>
 
-    <!-- Title Input -->
+    <!-- Category -->
     <div class="editor-title-area">
       <MemoCategoryDropdown
         v-model="localCategoryId"
@@ -724,14 +735,6 @@ function formatUpdateTime(timestamp: number): string {
         size="medium"
         :showNewButton="false"
         @change="onCategoryChange"
-      />
-      <input
-        ref="titleInputRef"
-        v-model="localTitle"
-        class="title-input"
-        placeholder="给它起个名字…"
-        @input="onTitleInput"
-        @keydown="onTitleKeydown"
       />
     </div>
 
@@ -813,15 +816,6 @@ function formatUpdateTime(timestamp: number): string {
           <polyline points="21 15 16 10 5 21"/>
         </svg>
       </button>
-
-      <div class="toolbar-divider"></div>
-
-      <button class="toolbar-btn" @click="openMemoAi" title="写规范一点">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z"/>
-          <path d="M18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2z"/>
-        </svg>
-      </button>
     </div>
 
     <!-- Editor Content -->
@@ -839,6 +833,15 @@ function formatUpdateTime(timestamp: number): string {
       ></div>
     </div>
 
+    <!-- 底部确定：回车换行，Shift+回车生成并存回列表 -->
+    <div class="editor-bottom">
+      <span v-if="rewriteError" class="rewrite-error">{{ rewriteError }}</span>
+      <span v-else class="rewrite-hint">Shift+回车 整理并存回小记</span>
+      <button class="rewrite-btn" :disabled="rewriting" @click="rewriteAndSave">
+        {{ rewriting ? '写着呢…' : '确定' }}
+      </button>
+    </div>
+
     <!-- Hidden File Input for Image Upload -->
     <input
       ref="fileInputRef"
@@ -851,11 +854,11 @@ function formatUpdateTime(timestamp: number): string {
     <!-- Delete Confirmation Dialog -->
     <div v-if="showDeleteConfirm" class="delete-dialog-overlay" @click="cancelDelete">
       <div class="delete-dialog" @click.stop>
-        <div class="delete-dialog-title">🗑️ 删除备忘录</div>
-        <div class="delete-dialog-content">确定要删除这条备忘录吗？此操作无法撤销。</div>
+        <div class="delete-dialog-title">🗑️ 真的要丢掉这条小记吗</div>
+        <div class="delete-dialog-content">丢掉就捡不回来啦，再想想好不好～</div>
         <div class="delete-dialog-actions">
-          <button class="dialog-btn cancel-btn" @click="cancelDelete">取消</button>
-          <button class="dialog-btn confirm-btn" @click="confirmDelete">删除</button>
+          <button class="dialog-btn cancel-btn" @click="cancelDelete">再想想</button>
+          <button class="dialog-btn confirm-btn" @click="confirmDelete">丢掉吧</button>
         </div>
       </div>
     </div>
@@ -900,14 +903,6 @@ function formatUpdateTime(timestamp: number): string {
         </button>
       </div>
     </div>
-
-    <AiDialog
-      v-if="showAi"
-      mode="memo"
-      :memo-content="memoAiText"
-      @close="showAi = false"
-      @insert="insertAiText"
-    />
   </div>
 </template>
 
@@ -992,21 +987,46 @@ function formatUpdateTime(timestamp: number): string {
   flex-shrink: 0;
 }
 
-.title-input {
-  flex: 1;
-  min-width: 0;
-  background: transparent;
-  border: none;
-  padding: 0;
-  font-size: 20px;
-  font-weight: 600;
-  color: #fff;
-  outline: none;
-  font-family: inherit;
+/* 底部操作条 */
+.editor-bottom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
 }
 
-.title-input::placeholder {
+.rewrite-hint {
+  flex: 1;
+  font-size: 11px;
   color: rgba(255, 255, 255, 0.3);
+}
+
+.rewrite-error {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #f87171;
+}
+
+.rewrite-btn {
+  flex-shrink: 0;
+  height: 28px;
+  padding: 0 16px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--focus-color);
+  background: color-mix(in srgb, var(--focus-color) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--focus-color) 35%, transparent);
+  cursor: pointer;
+}
+
+.rewrite-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 /* Toolbar */

@@ -276,21 +276,29 @@ export function useAi() {
     )
   }
 
-  async function polishMemo(content: string): Promise<string> {
+  async function polishMemo(content: string): Promise<{ title: string; content: string }> {
     const plain = content.trim()
     if (!plain) throw new Error('这条小记还空空的呀')
     const system = `你是中文笔记编辑，只做一件事：把用户随手写的碎片改写成规范的书面笔记。
+只输出 JSON：{"title":"不超过 12 字的短标题","content":"改写后的条目，每条一行，以「• 」开头"}
+标题必须根据用户这一次写的内容概括，示例只是格式演示，不要照抄示例文字。
 规则：
-1. 只改写用户写的内容，一条一行，以「• 」开头。
+1. 只改写用户写的内容，不新增事实、数量、日期。
 2. 把「写写」「整理整理」这类重复口语改成简洁的书面说法。
-3. 不新增用户没写的事实、数量、日期。
-4. 只输出改写后的条目，不要解释，不要复述规则。
-示例：
-输入：写写算法题 整理整理笔记
-输出：
-• 练习算法题
-• 整理笔记`
-    return chat(system, plain.slice(0, 2000), 0.2)
+3. 不要解释，不要输出 JSON 之外的内容。
+示例输入：买牛奶 记得交房租
+示例输出：{"title":"生活待办","content":"• 购买牛奶\\n• 缴纳房租"}`
+    const text = await chat(system, plain.slice(0, 2000), 0.2)
+    const raw = stripCodeFence(text)
+    try {
+      const data = JSON.parse(raw)
+      const title = String(data?.title ?? '').trim().slice(0, 20)
+      const body = String(data?.content ?? '').trim()
+      if (body) return { title, content: body }
+    } catch {
+      // 解析失败时按纯文本兜底
+    }
+    return { title: '', content: raw }
   }
 
   async function coachToday(ctx: CoachContext): Promise<string> {
