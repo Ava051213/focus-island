@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import {
   EVENT_TAGS,
   hasExplicitSchedule,
@@ -59,14 +59,19 @@ function showLocalPreview() {
   }
 }
 
+let requestSeq = 0
+
 async function extractWithAi() {
   const text = draft.value.trim()
-  if (!text || !configured.value || aiLoading.value) return
+  if (!text || !configured.value) return
+  const seq = ++requestSeq
   aiLoading.value = true
   aiError.value = ''
   preview.value = null
   try {
     const result = await extractEvent(text)
+    // 等待期间内容被改过或又发起了一次，丢弃这次结果
+    if (seq !== requestSeq || draft.value.trim() !== text) return
 
     // 日期和时间以本地规则为准：模型推算「下周三」并不可靠。
     // AI 只负责提炼标题、描述和标签，时间轴由代码决定。
@@ -90,20 +95,20 @@ async function extractWithAi() {
       source: 'ai',
     }
   } catch (e) {
+    if (seq !== requestSeq) return
     aiError.value = e instanceof Error ? e.message : String(e)
-    // 失败也别让用户白粘贴一次，给出本地条子
+    // 失败也别让用户白打一次字，给出本地条子
     showLocalPreview()
   } finally {
-    aiLoading.value = false
+    if (seq === requestSeq) aiLoading.value = false
   }
 }
 
-/** 粘贴后等一拍再取内容，此时 draft 已经更新 */
-function onPasteDraft() {
-  setTimeout(() => {
-    if (draft.value.trim() && configured.value) void extractWithAi()
-  }, 60)
-}
+/** 输入内容一变，之前整理出的条子就作废，避免拿旧结果显示新内容 */
+watch(draft, () => {
+  if (preview.value) preview.value = null
+  aiError.value = ''
+})
 
 function savePreview() {
   const item = preview.value
@@ -137,14 +142,10 @@ function adjustPreview() {
   draft.value = ''
 }
 
-/** 回车：没整理过就整理，整理过就保存 */
+/** 回车只负责「整理成条子」，绝不在这一步建事件；建事件必须点保存 */
 async function submitDraft() {
   const text = draft.value.trim()
-  if (!text) return
-  if (preview.value) {
-    savePreview()
-    return
-  }
+  if (!text || aiLoading.value) return
   if (configured.value) {
     await extractWithAi()
   } else {
@@ -201,7 +202,6 @@ function removeEvent() {
         class="quick-input"
         placeholder="记一件事，回车整理成日程"
         @keydown.enter="submitDraft"
-        @paste="onPasteDraft"
       />
 
       <div v-if="aiLoading" class="ai-hint">正在整理…</div>
