@@ -7,12 +7,19 @@ import {
   type CalendarEvent,
   type EventTag,
 } from '../composables/useEvents'
+import { useAi } from '../composables/useAi'
 import EventCard from './EventCard.vue'
 
 const { upcoming, overdue, handledEvents, addEvent, updateEvent, deleteEvent, toggleHandled } = useEvents()
+const { extractEvent, configured } = useAi()
 
 const draft = ref('')
 const showHandled = ref(false)
+
+/** 超过这个字数就认为不是「一句话」，考虑交给 AI 提炼 */
+const LONG_TEXT_THRESHOLD = 30
+
+const isLongDraft = computed(() => draft.value.trim().length > LONG_TEXT_THRESHOLD)
 
 const parseHint = computed(() => {
   const text = draft.value.trim()
@@ -24,13 +31,85 @@ const parseHint = computed(() => {
   return `${at} · ${tag}`
 })
 
+const aiLoading = ref(false)
+const aiError = ref('')
+const aiPreview = ref<{ title: string; at: string; note: string; tag: EventTag } | null>(null)
+
+function tagLabel(tag: EventTag): string {
+  return EVENT_TAGS.find(t => t.id === tag)?.label ?? '其他'
+}
+
+async function extractWithAi() {
+  const text = draft.value.trim()
+  if (!text || !configured.value || aiLoading.value) return
+  aiLoading.value = true
+  aiError.value = ''
+  aiPreview.value = null
+  try {
+    const result = await extractEvent(text)
+    aiPreview.value = {
+      title: result.title,
+      at: result.at,
+      note: result.note,
+      tag: (['work', 'life', 'study', 'other'].includes(result.tag) ? result.tag : 'other') as EventTag,
+    }
+  } catch (e) {
+    aiError.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    aiLoading.value = false
+  }
+}
+
+/** 粘贴后等一拍再判断长度，此时 draft 已经更新 */
+function onPasteDraft() {
+  setTimeout(() => {
+    if (isLongDraft.value && configured.value) void extractWithAi()
+  }, 60)
+}
+
+function saveAiPreview() {
+  const preview = aiPreview.value
+  if (!preview) return
+  addEvent({ title: preview.title, at: preview.at, note: preview.note, tag: preview.tag })
+  aiPreview.value = null
+  draft.value = ''
+}
+
+function adjustAiPreview() {
+  const preview = aiPreview.value
+  if (!preview) return
+  const [date, time] = preview.at.split('T')
+  editing.value = {
+    id: '',
+    title: preview.title,
+    note: preview.note,
+    at: preview.at,
+    tag: preview.tag,
+    handled: false,
+    createdAt: 0,
+    updatedAt: 0,
+  }
+  form.title = preview.title
+  form.date = date ?? ''
+  form.time = time ?? ''
+  form.note = preview.note
+  form.tag = preview.tag
+  aiPreview.value = null
+  draft.value = ''
+}
+
 function submitDraft() {
   const text = draft.value.trim()
   if (!text) return
+  if (aiPreview.value) {
+    saveAiPreview()
+    return
+  }
   const parsed = parseQuickEvent(text)
   if (!parsed.title) return
   addEvent(parsed)
   draft.value = ''
+  aiError.value = ''
 }
 
 const editing = ref<CalendarEvent | null>(null)
@@ -56,18 +135,20 @@ function saveEditor() {
   if (!editing.value) return
   const title = form.title.trim()
   if (!title || !form.date) return
-  updateEvent(editing.value.id, {
-    title,
-    at: form.time ? `${form.date}T${form.time}` : form.date,
-    note: form.note.trim(),
-    tag: form.tag,
-  })
+  const at = form.time ? `${form.date}T${form.time}` : form.date
+  const note = form.note.trim()
+  if (!editing.value.id) {
+    // 从 AI 预览点「调整」过来的新事件
+    addEvent({ title, at, note, tag: form.tag })
+  } else {
+    updateEvent(editing.value.id, { title, at, note, tag: form.tag })
+  }
   editing.value = null
 }
 
 function removeEvent() {
   if (!editing.value) return
-  deleteEvent(editing.value.id)
+  if (editing.value.id) deleteEvent(editing.value.id)
   editing.value = null
 }
 </script>
@@ -78,10 +159,40 @@ function removeEvent() {
       <input
         v-model="draft"
         class="quick-input"
-        placeholder="明天 10:00 交季度报告 #工作"
+        placeholder="明天 10:00 交季度报告 #工作，或直接粘贴一整段"
         @keydown.enter="submitDraft"
+        @paste="onPasteDraft"
       />
-      <span v-if="parseHint" class="quick-hint">{{ parseHint }}</span>
+
+      <div v-if="aiLoading" class="ai-hint">正在整理这段…</div>
+
+      <div v-else-if="aiError" class="ai-hint error">
+        <span>{{ aiError }}</span>
+        <button class="link-btn" @click="extractWithAi">重试</button>
+      </div>
+
+      <div v-else-if="aiPreview" class="ai-preview">
+        <div class="preview-head">将创建这条日程</div>
+        <div class="preview-title">{{ aiPreview.title }}</div>
+        <div class="preview-meta">
+          {{ aiPreview.at.replace('T', ' ') }} · {{ tagLabel(aiPreview.tag) }}
+        </div>
+        <div v-if="aiPreview.note" class="preview-note">{{ aiPreview.note }}</div>
+        <div class="preview-actions">
+          <button class="btn" @click="adjustAiPreview">调整</button>
+          <button class="btn primary" @click="saveAiPreview">保存</button>
+        </div>
+      </div>
+
+      <template v-else>
+        <span v-if="!isLongDraft && parseHint" class="quick-hint">{{ parseHint }}</span>
+        <span v-else-if="isLongDraft && configured" class="quick-hint">
+          这段有点长，<button class="link-btn" @click="extractWithAi">用 AI 提炼成日程</button>
+        </span>
+        <span v-else-if="isLongDraft" class="quick-hint">
+          这段会被整段当成事件名。在「设置 → AI 助手」填 Key 后可以自动提炼。
+        </span>
+      </template>
     </div>
 
     <div class="event-list">
@@ -207,6 +318,74 @@ function removeEvent() {
   margin-top: 5px;
   font-size: 10px;
   color: rgba(255, 255, 255, 0.35);
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--focus-color);
+  font-size: inherit;
+  font-family: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.ai-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 5px;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.ai-hint.error {
+  color: #f87171;
+}
+
+.ai-preview {
+  margin-top: 8px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--focus-color) 8%, rgba(255, 255, 255, 0.03));
+  border: 1px solid color-mix(in srgb, var(--focus-color) 25%, transparent);
+}
+
+.preview-head {
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.3);
+  margin-bottom: 4px;
+}
+
+.preview-title {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.preview-meta {
+  margin-top: 2px;
+  font-size: 11px;
+  color: color-mix(in srgb, var(--focus-color) 85%, transparent);
+}
+
+.preview-note {
+  margin-top: 5px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.45);
+  max-height: 54px;
+  overflow: hidden;
+}
+
+.preview-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 8px;
 }
 
 .event-list {

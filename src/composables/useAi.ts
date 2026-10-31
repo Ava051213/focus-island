@@ -1,6 +1,7 @@
 import { computed } from 'vue'
 import { fetch } from '@tauri-apps/plugin-http'
 import { useSettings } from './useSettings'
+import { toLocalDateStr } from '../utils/date'
 
 const ENDPOINT = 'https://open.bigmodel.cn/api/paas/v4/chat/completions'
 
@@ -23,6 +24,15 @@ export interface PlanArtifacts {
   memoTitle: string
   memoContent: string
 }
+
+export interface ExtractedEvent {
+  title: string
+  at: string
+  note: string
+  tag: string
+}
+
+const WEEKDAY_NAMES = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
 
 function stripCodeFence(text: string): string {
   return text.replace(/^```(?:json)?/i, '').replace(/```$/, '').trim()
@@ -205,5 +215,45 @@ export function useAi() {
     return { tasks: parseTaskList(text), memoTitle: '计划草稿', memoContent: raw }
   }
 
-  return { configured, breakdownGoal, suggestToday, summarizeMemo, coachToday, evaluatePlan, suggestTaskNames, generatePlan }
+  /**
+   * 把一大段粘贴文字提炼成一条日程。
+   * 模型不知道今天是几号，日期和星期必须写进 system 里。
+   */
+  async function extractEvent(raw: string, now: Date = new Date()): Promise<ExtractedEvent> {
+    const today = toLocalDateStr(now)
+    const system = `你是日程整理助手。把用户粘贴的文字提炼成一条日程，只输出 JSON：
+{"title":"事件名，不超过 20 字","at":"YYYY-MM-DD 或 YYYY-MM-DDTHH:mm","note":"原文里的关键信息，不超过 100 字","tag":"work|life|study|other"}
+今天是 ${today} ${WEEKDAY_NAMES[now.getDay()]}。原文没写日期就用今天，没写时间就只给日期。不要编造原文没有的事实，不要输出 JSON 之外的任何内容。`
+    const text = await chat(system, raw.slice(0, 2000), 0.2)
+    const json = stripCodeFence(text)
+    let data: Record<string, unknown>
+    try {
+      data = JSON.parse(json) as Record<string, unknown>
+    } catch {
+      throw new Error('AI 返回的内容无法解析，请重试')
+    }
+    const title = String(data.title ?? '').trim()
+    if (!title) throw new Error('AI 没有提炼出事件名，请重试')
+    const rawAt = String(data.at ?? '').trim()
+    const at = /^\d{4}-\d{2}-\d{2}/.test(rawAt) ? rawAt.slice(0, 16) : today
+    const tag = String(data.tag ?? 'other')
+    return {
+      title: title.slice(0, 40),
+      at,
+      note: String(data.note ?? '').trim().slice(0, 200),
+      tag: ['work', 'life', 'study', 'other'].includes(tag) ? tag : 'other',
+    }
+  }
+
+  return {
+    configured,
+    breakdownGoal,
+    suggestToday,
+    summarizeMemo,
+    coachToday,
+    evaluatePlan,
+    suggestTaskNames,
+    generatePlan,
+    extractEvent,
+  }
 }
