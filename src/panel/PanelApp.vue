@@ -309,8 +309,16 @@ onMounted(async () => {
   })
 
   unlistenFocus = await win.onFocusChanged(({ payload: focused }) => {
-    if (focused && panelAnimState.value === 'steady') {
-      isClosing.value = false
+    if (focused) {
+      if (panelAnimState.value === 'steady') {
+        isClosing.value = false
+      }
+      return
+    }
+    // 焦点被别的窗口抢走（点了浏览器、IDE 或桌面）时自动收起，
+    // 只在完全打开的状态下收，避免打断开场动画
+    if (panelAnimState.value === 'steady') {
+      void closeWindow()
     }
   })
 })
