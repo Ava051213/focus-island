@@ -41,3 +41,6 @@ desktop.ini
 
 # 本地 cargo 镜像配置（仅本机使用）
 .cargo/
+
+# 本地助手工作记录（仅本机）
+.workbuddy/
