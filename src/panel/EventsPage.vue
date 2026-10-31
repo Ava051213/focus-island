@@ -73,17 +73,17 @@ async function extractWithAi() {
     // 等待期间内容被改过或又发起了一次，丢弃这次结果
     if (seq !== requestSeq || draft.value.trim() !== text) return
 
-    // 日期和时间以本地规则为准：模型推算「下周三」并不可靠。
-    // AI 只负责提炼标题、描述和标签，时间轴由代码决定。
+    // 日期和时间以本地规则为准，但只限一句话式的短输入。
+    // 粘贴的长通知里常有多個日期和无关时间，本地规则容易挑错，交给 AI 判断。
     let at = result.at
-    if (hasExplicitSchedule(text)) {
+    const isQuickInput = text.length <= 40 && !/[\n，。；：]/.test(text)
+    if (isQuickInput && hasExplicitSchedule(text)) {
       const local = parseQuickEvent(text)
       const localDate = local.at.split('T')[0]
       const localTime = local.at.split('T')[1]
-      const aiTime = result.at.split('T')[1]
-      const finalTime = localTime ?? aiTime
       if (localDate) {
-        at = finalTime ? `${localDate}T${finalTime}` : localDate
+        // 原文没写时间就不要让 AI 补一个时钟时间
+        at = localTime ? `${localDate}T${localTime}` : localDate
       }
     }
 

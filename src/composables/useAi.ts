@@ -362,7 +362,7 @@ export function useAi() {
 今天是 ${today} ${WEEKDAY_NAMES[now.getDay()]}。
 接下来两周的日期对照：${buildDateTable(now)}
 「明天」「周五」「下周三」这类说法必须按下表换算成具体日期，不要自己推算。
-原文没写日期就用今天，没写时间就只给日期。标题要提炼成能一眼看懂的一件事，不要把整段话塞进去。不要编造原文没有的事实，不要输出 JSON 之外的任何内容。`
+原文没写日期就用今天，没写时间就只给日期。原文里有多个时间时，取调整后的新时间（例如「原时间…现调整至…」取后者）。节次（如 11-12 节）不是时钟时间，不要换算成 HH:mm，写进 note。标题要提炼成能一眼看懂的一件事，不要把整段话塞进去。不要编造原文没有的事实，不要输出 JSON 之外的任何内容。`
     const text = await chat(system, raw.slice(0, 2000), 0.2)
     const json = stripCodeFence(text)
     let data: Record<string, unknown>

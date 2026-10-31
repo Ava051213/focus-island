@@ -87,6 +87,26 @@ describe('parseQuickEvent', () => {
     expect(parseQuickEvent('晚上八点半跑步', NOW).at).toBe('2026-10-31T20:30')
     expect(parseQuickEvent('中午一点吃饭', NOW).at).toBe('2026-10-31T13:00')
   })
+
+  it('识别中文年月日', () => {
+    expect(parseQuickEvent('2026年11月13日 交报告', NOW)).toEqual({
+      title: '交报告',
+      at: '2026-11-13',
+      tag: 'other',
+    })
+    expect(parseQuickEvent('11月15日 妈妈生日', NOW).at).toBe('2026-11-15')
+  })
+
+  it('「星期几」也能换算', () => {
+    expect(parseQuickEvent('星期五 开会', NOW).at).toBe('2026-11-06')
+    expect(parseQuickEvent('下星期五 开会', NOW).at).toBe('2026-11-06')
+  })
+
+  it('「11-12 节」是节次，不当成日期', () => {
+    const parsed = parseQuickEvent('11-12节 上课', NOW)
+    expect(parsed.title).toBe('11-12节 上课')
+    expect(parsed.at).toBe('2026-10-31')
+  })
 })
 
 describe('useEvents 排序与分档', () => {

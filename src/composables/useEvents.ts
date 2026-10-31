@@ -188,8 +188,9 @@ export function useEvents() {
   }
 }
 
-const DATE_WORD_RE = /^(今天|明天|后天|大后天|周[一二三四五六日天]|下周[一二三四五六日天])/
+const DATE_WORD_RE = /^(今天|明天|后天|大后天|(?:下)?(?:周|星期|礼拜)[一二三四五六日天])/
 const DATE_NUM_RE = /^(\d{4}[-/])?\d{1,2}[-/]\d{1,2}/
+const DATE_CN_RE = /^(\d{4}年)?(\d{1,2})月(\d{1,2})[日号]?/
 const TIME_RE = /(\d{1,2}):(\d{2})/
 
 const CN_DIGITS: Record<string, number> = {
@@ -200,7 +201,7 @@ const CN_TIME_RE = /(凌晨|上午|中午|下午|傍晚|晚上)?([一二两三�
 
 /** 原文里有没有能确定的日期/时刻，有的话以本地换算为准，不交给模型猜 */
 export function hasExplicitSchedule(text: string): boolean {
-  return /(今天|明天|后天|大后天|周[一二三四五六日天]|下周[一二三四五六日天]|\d{1,2}[-/月]\d{1,2}|\d{1,2}:\d{2}|[一二两三四五六七八九十]{1,3}点)/.test(text)
+  return /(今天|明天|后天|大后天|(?:下)?(?:周|星期|礼拜)[一二三四五六日天]|\d{4}年\d{1,2}月\d{1,2}|\d{1,2}[-/月]\d{1,2}|\d{1,2}:\d{2}|[一二两三四五六七八九十]{1,3}点)/.test(text)
 }
 
 /** 把「下午三点半」这类说法换算成 HH:mm，认不出返回 null */
@@ -235,7 +236,7 @@ function weekdayToOffset(word: string, now: Date): number | null {
   const index = names.indexOf(target === '天' ? '日' : target)
   if (index < 0) return null
   const current = now.getDay()
-  const base = word.startsWith('下周') ? 7 : 0
+  const base = /^下(周|星期|礼拜)/.test(word) ? 7 : 0
   let diff = index - current + base
   if (diff <= 0) diff += 7
   return diff
@@ -299,8 +300,26 @@ export function parseQuickEvent(input: string, now: Date = new Date()): QuickEve
         if (remain) kept.push(remain)
         continue
       }
+      const cnMatch = word.match(DATE_CN_RE)
+      if (cnMatch) {
+        const month = Number(cnMatch[2])
+        const day = Number(cnMatch[3])
+        const year = cnMatch[1] ? Number(cnMatch[1].replace('年', '')) : now.getFullYear()
+        if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+          explicitDate = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+          const remain = word.slice(cnMatch[0].length)
+          if (remain) kept.push(remain)
+          continue
+        }
+      }
       const numMatch = word.match(DATE_NUM_RE)
       if (numMatch) {
+        // 「11-12 节」是节次不是日期，别把上课节次当月份天数
+        const next = word.slice(numMatch[0].length, numMatch[0].length + 1)
+        if (next && '节点时分'.includes(next)) {
+          kept.push(word)
+          continue
+        }
         const raw = numMatch[0].replace(/\//g, '-')
         const parts = raw.split('-').filter(Boolean)
         const year = parts.length === 3 ? Number(parts[0]) : now.getFullYear()
