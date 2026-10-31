@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useMemos, type Memo } from '../composables/useMemos'
+import { useTimerBridge } from '../composables/useTimerBridge'
 import MemoEditor from './MemoEditor.vue'
 import MemoCategoryDialog from './MemoCategoryDialog.vue'
 import MemoCategoryDropdown from './MemoCategoryDropdown.vue'
@@ -12,6 +13,13 @@ const emit = defineEmits<{
 }>()
 
 const { categories, currentCategoryId, filteredMemos, memoCount, addMemo, updateMemo, deleteMemo, togglePin, getDisplayTitle } = useMemos()
+const { start } = useTimerBridge()
+
+/** 从列表里直接开一轮专注，和首页的播放键是同一套逻辑 */
+function handleStartFocus(memo: Memo, event: Event) {
+  event.stopPropagation()
+  start(memo.id, getDisplayTitle(memo))
+}
 
 // View state
 const view = ref<'list' | 'edit'>('list')
@@ -218,6 +226,13 @@ function handleCloseCategoryDialog() {
         >
           <div class="memo-item-header">
             <span class="memo-item-title">{{ getDisplayTitle(memo) }}</span>
+            <button
+              class="memo-play-btn"
+              @click="(e) => handleStartFocus(memo, e)"
+              title="开始一轮专注"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg>
+            </button>
             <div class="memo-item-actions">
               <button
                 class="action-btn pin-btn"
@@ -479,6 +494,27 @@ function handleCloseCategoryDialog() {
   opacity: 0;
   transition: opacity 0.2s;
   flex-shrink: 0;
+}
+
+/* 播放键常驻可见：列表里最常用的动作不该藏在悬停后面 */
+.memo-play-btn {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--focus-color) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--focus-color) 38%, transparent);
+  color: var(--focus-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.memo-play-btn:hover {
+  background: color-mix(in srgb, var(--focus-color) 32%, transparent);
+  border-color: color-mix(in srgb, var(--focus-color) 55%, transparent);
 }
 
 .memo-item:hover .memo-item-actions,
