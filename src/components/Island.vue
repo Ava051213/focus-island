@@ -25,7 +25,58 @@ let unlistenNotification: (() => void) | null = null;
 
 const notificationType = ref<NotificationType>(null);
 const hoverActive = ref(false);
+// 悬停时才显示快捷按钮；通知横幅出现时先让用户处理通知，避免误触。
+const capsuleInteractive = computed(
+    () => hoverActive.value && notificationType.value === null,
+);
 let hoverTimer: ReturnType<typeof setInterval> | null = null;
+let fullscreenTimer: ReturnType<typeof setInterval> | null = null;
+
+// 前台全屏（游戏、视频、演示）时把岛让开；通知出现时临时冒出来。
+const fullscreenActive = ref(false);
+const islandHiddenByFullscreen = ref(false);
+
+async function applyFullscreenVisibility() {
+    const shouldHide = fullscreenActive.value && notificationType.value === null;
+    if (shouldHide === islandHiddenByFullscreen.value) return;
+    islandHiddenByFullscreen.value = shouldHide;
+    try {
+        await invoke("set_island_visible", { visible: !shouldHide });
+    } catch {
+        // 命令不可用时忽略
+    }
+}
+
+function startFullscreenPolling() {
+    if (fullscreenTimer !== null) return;
+    fullscreenTimer = window.setInterval(async () => {
+        if (!settings.value.hideOnFullscreen) {
+            if (fullscreenActive.value) {
+                fullscreenActive.value = false;
+                applyFullscreenVisibility();
+            }
+            return;
+        }
+        try {
+            const full = await invoke<boolean>("is_foreground_fullscreen");
+            if (full === fullscreenActive.value) return;
+            fullscreenActive.value = full;
+            if (full) {
+                // 面板也一起收起，别挡着全屏内容
+                try {
+                    if (await invoke<boolean>("is_panel_visible")) {
+                        await invoke("hide_panel");
+                    }
+                } catch {
+                    // 忽略
+                }
+            }
+            applyFullscreenVisibility();
+        } catch {
+            // 不支持检测的平台直接忽略
+        }
+    }, 1000);
+}
 
 // 通知横幅可见，或鼠标正悬停在岛上时，关闭鼠标穿透以便接收点击。
 function syncClickThrough() {
@@ -64,6 +115,15 @@ async function onIslandClick() {
     } catch {
         // 忽略
     }
+}
+
+// 胶囊上的暂停/跳过按钮只发指令，真正的计时逻辑在 panel 窗口。
+function onCapsuleToggle() {
+    emit("timer-command", "toggle").catch(() => {});
+}
+
+function onCapsuleSkip() {
+    emit("timer-command", "skip").catch(() => {});
 }
 
 // ===== 顶部水平拖动 =====
@@ -228,6 +288,8 @@ watch(notificationType, (val) => {
     setNotificationVisible(val !== null);
     syncClickThrough();
     applyWindowSize();
+    // 全屏把岛藏起来时，通知照常浮出来；处理完再藏回去
+    applyFullscreenVisibility();
 });
 
 // Resize when dock strip state or island scale changes
@@ -336,6 +398,7 @@ function startLocalCountdown(endAt: number) {
 onMounted(async () => {
     syncClickThrough();
     startHoverPolling();
+    startFullscreenPolling();
 
     // 初始化时应用窗口尺寸（胶囊 / 停靠细条 / 通知）
     applyWindowSize();
@@ -393,6 +456,10 @@ onUnmounted(() => {
         window.clearInterval(hoverTimer);
         hoverTimer = null;
     }
+    if (fullscreenTimer !== null) {
+        window.clearInterval(fullscreenTimer);
+        fullscreenTimer = null;
+    }
     unlisten?.();
     unlistenPanelMotion?.();
     unlistenNotification?.();
@@ -448,7 +515,12 @@ onUnmounted(() => {
                     />
                     <template v-else>
                         <CapsuleIdle v-if="state === 'idle' || state === 'alert'" />
-                        <CapsuleFocus v-else-if="state === 'focus' || state === 'break'" />
+                        <CapsuleFocus
+                            v-else-if="state === 'focus' || state === 'break'"
+                            :interactive="capsuleInteractive"
+                            @toggle="onCapsuleToggle"
+                            @skip="onCapsuleSkip"
+                        />
                         <svg class="progress-ring" :viewBox="`0 0 ${capsuleWidth} ${capsuleHeight}`" aria-hidden="true">
                             <rect
                                 class="ring-track"

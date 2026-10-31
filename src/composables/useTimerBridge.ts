@@ -107,6 +107,24 @@ export function useTimerBridge() {
       }
     }).catch(() => {})
 
+    // 灵动岛悬停按钮发来的指令：暂停/继续、跳过当前阶段
+    listen<string>('timer-command', ({ payload }) => {
+      if (timer.pendingNotification.value) return
+      if (payload === 'toggle') {
+        if (timer.running.value) {
+          timer.pause()
+        } else if (timer.activeTaskId.value) {
+          timer.resume()
+        }
+      } else if (payload === 'skip') {
+        if (timer.phase.value === 'focus') {
+          timer.skipToBreak()
+        } else {
+          timer.skipBreak()
+        }
+      }
+    }).catch(() => {})
+
     // 即时同步关键状态（开始/暂停/跳过/任务切换/阶段切换）
     watch(
       () => [

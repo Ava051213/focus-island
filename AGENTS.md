@@ -41,7 +41,7 @@ cd src-tauri && cargo check
 
 计时器逻辑运行在 panel 窗口（`useTimerBridge.ts`），在关键状态变化（阶段、运行状态、专注对象、时长）时通过 `emit('timer-state-update')` 广播快照（含 `syncedAt`）。main 窗口收到后用 `syncedAt + remaining` 推算结束时间，本地自行倒计时。main 窗口启动时会发 `timer-state-request` 拉取一次快照。
 
-计时结束时 panel 设置 `pendingNotification` 并广播 `notification-show`，灵动岛显示通知横幅，用户操作通过 `notification-action`（confirm / extend / dismiss）回传 panel。
+计时结束时 panel 设置 `pendingNotification` 并广播 `notification-show`，灵动岛显示通知横幅，用户操作通过 `notification-action`（confirm / extend / dismiss）回传 panel。灵动岛胶囊悬停时浮出的暂停/跳过按钮通过 `timer-command`（toggle / skip）回传 panel 执行，真正计时逻辑只在 panel。
 
 两个窗口都**不会真正关闭**：Rust 侧拦截 `CloseRequested` 改为 `hide()`，退出只能走托盘菜单。
 
@@ -86,7 +86,7 @@ alert → 恢复（窗口内有鼠标/键盘活动）
 - **`useTimerBridge.ts`**：panel 窗口专用，包装 useTimer，负责广播状态、记录番茄（累加到对应备忘、每日统计、成就）以及处理通知操作
 - **`useEvents.ts`**：日程事件 CRUD。每条只有发生时间（`YYYY-MM-DD` 或 `YYYY-MM-DDTHH:mm`）、标题、描述、单个标签、是否已处理，按时间升序排列，过期的单独归档。`parseQuickEvent()` 负责把「周五 10:00 交报告 #工作」这类一句话解析成事件。
 - **`useMemos.ts`**：备忘与分类，同时落 `memos.json` 和 `memo-categories.json`。每条备忘带 `pomodoroCount`，是当前唯一的专注对象
-- **`useSettings.ts`**：主题、时长、透明度（`islandOpacity`）、缩放（`islandScale`）、显示模式（常驻/边缘停靠）、顶部位置（`islandXRatio`）、`idleMottos`、快捷键、开机自启、AI Key（硅基主力 / 智谱兜底）/模型/自动建议开关
+- **`useSettings.ts`**：主题、时长、透明度（`islandOpacity`）、缩放（`islandScale`）、显示模式（常驻/边缘停靠）、顶部位置（`islandXRatio`）、`idleMottos`、快捷键、开机自启、全屏避让（`hideOnFullscreen`）、AI Key（硅基主力 / 智谱兜底）/模型/自动建议开关
 - **`useDockMode.ts`**：边缘停靠模式，消费主窗口统一的指针轮询结果（`is_mouse_over_window`）决定展开或收起细条
 - **`useDailyStats.ts` / `useAchievements.ts`**：每日统计与成就，日期一律用 `src/utils/date.ts` 的本地日期
 - **`useShortcut.ts`**：全局快捷键，只在 `Pressed` 时切换面板
@@ -123,6 +123,8 @@ alert → 恢复（窗口内有鼠标/键盘活动）
 前端会调用的 Tauri commands：
 - `is_mouse_over_window(pad)` — 鼠标是否在当前窗口内（macOS: CoreGraphics, Windows: Win32, Linux: X11）
 - `set_click_through(ignore)` — 窗口鼠标穿透
+- `is_foreground_fullscreen()` — 前台窗口是否铺满整屏（仅 Windows 实现，其它平台返回 false）。灵动岛每秒轮询一次，全屏时藏岛与面板，通知出现再临时浮回来
+- `set_island_visible(visible)` — 显隐灵动岛窗口（全屏避让用）
 - `set_island_size(scale)` / `set_island_custom_size(width, height)` — 调整灵动岛窗口尺寸并水平居中
 - `toggle_panel` / `animate_panel_close` / `hide_panel` / `is_panel_visible` / `position_panel_under_island` / `get_panel_transition_metrics` / `emit_island_panel_motion` — panel 显示与动画。Rust 端只负责定位、显示，并发出 `panel-window-transition` 事件，动画由前端完成
 

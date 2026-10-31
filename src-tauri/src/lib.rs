@@ -13,10 +13,18 @@ use core_graphics::event::CGEvent;
 use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
 
 #[cfg(target_os = "windows")]
-use windows::Win32::Foundation::POINT;
+use windows::Win32::Foundation::{POINT, RECT};
+#[cfg(target_os = "windows")]
+use windows::Win32::Graphics::Gdi::{
+    GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
+};
+#[cfg(target_os = "windows")]
+use windows::Win32::System::Threading::GetCurrentProcessId;
 #[cfg(target_os = "windows")]
 use windows::Win32::UI::WindowsAndMessaging::{
-    AllowSetForegroundWindow, GetCursorPos, ASFW_ANY,
+    AllowSetForegroundWindow, GetClassNameW, GetCursorPos, GetForegroundWindow,
+    GetWindowPlacement, GetWindowRect, GetWindowThreadProcessId, ASFW_ANY, SW_SHOWMAXIMIZED,
+    WINDOWPLACEMENT,
 };
 
 #[cfg(target_os = "linux")]
@@ -113,6 +121,95 @@ fn is_mouse_over_window<R: Runtime>(window: WebviewWindow<R>, pad: f64) -> bool 
 #[tauri::command]
 fn set_click_through<R: Runtime>(window: WebviewWindow<R>, ignore: bool) {
     let _ = window.set_ignore_cursor_events(ignore);
+}
+
+/// 前台窗口是否铺满整块屏幕（不含任务栏的最大化窗口不算全屏）。
+/// 目前只在 Windows 上检测，其它平台一律返回 false。
+#[cfg(target_os = "windows")]
+fn foreground_fullscreen() -> bool {
+    unsafe {
+        let hwnd = GetForegroundWindow();
+        if hwnd.0.is_null() {
+            return false;
+        }
+
+        // 自己的窗口（岛或面板）不算
+        let mut pid = 0u32;
+        GetWindowThreadProcessId(hwnd, Some(&mut pid as *mut u32));
+        if pid == GetCurrentProcessId() {
+            return false;
+        }
+
+        // 桌面、任务栏、开始菜单也铺满屏幕，但不是全屏应用
+        let mut class_buf = [0u16; 128];
+        let class_len = GetClassNameW(hwnd, &mut class_buf) as usize;
+        if class_len > 0 {
+            let class = String::from_utf16_lossy(&class_buf[..class_len.min(class_buf.len())]);
+            if matches!(
+                class.as_str(),
+                "Progman"
+                    | "WorkerW"
+                    | "Shell_TrayWnd"
+                    | "Shell_SecondaryTrayWnd"
+                    | "Windows.UI.Core.CoreWindow"
+            ) {
+                return false;
+            }
+        }
+
+        // 最大化窗口的位置等于工作区（通常露着任务栏），不能当全屏
+        let mut placement = WINDOWPLACEMENT::default();
+        if GetWindowPlacement(hwnd, &mut placement).is_ok()
+            && placement.showCmd as i32 == SW_SHOWMAXIMIZED.0
+        {
+            return false;
+        }
+
+        let mut rect = RECT::default();
+        if GetWindowRect(hwnd, &mut rect).is_err() {
+            return false;
+        }
+
+        let monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+        if monitor.0.is_null() {
+            return false;
+        }
+        let mut info = MONITORINFO {
+            cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+            ..Default::default()
+        };
+        if !GetMonitorInfoW(monitor, &mut info).as_bool() {
+            return false;
+        }
+
+        let mon = info.rcMonitor;
+        let tolerance = 2;
+        let width = rect.right - rect.left;
+        let height = rect.bottom - rect.top;
+        let mon_width = mon.right - mon.left;
+        let mon_height = mon.bottom - mon.top;
+        width >= mon_width - tolerance
+            && height >= mon_height - tolerance
+            && rect.left <= mon.left + tolerance
+            && rect.top <= mon.top + tolerance
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn foreground_fullscreen() -> bool {
+    false
+}
+
+#[tauri::command]
+fn is_foreground_fullscreen() -> bool {
+    foreground_fullscreen()
+}
+
+#[tauri::command]
+fn set_island_visible<R: Runtime>(app: AppHandle<R>, visible: bool) {
+    if let Some(main) = app.get_webview_window("main") {
+        let _ = if visible { main.show() } else { main.hide() };
+    }
 }
 
 #[tauri::command]
@@ -436,6 +533,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             is_mouse_over_window,
             set_click_through,
+            is_foreground_fullscreen,
+            set_island_visible,
             set_island_size,
             set_island_custom_size,
             emit_island_panel_motion,

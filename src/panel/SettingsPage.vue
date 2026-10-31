@@ -222,6 +222,16 @@ onUnmounted(() => {
       </div>
       <div class="update-toggle-row" style="margin-top: 8px;">
         <div class="update-copy">
+          <span class="update-label">全屏时自动避让</span>
+          <span class="update-hint">看视频、打游戏、演示时先躲起来，番茄结束再冒出来提醒</span>
+        </div>
+        <label class="switch" aria-label="全屏时自动避让">
+          <input v-model="settings.hideOnFullscreen" type="checkbox" />
+          <span class="switch-track"></span>
+        </label>
+      </div>
+      <div class="update-toggle-row" style="margin-top: 8px;">
+        <div class="update-copy">
           <span class="update-label">开机就来陪你</span>
           <span class="update-hint">开机自动出现，不用你找我啦</span>
         </div>

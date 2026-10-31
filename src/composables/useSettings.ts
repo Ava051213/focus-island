@@ -27,6 +27,7 @@ export interface Settings {
   idleMottos: string[]       // 空闲时轮播的激励语，空数组则用内置默认
   shortcutKey: string        // 全局快捷键，如 "Alt+Space"
   notificationSound: boolean // 通知提示音开关
+  hideOnFullscreen: boolean // 前台全屏（游戏/视频/演示）时自动把岛藏起来
   autoLaunch: boolean       // 开机自动启动
   aiSiliconKey: string      // 硅基流动 API Key（主力平台，仅存本机）
   aiSiliconModel: string    // 主力模型，默认 Qwen/Qwen3-8B
@@ -55,6 +56,7 @@ const DEFAULT_SETTINGS: Settings = {
   idleMottos: [],
   shortcutKey: 'Ctrl+Alt+Space',
   notificationSound: true,
+  hideOnFullscreen: true,
   autoLaunch: true,
   aiSiliconKey: '',
   aiSiliconModel: 'Qwen/Qwen3-8B',
