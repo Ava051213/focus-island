@@ -459,7 +459,6 @@ async function closeWindow() {
   color: #e8e8ea;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   transform-origin: 50% 0;
-  will-change: transform, opacity, border-radius;
   contain: layout paint;
   backface-visibility: hidden;
   clip-path: inset(0 round 12px);
@@ -503,6 +502,7 @@ async function closeWindow() {
 }
 
 .motion-opening {
+  will-change: transform, opacity, border-radius;
   animation: panel-open 280ms cubic-bezier(0.165, 0.84, 0.44, 1) both;
 }
 
@@ -520,6 +520,7 @@ async function closeWindow() {
 }
 
 .motion-closing {
+  will-change: transform, opacity, border-radius;
   animation: panel-close 240ms cubic-bezier(0.55, 0.055, 0.675, 0.19) both;
   pointer-events: none;
 }
