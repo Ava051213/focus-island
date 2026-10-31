@@ -236,7 +236,7 @@ onUnmounted(() => {
     <div class="settings-section">
       <div class="section-title">小管家</div>
 
-      <div class="section-subtitle">主力 · 硅基流动</div>
+      <div class="section-subtitle">硅基流动</div>
       <div class="ai-field">
         <span class="ai-label">API Key</span>
         <input
@@ -267,7 +267,7 @@ onUnmounted(() => {
       </div>
       <p v-if="testMessages.silicon" class="ai-test-result">{{ testMessages.silicon }}</p>
 
-      <div class="section-subtitle">兜底 · 智谱</div>
+      <div class="section-subtitle">智谱</div>
       <div class="ai-field">
         <span class="ai-label">API Key</span>
         <input
@@ -308,7 +308,6 @@ onUnmounted(() => {
           <span class="switch-track"></span>
         </label>
       </div>
-      <p class="ai-hint">先找硅基流动，它掉线了再换智谱，只填一家就用那一家～Key 只放在本机，不会外传的喔</p>
     </div>
 
     <!-- 外观 -->
@@ -503,13 +502,6 @@ onUnmounted(() => {
 
 .ai-input:focus {
   border-color: color-mix(in srgb, var(--focus-color) 55%, transparent);
-}
-
-.ai-hint {
-  margin: 8px 0 0;
-  font-size: 11px;
-  line-height: 1.5;
-  color: rgba(255, 255, 255, 0.35);
 }
 
 .ai-test-btn {

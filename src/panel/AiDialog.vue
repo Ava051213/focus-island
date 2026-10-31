@@ -17,14 +17,14 @@ const emit = defineEmits<{
   insert: [text: string]
 }>()
 
-const { configured, breakdownGoal, suggestToday, summarizeMemo } = useAi()
+const { configured, breakdownGoal, suggestToday, polishMemo } = useAi()
 const { upcoming } = useEvents()
 const { todayStat } = useDailyStats()
 
 const titles = {
   breakdown: '陪你拆一拆',
   plan: '今天先做点什么呀',
-  memo: '帮你理一理',
+  memo: '帮你写规范',
 } as const
 
 const title = computed(() => titles[props.mode])
@@ -34,7 +34,6 @@ const error = ref('')
 const resultTasks = ref<string[]>([])
 const selected = ref<boolean[]>([])
 const resultText = ref('')
-const memoStyle = ref<'summary' | 'checklist'>('checklist')
 const copied = ref(false)
 
 const hasResult = computed(() =>
@@ -77,20 +76,13 @@ async function generate() {
       }
       resultText.value = await suggestToday(input, todayStat.value?.pomodoros ?? 0)
     } else {
-      resultText.value = await summarizeMemo(props.memoContent ?? '', memoStyle.value)
+      resultText.value = await polishMemo(props.memoContent ?? '')
     }
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e)
   } finally {
     loading.value = false
   }
-}
-
-async function changeMemoStyle(style: 'summary' | 'checklist') {
-  if (memoStyle.value === style && resultText.value) return
-  memoStyle.value = style
-  resultText.value = ''
-  await generate()
 }
 
 function addTo(target: 'today' | 'inbox') {
@@ -177,23 +169,11 @@ function onBackdropClick(event: MouseEvent) {
         </div>
 
         <div v-else class="ai-body">
-          <div class="ai-style-row">
-            <button
-              class="ai-chip"
-              :class="{ active: memoStyle === 'checklist' }"
-              :disabled="loading"
-              @click="changeMemoStyle('checklist')"
-            >要点清单</button>
-            <button
-              class="ai-chip"
-              :class="{ active: memoStyle === 'summary' }"
-              :disabled="loading"
-              @click="changeMemoStyle('summary')"
-            >摘要</button>
-            <button class="ai-ghost" :disabled="loading" @click="generate">再理一遍</button>
-          </div>
+          <p class="ai-desc">把你随手写的几句改写成规范一点的笔记，原意不变。</p>
+          <button class="ai-primary" :disabled="loading" @click="generate">
+            {{ loading ? '写着呢…' : (hasResult ? '再改一遍' : '帮我写规范') }}
+          </button>
           <pre v-if="resultText" class="ai-result">{{ resultText }}</pre>
-          <p v-else-if="!loading" class="ai-desc">点「要点清单」或「摘要」，我就开始理啦～</p>
           <div v-if="resultText" class="ai-actions">
             <button class="ai-ghost" @click="copyResult">{{ copied ? '抄好啦' : '抄一份' }}</button>
             <button class="ai-primary" @click="insertResult">放进小记里</button>
@@ -392,34 +372,6 @@ function onBackdropClick(event: MouseEvent) {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-}
-
-.ai-style-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.ai-chip {
-  height: 26px;
-  padding: 0 10px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-family: inherit;
-  color: rgba(255, 255, 255, 0.55);
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  cursor: pointer;
-}
-
-.ai-chip.active {
-  color: var(--focus-color);
-  border-color: color-mix(in srgb, var(--focus-color) 40%, transparent);
-  background: color-mix(in srgb, var(--focus-color) 14%, transparent);
-}
-
-.ai-style-row .ai-ghost {
-  margin-left: auto;
 }
 
 .ai-empty {

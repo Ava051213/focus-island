@@ -816,7 +816,7 @@ function formatUpdateTime(timestamp: number): string {
 
       <div class="toolbar-divider"></div>
 
-      <button class="toolbar-btn" @click="openMemoAi" title="理一理">
+      <button class="toolbar-btn" @click="openMemoAi" title="写规范一点">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z"/>
           <path d="M18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2z"/>

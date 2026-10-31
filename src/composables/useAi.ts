@@ -276,12 +276,20 @@ export function useAi() {
     )
   }
 
-  async function summarizeMemo(content: string, style: 'summary' | 'checklist'): Promise<string> {
+  async function polishMemo(content: string): Promise<string> {
     const plain = content.trim()
     if (!plain) throw new Error('这条小记还空空的呀')
-    const system = style === 'summary'
-      ? '你是笔记整理助手。用中文把内容压缩成不超过 150 字的摘要，保留关键结论和数字，不要编造，不要输出标题。'
-      : '你是笔记整理助手。把内容整理成要点清单，每行一条并以「• 」开头，保留原有事实和数字，不要编造，不要输出标题。'
+    const system = `你是中文笔记编辑，只做一件事：把用户随手写的碎片改写成规范的书面笔记。
+规则：
+1. 只改写用户写的内容，一条一行，以「• 」开头。
+2. 把「写写」「整理整理」这类重复口语改成简洁的书面说法。
+3. 不新增用户没写的事实、数量、日期。
+4. 只输出改写后的条目，不要解释，不要复述规则。
+示例：
+输入：写写算法题 整理整理笔记
+输出：
+• 练习算法题
+• 整理笔记`
     return chat(system, plain.slice(0, 2000), 0.2)
   }
 
@@ -373,7 +381,7 @@ export function useAi() {
     testProvider,
     breakdownGoal,
     suggestToday,
-    summarizeMemo,
+    polishMemo,
     coachToday,
     evaluatePlan,
     suggestTaskNames,
