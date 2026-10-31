@@ -3,7 +3,28 @@ import { fetch } from '@tauri-apps/plugin-http'
 import { useSettings } from './useSettings'
 import { toLocalDateStr } from '../utils/date'
 
-const ENDPOINT = 'https://open.bigmodel.cn/api/paas/v4/chat/completions'
+const ZHIPU_ENDPOINT = 'https://open.bigmodel.cn/api/paas/v4/chat/completions'
+const SILICON_ENDPOINT = 'https://api.siliconflow.cn/v1/chat/completions'
+
+type ProviderId = 'silicon' | 'zhipu'
+
+interface Provider {
+  id: ProviderId
+  label: string
+  endpoint: string
+  key: string
+  model: string
+}
+
+interface ChatOptions {
+  thinking?: boolean
+  maxTokens?: number
+  timeoutMs?: number
+}
+
+/** 单次请求的整体限时。主备各一次，最坏等待会翻倍 */
+const REQUEST_TIMEOUT_MS = 20000
+const LONG_REQUEST_TIMEOUT_MS = 40000
 
 export interface PlanTaskInput {
   title: string
@@ -90,61 +111,145 @@ function parseNameList(text: string): string[] {
 export function useAi() {
   const { settings } = useSettings()
 
-  const configured = computed(() => settings.value.aiApiKey.trim().length > 0)
+  /**
+   * 按优先级收集可用平台：硅基流动是主力，智谱兜底。
+   * 只填了一家 Key 时就用那一家，兼容旧的单平台配置。
+   */
+  function collectProviders(): Provider[] {
+    const s = settings.value
+    const list: Provider[] = []
+    if (s.aiSiliconKey.trim()) {
+      list.push({
+        id: 'silicon',
+        label: '硅基流动',
+        endpoint: SILICON_ENDPOINT,
+        key: s.aiSiliconKey.trim(),
+        model: s.aiSiliconModel.trim() || 'Qwen/Qwen3-8B',
+      })
+    }
+    if (s.aiApiKey.trim()) {
+      list.push({
+        id: 'zhipu',
+        label: '智谱',
+        endpoint: ZHIPU_ENDPOINT,
+        key: s.aiApiKey.trim(),
+        model: s.aiModel.trim() || 'glm-4.7-flash',
+      })
+    }
+    return list
+  }
 
-  async function chat(
+  const configured = computed(() => collectProviders().length > 0)
+
+  async function request(
+    provider: Provider,
     system: string,
     user: string,
-    temperature = 0.3,
-    options: { thinking?: boolean; maxTokens?: number } = {},
+    temperature: number,
+    options: ChatOptions,
   ): Promise<string> {
-    const key = settings.value.aiApiKey.trim()
-    if (!key) throw new Error('请先在「设置 → AI 助手」中填写 API Key')
-    const model = settings.value.aiModel.trim() || 'glm-4.7-flash'
+    const body: Record<string, unknown> = {
+      model: provider.model,
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: user },
+      ],
+      max_tokens: options.maxTokens ?? 1024,
+      temperature,
+      stream: false,
+    }
+
+    // 两家的思考开关参数不同：智谱用 thinking 对象，硅基流动（Qwen3）用 enable_thinking 布尔值
+    if (provider.id === 'zhipu') {
+      body.thinking = { type: options.thinking ? 'enabled' : 'disabled' }
+    } else {
+      body.enable_thinking = Boolean(options.thinking)
+    }
+
+    const timeoutMs = options.timeoutMs ?? REQUEST_TIMEOUT_MS
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), timeoutMs)
 
     let response: Response
     try {
-      response = await fetch(ENDPOINT, {
+      response = await fetch(provider.endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${key}`,
+          Authorization: `Bearer ${provider.key}`,
         },
-        body: JSON.stringify({
-          model,
-          messages: [
-            { role: 'system', content: system },
-            { role: 'user', content: user },
-          ],
-          // 短任务默认关闭深度思考以减少等待；复杂规划单独开启
-          thinking: { type: options.thinking ? 'enabled' : 'disabled' },
-          max_tokens: options.maxTokens ?? 1024,
-          temperature,
-          stream: false,
-        }),
-        connectTimeout: 20000,
+        body: JSON.stringify(body),
+        connectTimeout: Math.min(10000, timeoutMs),
+        signal: controller.signal,
       })
     } catch {
-      throw new Error('无法连接 AI 服务，请检查网络或代理设置')
+      if (controller.signal.aborted) {
+        throw new Error(`${provider.label} 超过 ${Math.round(timeoutMs / 1000)} 秒未响应`)
+      }
+      throw new Error(`${provider.label} 连接失败，请检查网络或代理`)
+    } finally {
+      clearTimeout(timer)
     }
 
     if (!response.ok) {
       let detail = ''
       try {
-        const body = await response.json()
-        detail = body?.error?.message ?? ''
+        const data = await response.json()
+        detail = data?.error?.message ?? ''
       } catch {
         // 忽略解析失败
       }
-      throw new Error(`AI 请求失败（${response.status}）${detail ? '：' + detail : ''}`)
+      throw new Error(`${provider.label} 请求失败（${response.status}）${detail ? '：' + detail : ''}`)
     }
 
     const data = await response.json()
     const content = data?.choices?.[0]?.message?.content
     if (typeof content !== 'string' || content.trim().length === 0) {
-      throw new Error('AI 返回内容为空')
+      throw new Error(`${provider.label} 返回内容为空`)
     }
     return content.trim()
+  }
+
+  /** 依次尝试主备平台，第一个成功就返回；全部失败才抛错 */
+  async function chat(
+    system: string,
+    user: string,
+    temperature = 0.3,
+    options: ChatOptions = {},
+  ): Promise<string> {
+    const providers = collectProviders()
+    if (providers.length === 0) throw new Error('请先在「设置 → AI 助手」中填写 API Key')
+
+    const failures: string[] = []
+    for (const provider of providers) {
+      try {
+        return await request(provider, system, user, temperature, options)
+      } catch (err) {
+        failures.push(err instanceof Error ? err.message : `${provider.label} 请求失败`)
+      }
+    }
+    throw new Error(failures.join('；'))
+  }
+
+  /** 设置页的连通性测试，只看这一家的实际耗时，不走兜底 */
+  async function testProvider(id: ProviderId): Promise<{ ok: boolean; ms: number; message: string }> {
+    const provider = collectProviders().find(p => p.id === id)
+    if (!provider) return { ok: false, ms: 0, message: '未填写 Key' }
+
+    const started = Date.now()
+    try {
+      await request(provider, '你是连通性测试助手，只回复 ok。', 'ping', 0, {
+        maxTokens: 16,
+        timeoutMs: 15000,
+      })
+      return { ok: true, ms: Date.now() - started, message: '连接正常' }
+    } catch (err) {
+      return {
+        ok: false,
+        ms: Date.now() - started,
+        message: err instanceof Error ? err.message : '请求失败',
+      }
+    }
   }
 
   async function breakdownGoal(goal: string, existingTitles: string[] = []): Promise<string[]> {
@@ -206,7 +311,7 @@ export function useAi() {
       '你是计划助手。把用户的想法整理成可执行的待办任务和一份简短备忘。只输出 JSON：{"tasks":["任务1","任务2"],"memo":{"title":"标题","content":"正文"}}。任务 3~8 条，动词开头，每条不超过 18 个字；备忘标题不超过 12 个字，正文用短行列出关键安排。不要编造用户没提过的事实。',
       JSON.stringify({ idea: prompt.slice(0, 1500), extra: extra.slice(0, 300), existingTasks: tasks }),
       0.5,
-      { thinking: true, maxTokens: 2048 },
+      { thinking: true, maxTokens: 2048, timeoutMs: LONG_REQUEST_TIMEOUT_MS },
     )
     const raw = stripCodeFence(text)
     try {
@@ -261,6 +366,7 @@ export function useAi() {
 
   return {
     configured,
+    testProvider,
     breakdownGoal,
     suggestToday,
     summarizeMemo,

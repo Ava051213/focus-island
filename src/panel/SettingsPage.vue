@@ -1,11 +1,28 @@
 <script setup lang="ts">
 import { ref, nextTick, onMounted, onUnmounted, onActivated, onDeactivated } from 'vue'
 import { useSettings, presetThemes, type ColorMode, type IslandDisplayMode } from '../composables/useSettings'
+import { useAi } from '../composables/useAi'
 import AboutDialog from './AboutDialog.vue'
 
 const emit = defineEmits<{ back: [] }>()
 
 const { settings } = useSettings()
+const { testProvider } = useAi()
+
+const testingProvider = ref<'' | 'silicon' | 'zhipu'>('')
+const testMessages = ref<{ silicon: string; zhipu: string }>({ silicon: '', zhipu: '' })
+
+async function runAiTest(id: 'silicon' | 'zhipu') {
+  if (testingProvider.value) return
+  testingProvider.value = id
+  testMessages.value = { ...testMessages.value, [id]: '' }
+  const result = await testProvider(id)
+  testMessages.value = {
+    ...testMessages.value,
+    [id]: result.ok ? `连接正常，耗时 ${(result.ms / 1000).toFixed(1)} 秒` : result.message,
+  }
+  testingProvider.value = ''
+}
 
 const opacityPercent = (v: number) => Math.round(v * 100) + '%'
 
@@ -218,6 +235,39 @@ onUnmounted(() => {
     <!-- AI 助手 -->
     <div class="settings-section">
       <div class="section-title">AI 助手</div>
+
+      <div class="section-subtitle">主力 · 硅基流动</div>
+      <div class="ai-field">
+        <span class="ai-label">API Key</span>
+        <input
+          v-model="settings.aiSiliconKey"
+          class="ai-input"
+          type="password"
+          placeholder="硅基流动 API Key"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <button
+          class="ai-test-btn"
+          :disabled="testingProvider === 'silicon'"
+          @click="runAiTest('silicon')"
+        >
+          {{ testingProvider === 'silicon' ? '测试中' : '测试' }}
+        </button>
+      </div>
+      <div class="ai-field">
+        <span class="ai-label">模型</span>
+        <input
+          v-model="settings.aiSiliconModel"
+          class="ai-input"
+          type="text"
+          placeholder="Qwen/Qwen3-8B"
+          spellcheck="false"
+        />
+      </div>
+      <p v-if="testMessages.silicon" class="ai-test-result">{{ testMessages.silicon }}</p>
+
+      <div class="section-subtitle">兜底 · 智谱</div>
       <div class="ai-field">
         <span class="ai-label">API Key</span>
         <input
@@ -228,6 +278,13 @@ onUnmounted(() => {
           autocomplete="off"
           spellcheck="false"
         />
+        <button
+          class="ai-test-btn"
+          :disabled="testingProvider === 'zhipu'"
+          @click="runAiTest('zhipu')"
+        >
+          {{ testingProvider === 'zhipu' ? '测试中' : '测试' }}
+        </button>
       </div>
       <div class="ai-field">
         <span class="ai-label">模型</span>
@@ -239,6 +296,8 @@ onUnmounted(() => {
           spellcheck="false"
         />
       </div>
+      <p v-if="testMessages.zhipu" class="ai-test-result">{{ testMessages.zhipu }}</p>
+
       <div class="update-toggle-row" style="margin-top: 10px;">
         <div class="update-copy">
           <span class="update-label">后台自动建议</span>
@@ -249,7 +308,7 @@ onUnmounted(() => {
           <span class="switch-track"></span>
         </label>
       </div>
-      <p class="ai-hint">用于目标拆解、今日专注建议与备忘整理。Key 仅保存在本机的 settings.json。</p>
+      <p class="ai-hint">硅基流动优先，超时、限流或返回异常时自动切到智谱；只填一家 Key 就只用那一家。Key 仅保存在本机的 settings.json。</p>
     </div>
 
     <!-- 外观 -->
@@ -451,6 +510,36 @@ onUnmounted(() => {
   font-size: 11px;
   line-height: 1.5;
   color: rgba(255, 255, 255, 0.35);
+}
+
+.ai-test-btn {
+  flex-shrink: 0;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.ai-test-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+.ai-test-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.ai-test-result {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: color-mix(in srgb, var(--focus-color) 75%, rgba(255, 255, 255, 0.5));
 }
 
 .section-title {

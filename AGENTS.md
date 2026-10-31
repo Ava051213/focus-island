@@ -86,7 +86,7 @@ alert → 恢复（窗口内有鼠标/键盘活动）
 - **`useTimerBridge.ts`**：panel 窗口专用，包装 useTimer，负责广播状态、记录番茄（累加到对应备忘、每日统计、成就）以及处理通知操作
 - **`useEvents.ts`**：日程事件 CRUD。每条只有发生时间（`YYYY-MM-DD` 或 `YYYY-MM-DDTHH:mm`）、标题、描述、单个标签、是否已处理，按时间升序排列，过期的单独归档。`parseQuickEvent()` 负责把「周五 10:00 交报告 #工作」这类一句话解析成事件。
 - **`useMemos.ts`**：备忘与分类，同时落 `memos.json` 和 `memo-categories.json`。每条备忘带 `pomodoroCount`，是当前唯一的专注对象
-- **`useSettings.ts`**：主题、时长、透明度（`islandOpacity`）、缩放（`islandScale`）、显示模式（常驻/边缘停靠）、顶部位置（`islandXRatio`）、`idleMottos`、快捷键、开机自启、AI Key/模型/自动建议开关
+- **`useSettings.ts`**：主题、时长、透明度（`islandOpacity`）、缩放（`islandScale`）、显示模式（常驻/边缘停靠）、顶部位置（`islandXRatio`）、`idleMottos`、快捷键、开机自启、AI Key（硅基主力 / 智谱兜底）/模型/自动建议开关
 - **`useDockMode.ts`**：边缘停靠模式，轮询 `is_mouse_over_window` 决定展开或收起细条
 - **`useDailyStats.ts` / `useAchievements.ts`**：每日统计与成就，日期一律用 `src/utils/date.ts` 的本地日期
 - **`useShortcut.ts`**：全局快捷键，只在 `Pressed` 时切换面板
@@ -108,9 +108,11 @@ alert → 恢复（窗口内有鼠标/键盘活动）
 
 ### AI 模块
 
-- **`useAi.ts`**：封装智谱 GLM 的 `chat/completions`，所有 prompt 都集中在这里，业务侧只调语义化方法。请求走 `@tauri-apps/plugin-http`（Rust 侧发请求），因此不受 CSP 与浏览器跨域限制，也不会产生浏览器网络请求。
-  - 未填 `aiApiKey` 时 `configured` 为 false，任何调用直接抛错
-  - 短任务默认 `thinking: disabled` 并把 `max_tokens` 压到 1024；只有 `generatePlan` 开启思考、给 2048
+- **`useAi.ts`**：封装对话请求，所有 prompt 都集中在这里，业务侧只调语义化方法。硅基流动（默认 `Qwen/Qwen3-8B`）是主力，智谱 GLM 是兜底；按顺序逐家尝试，第一家成功即返回，全部失败才抛错。请求走 `@tauri-apps/plugin-http`（Rust 侧发请求），因此不受 CSP 与浏览器跨域限制，也不会产生浏览器网络请求。
+  - 两家 Key 都没填时 `configured` 为 false，任何调用直接抛错；只填一家就只用那一家
+  - 两家的思考开关参数不同：智谱用 `thinking: {type}`，硅基用 `enable_thinking` 布尔值
+  - 每次请求有整体超时（短任务 20 秒，`generatePlan` 40 秒），超时、非 2xx 或空返回都会切下一家
+  - 短任务把 `max_tokens` 压到 1024；只有 `generatePlan` 开启思考、给 2048
   - `parseTaskList` / `parseNameList` 先按 JSON 解析，失败后退化为按行拆分，容忍模型返回代码围栏
 - **`useAiButler.ts`**：后台自动建议调度 + `ai-insights.json`。四道闸门按顺序拦：`aiAutoEnabled` → 7:00–23:00 → 距上次 ≥10 分钟 → 当日 <30 次。触发源是 upcoming 事件 / memos / 今日番茄的 `watch`，90 秒防抖；失败也写 `lastAutoAt`，避免网络异常时反复重试。
   - 结果只进 `insights` 列表（保留最近 50 条，分 `coach` / `review` 两类）

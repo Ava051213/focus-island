@@ -16,7 +16,8 @@
     {
       "identifier": "http:default",
       "allow": [
-        { "url": "https://open.bigmodel.cn/*" }
+        { "url": "https://open.bigmodel.cn/*" },
+        { "url": "https://api.siliconflow.cn/*" }
       ]
     },
     "clipboard-manager:default",

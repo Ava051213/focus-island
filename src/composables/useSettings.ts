@@ -28,8 +28,10 @@ export interface Settings {
   shortcutKey: string        // 全局快捷键，如 "Alt+Space"
   notificationSound: boolean // 通知提示音开关
   autoLaunch: boolean       // 开机自动启动
-  aiApiKey: string          // 智谱开放平台 API Key（仅存本机）
-  aiModel: string           // 使用的模型名
+  aiSiliconKey: string      // 硅基流动 API Key（主力平台，仅存本机）
+  aiSiliconModel: string    // 主力模型，默认 Qwen/Qwen3-8B
+  aiApiKey: string          // 智谱开放平台 API Key（兜底平台，仅存本机）
+  aiModel: string           // 兜底模型名
   aiAutoEnabled: boolean    // 是否允许后台自动生成管家建议
 }
 
@@ -54,6 +56,8 @@ const DEFAULT_SETTINGS: Settings = {
   shortcutKey: 'Ctrl+Alt+Space',
   notificationSound: true,
   autoLaunch: true,
+  aiSiliconKey: '',
+  aiSiliconModel: 'Qwen/Qwen3-8B',
   aiApiKey: '',
   aiModel: 'glm-4.7-flash',
   aiAutoEnabled: true,
