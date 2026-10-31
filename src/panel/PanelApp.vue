@@ -44,9 +44,16 @@ function prewarmPanelData() {
 prewarmPanelData()
 
 const REPOSITION_BURST_DELAYS = [0, 90, 220]
+const PANEL_OPEN_DURATION = 280
 const PANEL_CLOSE_DURATION = 240
-const CLOSE_FALLBACK_BUFFER = 140
+const ANIMATION_FALLBACK_BUFFER = 140
+const AUTO_CLOSE_DELAY = 140
 const IS_MACOS = navigator.userAgent.toLowerCase().includes('mac')
+
+// 系统开启「减少动画效果」时改用淡入淡出，动画名跟着变，
+// 所以收尾判断不能只认 panel-open / panel-close
+const OPEN_ANIMATIONS = ['panel-open', 'panel-fade-in']
+const CLOSE_ANIMATIONS = ['panel-close', 'panel-fade-out']
 
 const { hasUnread, markSeen: markButlerSeen } = useAiButler()
 startAiButler()
@@ -126,7 +133,9 @@ let unlistenMove: (() => void) | null = null
 let unlistenTransition: (() => void) | null = null
 let unlistenFocus: (() => void) | null = null
 let repositionTimers: number[] = []
+let openFallbackTimer: number | null = null
 let closeFallbackTimer: number | null = null
+let autoCloseTimer: number | null = null
 let suppressMoveEventsUntil = 0
 
 function clamp(v: number, min: number, max: number) {
@@ -178,7 +187,57 @@ function scheduleCloseFallback() {
   clearCloseFallback()
   closeFallbackTimer = window.setTimeout(() => {
     void finishCloseAnimation()
-  }, PANEL_CLOSE_DURATION + CLOSE_FALLBACK_BUFFER)
+  }, PANEL_CLOSE_DURATION + ANIMATION_FALLBACK_BUFFER)
+}
+
+function clearOpenFallback() {
+  if (openFallbackTimer) {
+    window.clearTimeout(openFallbackTimer)
+    openFallbackTimer = null
+  }
+}
+
+function clearAutoClose() {
+  if (autoCloseTimer) {
+    window.clearTimeout(autoCloseTimer)
+    autoCloseTimer = null
+  }
+}
+
+/** 失焦后的确认期：这段时间内重新获得焦点就不收 */
+function scheduleAutoClose() {
+  clearAutoClose()
+  autoCloseTimer = window.setTimeout(() => {
+    autoCloseTimer = null
+    if (panelAnimState.value === 'steady') {
+      void closeWindow()
+    }
+  }, AUTO_CLOSE_DELAY)
+}
+
+/**
+ * 动画结束的收尾动作。
+ * 超时兜底也走这里：窗口不可见、动画被系统优化掉时 animationend 不会来，
+ * 状态会卡在 opening，之后失焦自动收起就永远不生效。
+ */
+function settleOpen() {
+  // opening-ready 说明动画还没起步，正常不该走到这里；
+  // 但窗口被遮挡、rAF 被节流时会出现，宁可少一段动画也不能卡住状态
+  if (panelAnimState.value !== 'opening' && panelAnimState.value !== 'opening-ready') return
+  clearOpenFallback()
+  panelAnimState.value = 'steady'
+  void repositionPanel()
+  if (!IS_MACOS) {
+    // 打开完成后把焦点拿到窗口上，否则面板收不到后续的失焦事件
+    void getCurrentWindow().setFocus().catch(() => {})
+  }
+}
+
+function scheduleOpenFallback() {
+  clearOpenFallback()
+  openFallbackTimer = window.setTimeout(() => {
+    settleOpen()
+  }, PANEL_OPEN_DURATION + ANIMATION_FALLBACK_BUFFER)
 }
 
 async function repositionPanel() {
@@ -215,6 +274,8 @@ function runOpenAnimation() {
   if (panelAnimState.value === 'opening' || panelAnimState.value === 'opening-ready') return
   clearCloseFallback()
   panelAnimState.value = 'opening-ready'
+  // 计时器在这里起算，避免 rAF 被节流时连兜底都没设上
+  scheduleOpenFallback()
   requestAnimationFrame(() => {
     panelAnimState.value = 'opening'
   })
@@ -243,25 +304,26 @@ async function onWindowTransition(payload: string) {
   }
 }
 
-async function onPanelAnimationEnd(event: AnimationEvent) {
+function onPanelAnimationEnd(event: AnimationEvent) {
   if (event.target !== panelRootRef.value) return
 
-  if (event.animationName === 'panel-open' && panelAnimState.value === 'opening') {
-    panelAnimState.value = 'steady'
-    void repositionPanel()
-    if (!IS_MACOS) {
-      try {
-        await getCurrentWindow().setFocus()
-      } catch {
-        // ignore focus errors during animation completion
-      }
-    }
+  if (OPEN_ANIMATIONS.includes(event.animationName)) {
+    settleOpen()
     return
   }
 
-  if (event.animationName === 'panel-close' && panelAnimState.value === 'closing') {
+  if (CLOSE_ANIMATIONS.includes(event.animationName) && panelAnimState.value === 'closing') {
     void finishCloseAnimation()
   }
+}
+
+/** WebView 层失焦，和窗口失焦事件互为兜底 */
+function onDomBlur() {
+  scheduleAutoClose()
+}
+
+function onDomFocus() {
+  clearAutoClose()
 }
 
 function onPanelKeydown(event: KeyboardEvent) {
@@ -277,6 +339,8 @@ onMounted(async () => {
   startBridge()
   await invoke('set_click_through', { ignore: false })
   window.addEventListener('keydown', onPanelKeydown)
+  window.addEventListener('blur', onDomBlur)
+  window.addEventListener('focus', onDomFocus)
 
   const win = getCurrentWebviewWindow()
   try {
@@ -300,23 +364,27 @@ onMounted(async () => {
 
   unlistenFocus = await win.onFocusChanged(({ payload: focused }) => {
     if (focused) {
+      // 焦点又回来了（点回面板、拖完边框），取消待执行的收起
+      clearAutoClose()
       if (panelAnimState.value === 'steady') {
         isClosing.value = false
       }
       return
     }
-    // 焦点被别的窗口抢走（点了浏览器、IDE 或桌面）时自动收起，
-    // 只在完全打开的状态下收，避免打断开场动画
-    if (panelAnimState.value === 'steady') {
-      void closeWindow()
-    }
+    // 焦点被别的应用抢走（点了浏览器、IDE 或桌面）时自动收起。
+    // 延后一拍再确认：拖动窗口边框、切换到子菜单都可能产生瞬时失焦
+    scheduleAutoClose()
   })
 })
 
 onUnmounted(() => {
   window.removeEventListener('keydown', onPanelKeydown)
+  window.removeEventListener('blur', onDomBlur)
+  window.removeEventListener('focus', onDomFocus)
   clearRepositionTimers()
+  clearOpenFallback()
   clearCloseFallback()
+  clearAutoClose()
   if (unlistenResize) unlistenResize()
   if (unlistenMove) unlistenMove()
   if (unlistenTransition) unlistenTransition()
