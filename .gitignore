@@ -44,3 +44,6 @@ desktop.ini
 
 # 本地助手工作记录（仅本机）
 .workbuddy/
+
+# 浏览器测试工具留下的截图缓存
+.screenshots/
