@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import {
   useWeeklyGoals,
   WEEKLY_REWARD_LABELS,
@@ -18,6 +18,24 @@ const rewards = computed(() =>
     unlocked: unlockedRewards.value.includes(id),
   })),
 )
+
+// 目标刚达成时短暂亮一下，不弹窗也不打断计时
+const freshIds = ref<string[]>([])
+
+function markFresh(id: string) {
+  if (!freshIds.value.includes(id)) freshIds.value.push(id)
+  setTimeout(() => {
+    freshIds.value = freshIds.value.filter(item => item !== id)
+  }, 2000)
+}
+
+watch(goals, (next, prev) => {
+  if (!prev || prev.length !== next.length) return
+  for (const goal of next) {
+    const before = prev.find(item => item.id === goal.id)
+    if (before && !before.done && goal.done) markFresh(goal.id)
+  }
+}, { deep: true })
 
 function percent(goal: WeeklyGoal): number {
   if (goal.target <= 0) return 100
@@ -42,7 +60,7 @@ function hint(goal: WeeklyGoal): string {
         v-for="goal in goals"
         :key="goal.id"
         class="weekly-pill"
-        :class="{ done: goal.done }"
+        :class="{ done: goal.done, fresh: freshIds.includes(goal.id) }"
         :title="hint(goal)"
       >
         <span class="weekly-pill-label">{{ goal.label }}</span>
@@ -58,7 +76,12 @@ function hint(goal: WeeklyGoal): string {
       <span class="weekly-card-title">本周目标</span>
       <span class="weekly-card-note">{{ allDone ? '都完成啦' : `${doneCount}/${goals.length} 完成` }}</span>
     </div>
-    <div v-for="goal in goals" :key="goal.id" class="weekly-goal-row">
+    <div
+      v-for="goal in goals"
+      :key="goal.id"
+      class="weekly-goal-row"
+      :class="{ fresh: freshIds.includes(goal.id) }"
+    >
       <div class="weekly-goal-copy">
         <span class="weekly-goal-label">{{ goal.label }}</span>
         <span class="weekly-goal-value">{{ goal.progress }}/{{ goal.target }}{{ goal.unit }}</span>
@@ -269,5 +292,27 @@ function hint(goal: WeeklyGoal): string {
 
 .weekly-reward-mark {
   font-size: 9px;
+}
+
+/* 目标刚达成时轻轻跳一下 */
+@keyframes weekly-pop {
+  0% { transform: scale(1); }
+  45% {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus-color) 28%, transparent);
+  }
+  100% { transform: scale(1); }
+}
+
+.weekly-pill.fresh {
+  animation: weekly-pop 1.1s ease;
+}
+
+.weekly-goal-row.fresh .weekly-goal-label {
+  color: var(--focus-color);
+}
+
+.weekly-goal-row.fresh .weekly-goal-fill {
+  animation: weekly-pop 1.1s ease;
 }
 </style>

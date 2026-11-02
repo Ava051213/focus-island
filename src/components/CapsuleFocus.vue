@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useTimer } from '../composables/useTimer'
 
 const props = defineProps<{ interactive?: boolean }>()
@@ -10,7 +10,49 @@ const emit = defineEmits<{
 
 const { displayTime, phase, activeTaskTitle, activeSubtaskTitle, running } = useTimer()
 
+// 休息阶段轮换小提示，只换文字，不增加操作
+const BREAK_TIPS = [
+  '喝口水呀～',
+  '伸个懒腰～',
+  '闭眼三十秒～',
+  '看看远处～',
+  '转转眼珠～',
+]
+const BREAK_TIP_INTERVAL_MS = 15_000
+
+const breakTipIndex = ref(0)
+let breakTipTimer: ReturnType<typeof setInterval> | null = null
+
+function stopBreakTips() {
+  if (breakTipTimer !== null) {
+    clearInterval(breakTipTimer)
+    breakTipTimer = null
+  }
+}
+
+function startBreakTips() {
+  stopBreakTips()
+  breakTipIndex.value = 0
+  breakTipTimer = setInterval(() => {
+    breakTipIndex.value = (breakTipIndex.value + 1) % BREAK_TIPS.length
+  }, BREAK_TIP_INTERVAL_MS)
+}
+
+watch(phase, (next) => {
+  if (next === 'break') startBreakTips()
+  else stopBreakTips()
+})
+
+onMounted(() => {
+  if (phase.value === 'break') startBreakTips()
+})
+
+onUnmounted(stopBreakTips)
+
 const resolvedTitle = computed(() => {
+  if (phase.value === 'break') {
+    return BREAK_TIPS[breakTipIndex.value % BREAK_TIPS.length]
+  }
   if (activeSubtaskTitle.value) return activeSubtaskTitle.value
   return activeTaskTitle.value ?? null
 })
