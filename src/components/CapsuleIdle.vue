@@ -2,11 +2,13 @@
 import { ref, computed, onMounted, onUnmounted, watch } from "vue";
 import { eventRelativeLabel, eventTime, useEvents } from "../composables/useEvents";
 import { useSettings } from "../composables/useSettings";
+import { useRewardUnlocks } from "../composables/useWeeklyGoals";
 
 const props = defineProps<{ paused?: boolean }>();
 
 const { upcoming } = useEvents();
-const { settings } = useSettings()
+const { settings } = useSettings();
+const { unlockedRewards } = useRewardUnlocks();
 
 const DEFAULT_MOTTOS = [
     "深呼吸一下，就开始嘛～",
@@ -21,9 +23,22 @@ const DEFAULT_MOTTOS = [
     "再等一下，心流就来啦～",
 ];
 
+// 完成本周专注目标后解锁的温柔文案包
+const GENTLE_MOTTOS = [
+    "今天也慢慢来，团子陪着你～",
+    "已经做得很好了，歇一下也没关系～",
+    "别忘了喝水呀，团子在这儿等你～",
+    "伸个懒腰再继续，不差这一小会儿～",
+    "累的时候靠一会儿，团子不催你～",
+];
+
 const mottos = computed(() => {
     const custom = settings.value.idleMottos;
-    return custom && custom.length > 0 ? custom : DEFAULT_MOTTOS;
+    if (custom && custom.length > 0) return custom;
+    if (unlockedRewards.value.includes("mottos-gentle")) {
+        return [...DEFAULT_MOTTOS, ...GENTLE_MOTTOS];
+    }
+    return DEFAULT_MOTTOS;
 });
 
 function pickRandomMottos(count: number): string[] {

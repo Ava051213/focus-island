@@ -5,6 +5,7 @@ import { useTimerBridge } from '../composables/useTimerBridge'
 import { eventRelativeLabel, eventTime, eventsNow, useEvents } from '../composables/useEvents'
 import { useAiButler, type CoachFeedback } from '../composables/useAiButler'
 import type { CoachPlan } from '../composables/useAi'
+import { useWeeklyGoals } from '../composables/useWeeklyGoals'
 import WeeklyGoals from './WeeklyGoals.vue'
 
 const emit = defineEmits<{ navigateEvents: [] }>()
@@ -78,6 +79,10 @@ function undoComplete() {
 const { coachInsight, refreshCoach, configured, preference } = useAiButler()
 const coachMessage = computed(() => coachInsight.value?.coach ?? null)
 
+// 团子的表情跟着本周完成的目标数走
+const { doneCount } = useWeeklyGoals()
+const mascotFace = computed(() => ['', '🌱', '✨', '🏆'][doneCount.value] ?? '')
+
 function planMemo(plan: CoachPlan): Memo | null {
   if (plan.memoId) {
     const matched = memos.value.find(memo => memo.id === plan.memoId && !memo.completedAt)
@@ -140,7 +145,7 @@ function onCoachNoteEnter(event: KeyboardEvent) {
   <div class="home-page">
     <section v-if="configured" class="coach-card">
       <div class="coach-head">
-        <span class="coach-title">团子说</span>
+        <span class="coach-title">团子说<span v-if="mascotFace" class="coach-face">{{ mascotFace }}</span></span>
         <button class="link-btn" :disabled="coachLoading" @click="handleRefreshCoach">
           {{ coachLoading ? '团子正在想…' : '再想想' }}
         </button>
@@ -333,6 +338,12 @@ function onCoachNoteEnter(event: KeyboardEvent) {
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: color-mix(in srgb, var(--focus-color) 82%, transparent);
+}
+
+.coach-face {
+  margin-left: 4px;
+  font-size: 11px;
+  letter-spacing: 0;
 }
 
 .coach-content {

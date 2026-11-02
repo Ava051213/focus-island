@@ -1,7 +1,13 @@
 <script setup lang="ts">
 import { useSettings, presetThemes, type ColorMode, type IslandDisplayMode } from '../composables/useSettings'
+import { useRewardUnlocks } from '../composables/useWeeklyGoals'
 
 const { settings } = useSettings()
+const { unlockedRewards } = useRewardUnlocks()
+
+function isThemeLocked(theme: (typeof presetThemes)[number]): boolean {
+  return !!theme.rewardId && !unlockedRewards.value.some(id => id === theme.rewardId)
+}
 
 const opacityPercent = (v: number) => Math.round(v * 100) + '%'
 
@@ -89,7 +95,9 @@ function switchColorMode(mode: ColorMode) {
         v-for="theme in presetThemes"
         :key="theme.id"
         class="theme-card"
-        :class="{ active: settings.activeThemeId === theme.id }"
+        :class="{ active: settings.activeThemeId === theme.id, locked: isThemeLocked(theme) }"
+        :disabled="isThemeLocked(theme)"
+        :title="isThemeLocked(theme) ? '完成本周番茄目标就能解锁' : theme.name"
         @click="settings.activeThemeId = theme.id"
       >
         <div class="theme-colors">
@@ -98,7 +106,8 @@ function switchColorMode(mode: ColorMode) {
           <span class="color-dot" :style="{ background: theme.idleColor }"></span>
         </div>
         <span class="theme-name">{{ theme.name }}</span>
-        <span v-if="settings.activeThemeId === theme.id" class="theme-check">✓</span>
+        <span v-if="isThemeLocked(theme)" class="theme-lock">🔒</span>
+        <span v-else-if="settings.activeThemeId === theme.id" class="theme-check">✓</span>
       </button>
     </div>
   </div>
@@ -214,7 +223,7 @@ function switchColorMode(mode: ColorMode) {
 
 .theme-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 6px;
 }
 
@@ -243,6 +252,11 @@ function switchColorMode(mode: ColorMode) {
   border-color: rgba(255, 255, 255, 0.25);
 }
 
+.theme-card.locked {
+  opacity: 0.45;
+  cursor: default;
+}
+
 .theme-colors {
   display: flex;
   gap: 3px;
@@ -269,5 +283,12 @@ function switchColorMode(mode: ColorMode) {
   font-size: 10px;
   color: var(--focus-color);
   font-weight: 700;
+}
+
+.theme-lock {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  font-size: 9px;
 }
 </style>

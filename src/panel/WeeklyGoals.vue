@@ -1,9 +1,23 @@
 <script setup lang="ts">
-import { useWeeklyGoals, type WeeklyGoal } from '../composables/useWeeklyGoals'
+import { computed } from 'vue'
+import {
+  useWeeklyGoals,
+  WEEKLY_REWARD_LABELS,
+  type WeeklyGoal,
+  type WeeklyRewardId,
+} from '../composables/useWeeklyGoals'
 
 const props = defineProps<{ compact?: boolean }>()
 
-const { goals, doneCount, allDone } = useWeeklyGoals()
+const { goals, doneCount, allDone, unlockedRewards } = useWeeklyGoals()
+
+const rewards = computed(() =>
+  (Object.entries(WEEKLY_REWARD_LABELS) as Array<[WeeklyRewardId, string]>).map(([id, label]) => ({
+    id,
+    label,
+    unlocked: unlockedRewards.value.includes(id),
+  })),
+)
 
 function percent(goal: WeeklyGoal): number {
   if (goal.target <= 0) return 100
@@ -56,6 +70,18 @@ function hint(goal: WeeklyGoal): string {
           :style="{ width: percent(goal) + '%' }"
         ></div>
       </div>
+    </div>
+
+    <div class="weekly-rewards">
+      <span
+        v-for="reward in rewards"
+        :key="reward.id"
+        class="weekly-reward"
+        :class="{ unlocked: reward.unlocked }"
+      >
+        <span class="weekly-reward-mark">{{ reward.unlocked ? '✓' : '🔒' }}</span>
+        {{ reward.label }}
+      </span>
     </div>
   </div>
 </template>
@@ -213,5 +239,35 @@ function hint(goal: WeeklyGoal): string {
 
 .weekly-goal-fill.done {
   background: var(--focus-color);
+}
+
+.weekly-rewards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.weekly-reward {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.weekly-reward.unlocked {
+  background: color-mix(in srgb, var(--focus-color) 12%, transparent);
+  border-color: color-mix(in srgb, var(--focus-color) 30%, transparent);
+  color: color-mix(in srgb, var(--focus-color) 80%, rgba(255, 255, 255, 0.5));
+}
+
+.weekly-reward-mark {
+  font-size: 9px;
 }
 </style>

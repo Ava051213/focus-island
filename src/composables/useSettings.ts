@@ -9,6 +9,8 @@ export interface ThemePreset {
   breakColor: string
   idleColor: string
   alertColor: string
+  /** 需要达成本周目标才能使用的奖励主题 */
+  rewardId?: string
 }
 
 export type ColorMode = 'dark' | 'light' | 'system'
@@ -42,6 +44,7 @@ export const presetThemes: ThemePreset[] = [
   { id: 'lavender', name: '薰衣草紫', focusColor: '#9b6dff', breakColor: '#4ecdc4', idleColor: '#7c8ba1', alertColor: '#f7b731' },
   { id: 'forest', name: '森林深绿', focusColor: '#27ae60', breakColor: '#3498db', idleColor: '#8e9aaf', alertColor: '#e67e22' },
   { id: 'cyber', name: '赛博朋克', focusColor: '#ff6b9d', breakColor: '#00d2d3', idleColor: '#a29bfe', alertColor: '#feca57' },
+  { id: 'dawn', name: '晨光', focusColor: '#ff8a4c', breakColor: '#5ac8a8', idleColor: '#f5c26b', alertColor: '#e06b8b', rewardId: 'theme-dawn' },
 ]
 
 const DEFAULT_SETTINGS: Settings = {
