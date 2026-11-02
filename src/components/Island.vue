@@ -40,11 +40,9 @@ async function applyFullscreenVisibility() {
     const shouldHide = fullscreenActive.value && notificationType.value === null;
     if (shouldHide === islandHiddenByFullscreen.value) return;
     islandHiddenByFullscreen.value = shouldHide;
-    try {
-        await invoke("set_island_visible", { visible: !shouldHide });
-    } catch {
-        // 命令不可用时忽略
-    }
+    if (shouldHide) hoverActive.value = false;
+    // 不真正 hide 窗口：藏起来的窗口 JS 计时器会被系统降频，轮询就停了。
+    syncClickThrough();
 }
 
 function startFullscreenPolling() {
@@ -79,8 +77,10 @@ function startFullscreenPolling() {
 }
 
 // 通知横幅可见，或鼠标正悬停在岛上时，关闭鼠标穿透以便接收点击。
+// 全屏避让期间岛只是视觉上淡出，必须保持穿透。
 function syncClickThrough() {
-    const interactive = notificationType.value !== null || hoverActive.value;
+    const interactive = !islandHiddenByFullscreen.value
+        && (notificationType.value !== null || hoverActive.value);
     invoke("set_click_through", { ignore: !interactive });
 }
 
@@ -89,6 +89,13 @@ function syncClickThrough() {
 function startHoverPolling() {
     if (hoverTimer !== null) return;
     hoverTimer = window.setInterval(async () => {
+        if (islandHiddenByFullscreen.value) {
+            if (hoverActive.value) {
+                hoverActive.value = false;
+                syncClickThrough();
+            }
+            return;
+        }
         if (notificationType.value !== null) return;
         // 拖动中保持可交互，否则指针短暂离开窗口会重新开启穿透并打断拖动
         if (dragging.value) return;
@@ -471,7 +478,10 @@ onUnmounted(() => {
 </script>
 
 <template>
-    <div class="island-container w-full h-full flex items-start justify-center">
+    <div
+        class="island-container w-full h-full flex items-start justify-center"
+        :class="{ 'fullscreen-hidden': islandHiddenByFullscreen }"
+    >
         <div class="island-stack">
             <div
                 class="capsule-motion"
@@ -558,6 +568,13 @@ onUnmounted(() => {
 <style scoped>
 .island-container {
     /* items-start justify-center to stick to top edge */
+}
+
+/* 全屏避让：只淡出，不隐藏窗口，保证轮询和本地倒计时照常运行 */
+.island-container.fullscreen-hidden {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
 }
 
 .island-stack {

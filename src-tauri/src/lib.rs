@@ -15,6 +15,8 @@ use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
 #[cfg(target_os = "windows")]
 use windows::Win32::Foundation::{POINT, RECT};
 #[cfg(target_os = "windows")]
+use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_EXTENDED_FRAME_BOUNDS};
+#[cfg(target_os = "windows")]
 use windows::Win32::Graphics::Gdi::{
     GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
 };
@@ -22,9 +24,8 @@ use windows::Win32::Graphics::Gdi::{
 use windows::Win32::System::Threading::GetCurrentProcessId;
 #[cfg(target_os = "windows")]
 use windows::Win32::UI::WindowsAndMessaging::{
-    AllowSetForegroundWindow, GetClassNameW, GetCursorPos, GetForegroundWindow,
-    GetWindowPlacement, GetWindowRect, GetWindowThreadProcessId, ASFW_ANY, SW_SHOWMAXIMIZED,
-    WINDOWPLACEMENT,
+    AllowSetForegroundWindow, GetClassNameW, GetCursorPos, GetForegroundWindow, GetWindowRect,
+    GetWindowThreadProcessId, ASFW_ANY,
 };
 
 #[cfg(target_os = "linux")]
@@ -157,16 +158,17 @@ fn foreground_fullscreen() -> bool {
             }
         }
 
-        // 最大化窗口的位置等于工作区（通常露着任务栏），不能当全屏
-        let mut placement = WINDOWPLACEMENT::default();
-        if GetWindowPlacement(hwnd, &mut placement).is_ok()
-            && placement.showCmd as i32 == SW_SHOWMAXIMIZED.0
-        {
-            return false;
-        }
-
+        // 必须用 DWM 的真实可见边界：GetWindowRect 给最大化窗口的矩形会向外多出一圈
+        // 看不见的边框，导致宽高比屏幕还大，被误判成全屏
         let mut rect = RECT::default();
-        if GetWindowRect(hwnd, &mut rect).is_err() {
+        let dwm_ok = DwmGetWindowAttribute(
+            hwnd,
+            DWMWA_EXTENDED_FRAME_BOUNDS,
+            &mut rect as *mut RECT as *mut std::ffi::c_void,
+            std::mem::size_of::<RECT>() as u32,
+        )
+        .is_ok();
+        if !dwm_ok && GetWindowRect(hwnd, &mut rect).is_err() {
             return false;
         }
 
@@ -183,15 +185,15 @@ fn foreground_fullscreen() -> bool {
         }
 
         let mon = info.rcMonitor;
-        let tolerance = 2;
+        let tolerance = 4;
         let width = rect.right - rect.left;
         let height = rect.bottom - rect.top;
         let mon_width = mon.right - mon.left;
         let mon_height = mon.bottom - mon.top;
-        width >= mon_width - tolerance
-            && height >= mon_height - tolerance
-            && rect.left <= mon.left + tolerance
-            && rect.top <= mon.top + tolerance
+        (rect.left - mon.left).abs() <= tolerance
+            && (rect.top - mon.top).abs() <= tolerance
+            && (width - mon_width).abs() <= 8
+            && (height - mon_height).abs() <= 8
     }
 }
 
@@ -203,13 +205,6 @@ fn foreground_fullscreen() -> bool {
 #[tauri::command]
 fn is_foreground_fullscreen() -> bool {
     foreground_fullscreen()
-}
-
-#[tauri::command]
-fn set_island_visible<R: Runtime>(app: AppHandle<R>, visible: bool) {
-    if let Some(main) = app.get_webview_window("main") {
-        let _ = if visible { main.show() } else { main.hide() };
-    }
 }
 
 #[tauri::command]
@@ -534,7 +529,6 @@ pub fn run() {
             is_mouse_over_window,
             set_click_through,
             is_foreground_fullscreen,
-            set_island_visible,
             set_island_size,
             set_island_custom_size,
             emit_island_panel_motion,
