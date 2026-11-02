@@ -191,7 +191,10 @@ function canRunAuto(): boolean {
   const now = new Date()
   const hour = now.getHours()
   if (hour < AUTO_START_HOUR || hour >= AUTO_END_HOUR) return false
-  if (Date.now() - state.value.lastAutoAt < AUTO_MIN_INTERVAL_MS) return false
+  // 最新一条还是旧格式（没有结构化 coach）时，跳过十分钟间隔，先补一次新版
+  const latestCoach = state.value.insights.find(item => item.kind === 'coach')
+  const needsUpgrade = !latestCoach?.coach
+  if (!needsUpgrade && Date.now() - state.value.lastAutoAt < AUTO_MIN_INTERVAL_MS) return false
 
   const today = toLocalDateStr(now)
   if (state.value.autoDate !== today) {
@@ -268,8 +271,12 @@ export function startAiButler() {
   )
   watch(() => todayStat.value?.pomodoros ?? 0, onChange)
 
-  // 启动时给一次机会：若当天已有变化但还没生成过，稍后补一次
-  setTimeout(onChange, 30_000)
+  // 启动时给一次机会：旧格式建议立即补一次新结构，其余情况稍后补
+  setTimeout(() => {
+    const latestCoach = state.value.insights.find(item => item.kind === 'coach')
+    if (!latestCoach?.coach) scheduleAuto(0)
+    else onChange()
+  }, 30_000)
 
   // 每小时主动换一条建议，免得一整天都在复读同一句
   setInterval(() => scheduleAuto(0), 60 * 60 * 1000)

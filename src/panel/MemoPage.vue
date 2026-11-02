@@ -222,63 +222,82 @@ function handleRestoreMemo(memo: Memo) {
   restoreMemo(memo.id)
 }
 
-// 拖动排序
+// 拖动排序：Tauri 的 WebView2 会拦截 HTML5 拖放，这里改用指针事件自己算
+const memoListRef = ref<HTMLElement | null>(null)
 const draggingId = ref<string | null>(null)
 const dropTarget = ref<{ id: string; after: boolean } | null>(null)
-let pressStartedOnButton = false
 let suppressClickUntil = 0
 
-function handleItemPointerDown(event: PointerEvent) {
-  pressStartedOnButton = !!(event.target as HTMLElement)?.closest('button')
+function updateDropTarget(clientY: number, moving: Memo) {
+  const container = memoListRef.value
+  if (!container) return
+  const items = Array.from(container.querySelectorAll<HTMLElement>('[data-memo-id]'))
+    .map(el => ({ id: el.dataset.memoId ?? '', rect: el.getBoundingClientRect() }))
+    .filter(item => {
+      if (item.id === moving.id) return false
+      const memo = displayMemos.value.find(m => m.id === item.id)
+      // 置顶和普通是两组，跨组拖动直接忽略
+      return !!memo && memo.isPinned === moving.isPinned
+    })
+
+  let next: { id: string; after: boolean } | null = null
+  for (const item of items) {
+    if (clientY < item.rect.top + item.rect.height / 2) {
+      next = { id: item.id, after: false }
+      break
+    }
+    next = { id: item.id, after: true }
+  }
+  if (next?.id === dropTarget.value?.id && next?.after === dropTarget.value?.after) return
+  dropTarget.value = next
 }
 
-function handleDragStart(memo: Memo, event: DragEvent) {
-  if (pressStartedOnButton) {
-    event.preventDefault()
-    return
-  }
-  draggingId.value = memo.id
-  dropTarget.value = null
-  if (event.dataTransfer) {
-    event.dataTransfer.effectAllowed = 'move'
-    event.dataTransfer.setData('text/plain', memo.id)
-  }
-}
+function handleItemPointerDown(memo: Memo, event: PointerEvent) {
+  if (event.button !== 0) return
+  if ((event.target as HTMLElement)?.closest('button')) return
 
-function handleDragOver(memo: Memo, event: DragEvent) {
-  if (!draggingId.value || draggingId.value === memo.id) return
-  const moving = displayMemos.value.find(m => m.id === draggingId.value)
-  // 置顶和普通是两组，跨组拖动直接忽略
-  if (moving && moving.isPinned !== memo.isPinned) {
+  const startX = event.clientX
+  const startY = event.clientY
+  const pointerId = event.pointerId
+  let active = false
+
+  const cleanup = () => {
+    window.removeEventListener('pointermove', onMove)
+    window.removeEventListener('pointerup', onUp)
+    window.removeEventListener('pointercancel', onUp)
+    document.documentElement.classList.remove('memo-dragging')
+    draggingId.value = null
     dropTarget.value = null
-    return
   }
-  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
-  dropTarget.value = {
-    id: memo.id,
-    after: event.clientY > rect.top + rect.height / 2,
+
+  const onMove = (e: PointerEvent) => {
+    if (e.pointerId !== pointerId) return
+    if (!active) {
+      const dy = e.clientY - startY
+      const dx = e.clientX - startX
+      // 竖直移动超过 8px 才算拖动，避免和点击编辑抢
+      if (Math.abs(dy) < 8 || Math.abs(dy) <= Math.abs(dx)) return
+      active = true
+      draggingId.value = memo.id
+      document.documentElement.classList.add('memo-dragging')
+    }
+    e.preventDefault()
+    updateDropTarget(e.clientY, memo)
   }
-}
 
-function handleDragLeave(memo: Memo) {
-  if (dropTarget.value?.id === memo.id) dropTarget.value = null
-}
-
-function handleDrop(event: DragEvent) {
-  event.preventDefault()
-  const movingId = draggingId.value
-  const target = dropTarget.value
-  if (movingId && target && moveMemo(movingId, target.id, target.after)) {
-    suppressClickUntil = Date.now() + 220
+  const onUp = (e: PointerEvent) => {
+    if (e.pointerId !== pointerId) return
+    const movingId = draggingId.value
+    const target = dropTarget.value
+    if (active && movingId && target && moveMemo(movingId, target.id, target.after)) {
+      suppressClickUntil = Date.now() + 220
+    }
+    cleanup()
   }
-  draggingId.value = null
-  dropTarget.value = null
-}
 
-function handleDragEnd() {
-  if (draggingId.value) suppressClickUntil = Date.now() + 220
-  draggingId.value = null
-  dropTarget.value = null
+  window.addEventListener('pointermove', onMove, { passive: false })
+  window.addEventListener('pointerup', onUp)
+  window.addEventListener('pointercancel', onUp)
 }
 
 function handleItemClick(memo: Memo) {
@@ -333,7 +352,7 @@ function handleCloseCategoryDialog() {
       </div>
 
       <!-- Memo List -->
-      <div class="memo-list">
+      <div ref="memoListRef" class="memo-list">
         <div v-if="completedMemos.length > 0 || displayMemos.length > 0" class="memo-list-head">
           <button v-if="completedMemos.length > 0" class="archive-entry" @click="showArchive = true">
             已完成 {{ completedMemos.length }} 条
@@ -353,13 +372,8 @@ function handleCloseCategoryDialog() {
             'drop-before': dropTarget?.id === memo.id && !dropTarget.after,
             'drop-after': dropTarget?.id === memo.id && dropTarget.after,
           }"
-          draggable="true"
-          @pointerdown="handleItemPointerDown"
-          @dragstart="handleDragStart(memo, $event)"
-          @dragover.prevent="handleDragOver(memo, $event)"
-          @dragleave="handleDragLeave(memo)"
-          @drop.prevent="handleDrop($event)"
-          @dragend="handleDragEnd"
+          :data-memo-id="memo.id"
+          @pointerdown="handleItemPointerDown(memo, $event)"
           @click="handleItemClick(memo)"
         >
           <div class="memo-item-header">
@@ -719,6 +733,11 @@ function handleCloseCategoryDialog() {
 
 .memo-item.is-dragging {
   opacity: 0.4;
+}
+
+:global(html.memo-dragging) {
+  user-select: none;
+  cursor: grabbing;
 }
 
 .memo-item.drop-before::before,
