@@ -5,6 +5,7 @@ import { useTimerBridge } from '../composables/useTimerBridge'
 import { eventRelativeLabel, eventTime, eventsNow, useEvents } from '../composables/useEvents'
 import { useAiButler, type CoachFeedback } from '../composables/useAiButler'
 import type { CoachPlan } from '../composables/useAi'
+import WeeklyGoals from './WeeklyGoals.vue'
 
 const emit = defineEmits<{ navigateEvents: [] }>()
 
@@ -219,6 +220,8 @@ function onCoachNoteEnter(event: KeyboardEvent) {
         @click="coachErrorExpanded = !coachErrorExpanded"
       >{{ coachError }}</p>
     </section>
+
+    <WeeklyGoals compact />
 
     <section class="zone">
       <div class="zone-title">现在陪你做</div>

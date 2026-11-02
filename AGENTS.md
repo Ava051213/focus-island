@@ -89,6 +89,7 @@ alert → 恢复（窗口内有鼠标/键盘活动）
 - **`useSettings.ts`**：主题、时长、透明度（`islandOpacity`）、缩放（`islandScale`）、显示模式（常驻/边缘停靠）、顶部位置（`islandXRatio`）、`idleMottos`、快捷键、开机自启、全屏避让（`hideOnFullscreen`）、AI Key（硅基主力 / 智谱兜底）/模型/自动建议开关
 - **`useDockMode.ts`**：边缘停靠模式，消费主窗口统一的指针轮询结果（`is_mouse_over_window`）决定展开或收起细条
 - **`useDailyStats.ts` / `useAchievements.ts`**：每日统计与成就，日期一律用 `src/utils/date.ts` 的本地日期
+- **`useWeeklyGoals.ts`**：本周目标（番茄 8 个、专注 3 天、完成 2 条小记），进度从 `dailyStats` 和 `memos.completedAt` 实时计算，周一自动换周，不新增持久化；首页显示紧凑条，记录页显示进度条
 - **`useShortcut.ts`**：全局快捷键，只在 `Pressed` 时切换面板
 - **`useAi.ts` / `useAiButler.ts`**：见下方「AI 模块」
 
