@@ -3,6 +3,8 @@ import { ref, computed, onMounted, onUnmounted, watch } from "vue";
 import { eventRelativeLabel, eventTime, useEvents } from "../composables/useEvents";
 import { useSettings } from "../composables/useSettings";
 
+const props = defineProps<{ paused?: boolean }>();
+
 const { upcoming } = useEvents();
 const { settings } = useSettings()
 
@@ -89,13 +91,17 @@ const currentItem = computed(() => {
     return items[carouselIndex.value % items.length];
 });
 
+// 待机轮播只是点缀，放慢到 8 秒；全屏避让时暂停，避免隐藏窗口里继续切 DOM
+const CAROUSEL_INTERVAL_MS = 8000;
+
 onMounted(() => {
     carouselTimer = setInterval(() => {
+        if (props.paused) return;
         const len = carouselItems.value.length;
         if (len > 1) {
             carouselIndex.value = (carouselIndex.value + 1) % len;
         }
-    }, 5000);
+    }, CAROUSEL_INTERVAL_MS);
 });
 
 onUnmounted(() => {

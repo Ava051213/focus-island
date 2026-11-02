@@ -29,8 +29,8 @@ const hoverActive = ref(false);
 const capsuleInteractive = computed(
     () => hoverActive.value && notificationType.value === null,
 );
-let hoverTimer: ReturnType<typeof setInterval> | null = null;
-let fullscreenTimer: ReturnType<typeof setInterval> | null = null;
+let hoverTimer: ReturnType<typeof setTimeout> | null = null;
+let fullscreenTimer: ReturnType<typeof setTimeout> | null = null;
 
 // 前台全屏（游戏、视频、演示）时把岛让开；通知出现时临时冒出来。
 const fullscreenActive = ref(false);
@@ -45,9 +45,17 @@ async function applyFullscreenVisibility() {
     syncClickThrough();
 }
 
-function startFullscreenPolling() {
-    if (fullscreenTimer !== null) return;
-    fullscreenTimer = window.setInterval(async () => {
+// 全屏检测本身不便宜，1.5 秒一次足够；上一次检查结束后再排下一次，避免调用堆叠
+const FULLSCREEN_POLL_MS = 1500;
+
+function scheduleFullscreenPoll() {
+    if (fullscreenTimer !== null) window.clearTimeout(fullscreenTimer);
+    fullscreenTimer = window.setTimeout(runFullscreenPoll, FULLSCREEN_POLL_MS);
+}
+
+async function runFullscreenPoll() {
+    fullscreenTimer = null;
+    try {
         if (!settings.value.hideOnFullscreen) {
             if (fullscreenActive.value) {
                 fullscreenActive.value = false;
@@ -55,9 +63,8 @@ function startFullscreenPolling() {
             }
             return;
         }
-        try {
-            const full = await invoke<boolean>("is_foreground_fullscreen");
-            if (full === fullscreenActive.value) return;
+        const full = await invoke<boolean>("is_foreground_fullscreen");
+        if (full !== fullscreenActive.value) {
             fullscreenActive.value = full;
             if (full) {
                 // 面板也一起收起，别挡着全屏内容
@@ -70,10 +77,17 @@ function startFullscreenPolling() {
                 }
             }
             applyFullscreenVisibility();
-        } catch {
-            // 不支持检测的平台直接忽略
         }
-    }, 1000);
+    } catch {
+        // 不支持检测的平台直接忽略
+    } finally {
+        scheduleFullscreenPoll();
+    }
+}
+
+function startFullscreenPolling() {
+    if (fullscreenTimer !== null) return;
+    void runFullscreenPoll();
 }
 
 // 通知横幅可见，或鼠标正悬停在岛上时，关闭鼠标穿透以便接收点击。
@@ -86,30 +100,42 @@ function syncClickThrough() {
 
 // 穿透状态下 webview 收不到 mousemove，只能轮询系统光标位置来判断悬停。
 // 停靠模式的展开/收起也复用这一次结果，避免两套轮询同时跑。
+// 没悬停时可以放慢到 400ms，悬停后回到 200ms；每次调用结束再排下一次，避免并发堆叠。
+const HOVER_POLL_IDLE_MS = 400;
+const HOVER_POLL_ACTIVE_MS = 200;
+
+function scheduleHoverPoll() {
+    if (hoverTimer !== null) window.clearTimeout(hoverTimer);
+    const delay = hoverActive.value ? HOVER_POLL_ACTIVE_MS : HOVER_POLL_IDLE_MS;
+    hoverTimer = window.setTimeout(runHoverPoll, delay);
+}
+
+async function runHoverPoll() {
+    hoverTimer = null;
+    // 全屏避让期间岛不可见也不可点，没必要查鼠标；空转保持轮询，退出全屏后自动恢复
+    if (!islandHiddenByFullscreen.value) {
+        if (notificationType.value === null && !dragging.value) {
+            try {
+                const over = await invoke<boolean>("is_mouse_over_window", { pad: 2 });
+                updatePointerOver(over);
+                if (over !== hoverActive.value) {
+                    hoverActive.value = over;
+                    syncClickThrough();
+                }
+            } catch {
+                // 命令不可用时忽略
+            }
+        }
+    } else if (hoverActive.value) {
+        hoverActive.value = false;
+        syncClickThrough();
+    }
+    scheduleHoverPoll();
+}
+
 function startHoverPolling() {
     if (hoverTimer !== null) return;
-    hoverTimer = window.setInterval(async () => {
-        if (islandHiddenByFullscreen.value) {
-            if (hoverActive.value) {
-                hoverActive.value = false;
-                syncClickThrough();
-            }
-            return;
-        }
-        if (notificationType.value !== null) return;
-        // 拖动中保持可交互，否则指针短暂离开窗口会重新开启穿透并打断拖动
-        if (dragging.value) return;
-        try {
-            const over = await invoke<boolean>("is_mouse_over_window", { pad: 2 });
-            updatePointerOver(over);
-            if (over !== hoverActive.value) {
-                hoverActive.value = over;
-                syncClickThrough();
-            }
-        } catch {
-            // 命令不可用时忽略
-        }
-    }, 200);
+    void runHoverPoll();
 }
 
 async function onIslandClick() {
@@ -460,11 +486,11 @@ onMounted(async () => {
 
 onUnmounted(() => {
     if (hoverTimer !== null) {
-        window.clearInterval(hoverTimer);
+        window.clearTimeout(hoverTimer);
         hoverTimer = null;
     }
     if (fullscreenTimer !== null) {
-        window.clearInterval(fullscreenTimer);
+        window.clearTimeout(fullscreenTimer);
         fullscreenTimer = null;
     }
     unlisten?.();
@@ -524,7 +550,10 @@ onUnmounted(() => {
                         :scale="settings.islandScale ?? 1"
                     />
                     <template v-else>
-                        <CapsuleIdle v-if="state === 'idle' || state === 'alert'" />
+                        <CapsuleIdle
+                            v-if="state === 'idle' || state === 'alert'"
+                            :paused="islandHiddenByFullscreen"
+                        />
                         <CapsuleFocus
                             v-else-if="state === 'focus' || state === 'break'"
                             :interactive="capsuleInteractive"
