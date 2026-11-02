@@ -9,6 +9,10 @@ export interface Memo {
   isPinned: boolean
   /** 这条备忘上累计完成的专注轮数 */
   pomodoroCount: number
+  /** 手动排序序号，越小越靠前；旧数据在读取时补齐 */
+  order?: number
+  /** 完成归档时间，null 表示还在进行中 */
+  completedAt?: number | null
   createdAt: number
   updatedAt: number
 }
@@ -54,18 +58,36 @@ const memos = ref<Memo[]>([])
 const categories = ref<MemoCategory[]>([...DEFAULT_CATEGORIES])
 const currentCategoryId = ref<string>('all')
 
+/** 置顶优先，其余按手动顺序；没有手动顺序的老数据退回更新时间 */
+function sortMemos(list: Memo[]): Memo[] {
+  return [...list].sort((a, b) => {
+    if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1
+    const orderA = typeof a.order === 'number' ? a.order : Number.POSITIVE_INFINITY
+    const orderB = typeof b.order === 'number' ? b.order : Number.POSITIVE_INFINITY
+    if (orderA !== orderB) return orderA - orderB
+    return b.updatedAt - a.updatedAt
+  })
+}
+
 const memoStore = createPersistedStore({
   file: 'memos.json',
   snapshot: () => memos.value,
   restore: (data) => {
     if (!Array.isArray(data)) throw new Error('memos.json is not an array')
-    // 老数据没有 pomodoroCount，这里补默认值避免出现 NaN
-    memos.value = data
+    // 老数据没有 pomodoroCount / completedAt / order，这里一次补齐
+    const list = data
       .filter((raw): raw is Partial<Memo> => !!raw && typeof raw === 'object')
       .map(raw => ({
         ...raw,
         pomodoroCount: Number(raw.pomodoroCount) || 0,
+        completedAt: Number(raw.completedAt) > 0 ? Number(raw.completedAt) : null,
       })) as Memo[]
+    if (list.some(memo => typeof memo.order !== 'number')) {
+      sortMemos(list).forEach((memo, index) => {
+        memo.order = index
+      })
+    }
+    memos.value = list
   },
   syncEvent: 'memos-updated',
 })
@@ -95,6 +117,10 @@ export function useMemos() {
   function addMemo(categoryId: string = 'all'): Memo {
     const now = Date.now()
     const actualCategoryId = categoryId === 'all' ? 'work' : categoryId
+    const activeOrders = memos.value
+      .filter(memo => !memo.completedAt)
+      .map(memo => memo.order ?? 0)
+    const minOrder = activeOrders.length > 0 ? Math.min(...activeOrders) : 0
     const memo: Memo = {
       id: crypto.randomUUID(),
       title: '',
@@ -102,6 +128,8 @@ export function useMemos() {
       categoryId: actualCategoryId,
       isPinned: false,
       pomodoroCount: 0,
+      order: minOrder - 1,
+      completedAt: null,
       createdAt: now,
       updatedAt: now,
     }
@@ -125,6 +153,48 @@ export function useMemos() {
     if (!memo) return
     memo.isPinned = !memo.isPinned
     memo.updatedAt = Date.now()
+    // 钉住后放到置顶组最前，取消后回到普通组最前
+    const groupOrders = memos.value
+      .filter(item => !item.completedAt && item.id !== memo.id && item.isPinned === memo.isPinned)
+      .map(item => item.order ?? 0)
+    memo.order = (groupOrders.length > 0 ? Math.min(...groupOrders) : 0) - 1
+    sortMemos(memos.value.filter(item => !item.completedAt)).forEach((item, index) => {
+      item.order = index
+    })
+  }
+
+  /** 勾选完成：不删除，进归档，可以从已完成列表恢复 */
+  function completeMemo(id: string) {
+    const memo = memos.value.find(m => m.id === id)
+    if (!memo || memo.completedAt) return
+    memo.completedAt = Date.now()
+  }
+
+  function restoreMemo(id: string) {
+    const memo = memos.value.find(m => m.id === id)
+    if (!memo) return
+    memo.completedAt = null
+  }
+
+  /** 拖动排序：把 id 移到 targetId 之前或之后，只允许同一置顶分组内移动 */
+  function moveMemo(id: string, targetId: string, after: boolean): boolean {
+    const list = activeMemos.value.slice()
+    const moving = list.find(m => m.id === id)
+    const target = list.find(m => m.id === targetId)
+    if (!moving || !target || moving.id === target.id) return false
+    if (moving.isPinned !== target.isPinned) return false
+
+    const fromIndex = list.indexOf(moving)
+    list.splice(fromIndex, 1)
+    let insertIndex = list.findIndex(m => m.id === targetId)
+    if (insertIndex < 0) return false
+    if (after) insertIndex += 1
+    list.splice(insertIndex, 0, moving)
+
+    list.forEach((memo, index) => {
+      memo.order = index
+    })
+    return true
   }
 
   /** 一轮专注结束时累加到对应备忘 */
@@ -179,16 +249,23 @@ export function useMemos() {
     return true
   }
 
+  /** 所有未完成的小记，按置顶 + 手动顺序排列 */
+  const activeMemos = computed(() =>
+    sortMemos(memos.value.filter(memo => !memo.completedAt)),
+  )
+
   const filteredMemos = computed(() => {
-    let result = memos.value
-    if (currentCategoryId.value !== 'all') {
-      result = result.filter(m => m.categoryId === currentCategoryId.value)
-    }
-    return [...result].sort((a, b) => {
-      if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1
-      return b.updatedAt - a.updatedAt
-    })
+    if (currentCategoryId.value === 'all') return activeMemos.value
+    return activeMemos.value.filter(m => m.categoryId === currentCategoryId.value)
   })
+
+  /** 已完成归档，最近完成的在前 */
+  const completedMemos = computed(() =>
+    memos.value
+      .filter(memo => !!memo.completedAt)
+      .slice()
+      .sort((a, b) => (b.completedAt ?? 0) - (a.completedAt ?? 0)),
+  )
 
   const currentCategoryName = computed(() => {
     const category = categories.value.find(c => c.id === currentCategoryId.value)
@@ -197,9 +274,9 @@ export function useMemos() {
 
   const memoCount = computed(() => {
     if (currentCategoryId.value === 'all') {
-      return memos.value.length
+      return activeMemos.value.length
     }
-    return memos.value.filter(m => m.categoryId === currentCategoryId.value).length
+    return activeMemos.value.filter(m => m.categoryId === currentCategoryId.value).length
   })
 
   function getDisplayTitle(memo: Memo): string {
@@ -211,13 +288,18 @@ export function useMemos() {
     memos,
     categories,
     currentCategoryId,
+    activeMemos,
     filteredMemos,
+    completedMemos,
     currentCategoryName,
     memoCount,
     addMemo,
     updateMemo,
     deleteMemo,
     togglePin,
+    completeMemo,
+    restoreMemo,
+    moveMemo,
     incrementPomodoro,
     addCategory,
     updateCategory,

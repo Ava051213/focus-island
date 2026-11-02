@@ -1,6 +1,6 @@
 import { computed, ref, watch } from 'vue'
 import { createPersistedStore } from './persistence'
-import { useAi, type CoachContext } from './useAi'
+import { useAi, type CoachContext, type CoachMessage } from './useAi'
 import { useSettings } from './useSettings'
 import { useEvents } from './useEvents'
 import { useMemos } from './useMemos'
@@ -15,6 +15,8 @@ export interface AiInsight {
   title: string
   content: string
   createdAt: number
+  /** 管家结构化建议；旧数据没有这个字段，首页会退回显示 content */
+  coach?: CoachMessage
 }
 
 interface ButlerState {
@@ -77,13 +79,14 @@ function stripHtml(html: string): string {
     .trim()
 }
 
-function addInsight(kind: AiInsightKind, title: string, content: string) {
+function addInsight(kind: AiInsightKind, title: string, content: string, coach?: CoachMessage) {
   state.value.insights.unshift({
     id: crypto.randomUUID(),
     kind,
     title,
     content,
     createdAt: Date.now(),
+    coach,
   })
   if (state.value.insights.length > MAX_INSIGHTS) {
     state.value.insights.length = MAX_INSIGHTS
@@ -92,17 +95,34 @@ function addInsight(kind: AiInsightKind, title: string, content: string) {
 
 const WEEKDAY_NAMES = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
 
+function resolveTimeOfDay(hour: number): string {
+  if (hour < 5) return '深夜'
+  if (hour < 8) return '清晨'
+  if (hour < 11) return '上午'
+  if (hour < 13) return '中午'
+  if (hour < 17) return '下午'
+  if (hour < 19) return '傍晚'
+  if (hour < 23) return '晚上'
+  return '深夜'
+}
+
+/** 把日程时间换算成「还有多少分钟」，超过一天返回 null */
+function minutesUntil(at: string, now: Date): number | null {
+  const [datePart, timePart] = at.split('T')
+  const [y, m, d] = datePart.split('-').map(Number)
+  const [hh, mm] = (timePart ?? '00:00').split(':').map(Number)
+  const diff = Math.round((new Date(y, m - 1, d, hh, mm).getTime() - now.getTime()) / 60000)
+  return diff >= 0 && diff <= 1440 ? diff : null
+}
+
 function buildContext(): CoachContext {
   const { upcoming, overdue } = useEvents()
-  const { memos } = useMemos()
+  const { memos, activeMemos } = useMemos()
   const { todayStat } = useDailyStats()
   const { settings } = useSettings()
 
-  // 置顶优先，其余按最近更新；不再只取 24 小时内的，否则经常没有素材可建议
-  const ordered = memos.value
-    .slice()
-    .sort((a, b) => (Number(b.isPinned) - Number(a.isPinned)) || (b.updatedAt - a.updatedAt))
-    .slice(0, 5)
+  // 只拿还在进行中的小记，按用户手动排好的顺序取前 5 条
+  const ordered = activeMemos.value.slice(0, 5)
 
   const now = new Date()
   const hh = String(now.getHours()).padStart(2, '0')
@@ -110,31 +130,53 @@ function buildContext(): CoachContext {
   const nowText = `${toLocalDateStr(now)} ${hh}:${mm} ${WEEKDAY_NAMES[now.getDay()]}`
 
   const next = upcoming.value[0] ?? null
-  let minutesToNextEvent: number | null = null
-  if (next) {
-    const [datePart, timePart] = next.at.split('T')
-    const [y, m, d] = datePart.split('-').map(Number)
-    const [nh, nm] = (timePart ?? '00:00').split(':').map(Number)
-    const diff = Math.round((new Date(y, m - 1, d, nh, nm).getTime() - now.getTime()) / 60000)
-    if (diff >= 0 && diff <= 1440) minutesToNextEvent = diff
-  }
+  const minutesToNextEvent = next ? minutesUntil(next.at, now) : null
+  const todayStr = toLocalDateStr(now)
 
   return {
     now: nowText,
+    timeOfDay: resolveTimeOfDay(now.getHours()),
     minutesToNextEvent,
     nextEventTitle: next?.title ?? null,
     focusMinutes: settings.value.focusDuration,
     memos: ordered.map(memo => ({
+      id: memo.id,
       title: memo.title || '未命名',
       content: stripHtml(memo.content).slice(0, 200),
       pomodoros: memo.pomodoroCount,
+      daysSinceUpdate: Math.floor((now.getTime() - memo.updatedAt) / 86400000),
+      pinned: memo.isPinned,
     })),
-    events: upcoming.value.slice(0, 8).map(event => ({ title: event.title, at: event.at })),
+    events: upcoming.value.slice(0, 8).map(event => ({
+      title: event.title,
+      at: event.at,
+      inMinutes: minutesUntil(event.at, now),
+    })),
     overdueCount: overdue.value.length,
     todayPomodoros: todayStat.value?.pomodoros ?? 0,
     focusMinutesToday: todayStat.value?.focusMinutes ?? 0,
-    lastCoach: state.value.insights.find(item => item.kind === 'coach')?.content ?? null,
+    completedToday: memos.value
+      .filter(memo => memo.completedAt && toLocalDateStr(new Date(memo.completedAt)) === todayStr)
+      .map(memo => memo.title || stripHtml(memo.content).slice(0, 20))
+      .filter(title => title.length > 0)
+      .slice(0, 5),
+    recentCoaches: state.value.insights
+      .filter(item => item.kind === 'coach')
+      .slice(0, 3)
+      .map(item => item.content)
+      .filter(content => content.length > 0),
   }
+}
+
+/** 把结构化建议拼成一段纯文本，给旧展示和最近建议上下文用 */
+function formatCoach(message: CoachMessage): string {
+  const lines = [message.greeting]
+  message.plans.forEach((plan, index) => {
+    lines.push(`${index + 1}. ${plan.title} · ${plan.pomodoros} 个番茄：${plan.reason}`)
+  })
+  if (message.care) lines.push(message.care)
+  if (message.closing) lines.push(message.closing)
+  return lines.filter(line => line.length > 0).join('\n')
 }
 
 let started = false
@@ -159,11 +201,22 @@ function canRunAuto(): boolean {
   return state.value.autoRunsToday < AUTO_DAILY_CAP
 }
 
-async function generateCoach(): Promise<string> {
+async function generateCoach(): Promise<CoachMessage> {
   const { coachToday } = useAi()
-  const content = await coachToday(buildContext())
-  addInsight('coach', '小管家说', content)
-  return content
+  const ctx = buildContext()
+  const message = await coachToday(ctx)
+  // 模型只负责给序号，真正的小记 id 和标题由本地匹配，避免编造
+  const plans = message.plans.map((plan) => {
+    const memo = plan.memoIndex ? ctx.memos[plan.memoIndex - 1] ?? null : null
+    return {
+      ...plan,
+      memoId: memo?.id ?? null,
+      title: memo?.title ?? plan.title,
+    }
+  })
+  const enriched: CoachMessage = { ...message, plans }
+  addInsight('coach', '小管家说', formatCoach(enriched), enriched)
+  return enriched
 }
 
 async function runAuto() {
@@ -210,7 +263,7 @@ export function startAiButler() {
     onChange,
   )
   watch(
-    () => memos.value.map(m => `${m.id}:${m.updatedAt}`).join('|'),
+    () => memos.value.map(m => `${m.id}:${m.updatedAt}:${m.completedAt ?? 0}`).join('|'),
     onChange,
   )
   watch(() => todayStat.value?.pomodoros ?? 0, onChange)
@@ -232,7 +285,7 @@ export function useAiButler() {
   )
 
   async function refreshCoach(): Promise<void> {
-    const content = await generateCoach()
+    await generateCoach()
     state.value.lastAutoAt = Date.now()
     const today = toLocalDateStr(new Date())
     if (state.value.autoDate !== today) {
@@ -240,7 +293,6 @@ export function useAiButler() {
       state.value.autoRunsToday = 0
     }
     state.value.autoRunsToday += 1
-    void content
   }
 
   return {

@@ -36,18 +36,46 @@ export interface PlanTaskInput {
 export interface CoachContext {
   /** 本地时间，例如 2026-10-31 17:10 周五 */
   now: string
+  /** 清晨 / 上午 / 中午 / 下午 / 傍晚 / 晚上 / 深夜 */
+  timeOfDay: string
   /** 离最近一条日程还有多少分钟；超过一天或没有日程则为 null */
   minutesToNextEvent: number | null
   nextEventTitle: string | null
   /** 一个番茄多少分钟 */
   focusMinutes: number
-  memos: Array<{ title: string; content: string; pomodoros: number }>
-  events: Array<{ title: string; at: string }>
+  memos: Array<{
+    id: string
+    title: string
+    content: string
+    pomodoros: number
+    daysSinceUpdate: number
+    pinned: boolean
+  }>
+  events: Array<{ title: string; at: string; inMinutes: number | null }>
   overdueCount: number
   todayPomodoros: number
   focusMinutesToday: number
-  /** 上一次的建议，用来提醒模型换角度 */
-  lastCoach: string | null
+  /** 今天完成归档的小记标题 */
+  completedToday: string[]
+  /** 最近三条管家建议，用来提醒模型换角度 */
+  recentCoaches: string[]
+}
+
+export interface CoachPlan {
+  title: string
+  /** 对应 memos 数组的序号，从 1 开始；没有对应小记为 null */
+  memoIndex: number | null
+  /** 数据层匹配后回填的小记 id */
+  memoId: string | null
+  pomodoros: number
+  reason: string
+}
+
+export interface CoachMessage {
+  greeting: string
+  plans: CoachPlan[]
+  care: string
+  closing: string
 }
 
 export interface PlanArtifacts {
@@ -311,23 +339,51 @@ export function useAi() {
     return { title: '', content: raw }
   }
 
-  async function coachToday(ctx: CoachContext): Promise<string> {
-    return chat(
-      `你是用户的小管家，说话轻轻的，可以偶尔撒一句娇，但别腻。
-根据今天的情况，给出现在最值得做的 1-2 件事。规则：
-1. 每条一行，以「1.」「2.」开头，写清楚做哪条小记或日程、预计多久、为什么。
-2. memos 里的 pomodoros 是这条已经跑过的番茄轮数，0 表示还没开始，不要把它说反。
-3. 时长按一个番茄 ${ctx.focusMinutes} 分钟算，可以说「一个番茄」或「半个番茄」。
-4. 理由只能使用数据里的事实：番茄轮数、更新时间、日程时间；不要编造兴趣、进度或原文没有的信息。
-5. 给了你上次的建议时，这次必须换个角度，不要重复上次说的事。
-6. 总字数不超过 120 字，不要标题、不要复述原文，不要 Markdown。
-7. 最后一行单独写一句软软的关心，每次换个说法，不要和上次或示例重复。
-格式示例（只演示格式，不要照抄文字）：
-1. 先做「洗衣服」，半个番茄，它还没开始过，顺手就能完成。
-2. 再做「倒垃圾」，一个番茄，今天截止，别拖到明天。`,
+  async function coachToday(ctx: CoachContext): Promise<CoachMessage> {
+    const text = await chat(
+      `你是用户的私人小管家，不是客服，也不是只会喊口号的助手。你记得他的小记、日程和专注记录，说话像一个了解他节奏的朋友：具体、温和、有分寸，偶尔可以俏皮，但不要腻。
+
+请主动关心他，并给出现在能照着做的安排。只输出 JSON：
+{"greeting":"开场关心，结合当下时间和今天的事实，20-35 字","plans":[{"memo":小记序号,"title":"小记标题","pomodoros":1,"reason":"为什么现在做，15-25 字"}],"care":"主动提醒，15-30 字","closing":"收尾一句，10-20 字"}
+
+规则：
+1. plans 给 1-3 条，按先后顺序排好。memo 是 memos 数组里的序号（从 1 开始），没有对应小记就写 0，不要编造标题。
+2. 每条 reason 必须引用数据里的事实：放了几天没动、已经跑过几个番茄、离下一条日程还有多久、今天已专注多久。禁止“提高效率”“加油”“合理安排时间”这类空话。
+3. greeting 要带一个具体数字或时段，例如今天已经专注了多久、现在几点、下一条日程还剩多少分钟。
+4. care 按当前时段说人话：早上提醒吃早饭，中午提醒歇一会儿，傍晚提醒收尾，深夜劝睡。不要编造天气、位置、心情或数据里没有的事。
+5. 最近三条建议都在 recentCoaches 里，这次必须换句式和角度，不要复读。
+6. 一个番茄是 ${ctx.focusMinutes} 分钟。全文不要 Markdown、不要编号前缀，不要复述原始数据。`,
       JSON.stringify(ctx),
-      0.6,
+      0.8,
     )
+    const raw = stripCodeFence(text)
+    try {
+      const data = JSON.parse(raw) as Record<string, unknown>
+      const greeting = String(data?.greeting ?? '').trim()
+      const care = String(data?.care ?? '').trim()
+      const closing = String(data?.closing ?? '').trim()
+      const rawPlans = Array.isArray(data?.plans) ? data.plans : []
+      const plans: CoachPlan[] = rawPlans
+        .filter((item): item is Record<string, unknown> => !!item && typeof item === 'object')
+        .map((plan) => {
+          const memoIndexRaw = Number(plan.memo)
+          return {
+            title: String(plan.title ?? '').trim().slice(0, 30),
+            memoIndex: Number.isFinite(memoIndexRaw) && memoIndexRaw > 0 ? memoIndexRaw : null,
+            memoId: null,
+            pomodoros: Math.min(3, Math.max(1, Number(plan.pomodoros) || 1)),
+            reason: String(plan.reason ?? '').trim().slice(0, 80),
+          }
+        })
+        .filter(plan => plan.title.length > 0)
+        .slice(0, 3)
+      if (greeting || plans.length > 0) {
+        return { greeting, plans, care, closing }
+      }
+    } catch {
+      // JSON 解析失败时整段兜底
+    }
+    return { greeting: raw.slice(0, 240), plans: [], care: '', closing: '' }
   }
 
   async function evaluatePlan(plan: string, extra: string, tasks: PlanTaskInput[]): Promise<string> {

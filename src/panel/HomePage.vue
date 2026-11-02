@@ -4,10 +4,11 @@ import { useMemos, type Memo } from '../composables/useMemos'
 import { useTimerBridge } from '../composables/useTimerBridge'
 import { eventRelativeLabel, eventTime, eventsNow, useEvents } from '../composables/useEvents'
 import { useAiButler } from '../composables/useAiButler'
+import type { CoachPlan } from '../composables/useAi'
 
 const emit = defineEmits<{ navigateEvents: [] }>()
 
-const { memos, getDisplayTitle } = useMemos()
+const { memos, activeMemos, getDisplayTitle, completeMemo, restoreMemo } = useMemos()
 const { withinDays } = useEvents()
 const {
   start,
@@ -21,13 +22,8 @@ const {
   activeTaskTitle,
 } = useTimerBridge()
 
-/** 最近更新的三条备忘，作为「现在可以动手」的候选 */
-const recentMemos = computed(() =>
-  memos.value
-    .slice()
-    .sort((a, b) => b.updatedAt - a.updatedAt)
-    .slice(0, 3),
-)
+/** 按用户拖好的顺序取前三条，作为「现在可以动手」的候选 */
+const recentMemos = computed(() => activeMemos.value.slice(0, 3))
 
 const upcomingEvents = computed(() => withinDays(7).slice(0, 5))
 
@@ -35,8 +31,42 @@ function startMemo(memo: Memo) {
   start(memo.id, getDisplayTitle(memo))
 }
 
+const undoState = ref<{ id: string; title: string } | null>(null)
+let undoTimer: ReturnType<typeof setTimeout> | null = null
+
+function completeHomeMemo(memo: Memo, event: Event) {
+  event.stopPropagation()
+  undoState.value = { id: memo.id, title: getDisplayTitle(memo) }
+  completeMemo(memo.id)
+  if (undoTimer) clearTimeout(undoTimer)
+  undoTimer = setTimeout(() => {
+    undoState.value = null
+  }, 5000)
+}
+
+function undoComplete() {
+  if (!undoState.value) return
+  restoreMemo(undoState.value.id)
+  undoState.value = null
+  if (undoTimer) clearTimeout(undoTimer)
+}
+
 /** 小管家建议直接放在首页，不再单独占一个页面 */
 const { coachInsight, refreshCoach, configured } = useAiButler()
+const coachMessage = computed(() => coachInsight.value?.coach ?? null)
+
+function planMemo(plan: CoachPlan): Memo | null {
+  if (plan.memoId) {
+    const matched = memos.value.find(memo => memo.id === plan.memoId && !memo.completedAt)
+    if (matched) return matched
+  }
+  return memos.value.find(memo => !memo.completedAt && getDisplayTitle(memo) === plan.title) ?? null
+}
+
+function startPlan(plan: CoachPlan) {
+  const memo = planMemo(plan)
+  if (memo) start(memo.id, getDisplayTitle(memo))
+}
 const coachLoading = ref(false)
 const coachError = ref('')
 const coachErrorExpanded = ref(false)
@@ -65,7 +95,25 @@ async function handleRefreshCoach() {
           {{ coachLoading ? '想着呢…' : '再想想' }}
         </button>
       </div>
-      <p v-if="coachInsight" class="coach-content">{{ coachInsight.content }}</p>
+      <template v-if="coachMessage">
+        <p v-if="coachMessage.greeting" class="coach-greeting">{{ coachMessage.greeting }}</p>
+        <div v-if="coachMessage.plans.length > 0" class="coach-plans">
+          <div v-for="(plan, index) in coachMessage.plans" :key="index" class="coach-plan">
+            <div class="coach-plan-copy">
+              <div class="coach-plan-line">
+                <span class="coach-plan-index">{{ index + 1 }}</span>
+                <span class="coach-plan-title">{{ plan.title }}</span>
+                <span class="coach-plan-pomo">{{ plan.pomodoros }} 个番茄</span>
+              </div>
+              <p class="coach-plan-reason">{{ plan.reason }}</p>
+            </div>
+            <button v-if="planMemo(plan)" class="coach-start-btn" @click="startPlan(plan)">开始</button>
+          </div>
+        </div>
+        <p v-if="coachMessage.care" class="coach-care">{{ coachMessage.care }}</p>
+        <p v-if="coachMessage.closing" class="coach-closing">{{ coachMessage.closing }}</p>
+      </template>
+      <p v-else-if="coachInsight" class="coach-content">{{ coachInsight.content }}</p>
       <p v-else class="coach-empty">记点小记或日程，我就悄悄帮你想办法呀～</p>
       <p
         v-if="coachError"
@@ -94,6 +142,11 @@ async function handleRefreshCoach() {
 
       <div v-else-if="recentMemos.length > 0" class="memo-list">
         <div v-for="memo in recentMemos" :key="memo.id" class="memo-row">
+          <button class="home-check-btn" @click="(e) => completeHomeMemo(memo, e)" title="做完了，收起来">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4">
+              <polyline points="4 12 9 17 20 6"/>
+            </svg>
+          </button>
           <span class="memo-title">{{ getDisplayTitle(memo) }}</span>
           <button class="play-btn" @click="startMemo(memo)" title="陪我专注一会儿呀">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg>
@@ -130,6 +183,11 @@ async function handleRefreshCoach() {
         这七天干干净净的，正好留给想做的事呀～
       </div>
     </section>
+
+    <div v-if="undoState" class="undo-toast">
+      <span class="undo-text">做完「{{ undoState.title }}」啦</span>
+      <button class="undo-btn" @click="undoComplete">撤销</button>
+    </div>
   </div>
 </template>
 
@@ -183,6 +241,115 @@ async function handleRefreshCoach() {
   line-height: 1.65;
   white-space: pre-wrap;
   color: rgba(255, 255, 255, 0.82);
+}
+
+.coach-greeting {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.65;
+  color: rgba(255, 255, 255, 0.86);
+}
+
+.coach-plans {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.coach-plan {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.coach-plan-copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.coach-plan-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.coach-plan-index {
+  flex-shrink: 0;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--focus-color);
+  background: color-mix(in srgb, var(--focus-color) 16%, transparent);
+}
+
+.coach-plan-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.9);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.coach-plan-pomo {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: color-mix(in srgb, var(--focus-color) 78%, transparent);
+}
+
+.coach-plan-reason {
+  margin: 0;
+  padding-left: 21px;
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.coach-start-btn {
+  flex-shrink: 0;
+  padding: 4px 9px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--focus-color) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--focus-color) 34%, transparent);
+  color: var(--focus-color);
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.coach-start-btn:hover {
+  background: color-mix(in srgb, var(--focus-color) 28%, transparent);
+}
+
+.coach-care {
+  margin: 0;
+  padding-top: 5px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 11px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.coach-closing {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.6;
+  color: color-mix(in srgb, var(--focus-color) 62%, rgba(255, 255, 255, 0.4));
 }
 
 .coach-empty {
@@ -324,6 +491,27 @@ async function handleRefreshCoach() {
   background: rgba(255, 255, 255, 0.07);
 }
 
+.home-check-btn {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.18);
+  background: transparent;
+  color: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.home-check-btn:hover {
+  border-color: color-mix(in srgb, var(--focus-color) 60%, transparent);
+  background: color-mix(in srgb, var(--focus-color) 12%, transparent);
+  color: color-mix(in srgb, var(--focus-color) 80%, transparent);
+}
+
 .memo-title {
   flex: 1;
   min-width: 0;
@@ -421,5 +609,41 @@ async function handleRefreshCoach() {
 .empty.small {
   padding: 16px;
   font-size: 11px;
+}
+
+.undo-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 64px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px;
+  border-radius: 9px;
+  background: rgba(30, 30, 34, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  z-index: 1100;
+  white-space: nowrap;
+}
+
+.undo-text {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.undo-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--focus-color);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.undo-btn:hover {
+  text-decoration: underline;
 }
 </style>

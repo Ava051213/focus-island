@@ -85,7 +85,7 @@ alert → 恢复（窗口内有鼠标/键盘活动）
 - **`useTimer.ts`**：计时器纯逻辑，与 UI 解耦，以 `phaseEndAtMs` 计算剩余时间。`onPhaseDoneCallback` 注册阶段结束回调；提供 `skipToBreak()`、`skipBreak()`、`abandon()` 和通知相关的 `confirm/extend/dismissNotification()`
 - **`useTimerBridge.ts`**：panel 窗口专用，包装 useTimer，负责广播状态、记录番茄（累加到对应备忘、每日统计、成就）以及处理通知操作
 - **`useEvents.ts`**：日程事件 CRUD。每条只有发生时间（`YYYY-MM-DD` 或 `YYYY-MM-DDTHH:mm`）、标题、描述、单个标签、是否已处理，按时间升序排列，过期的单独归档。`parseQuickEvent()` 负责把「周五 10:00 交报告 #工作」这类一句话解析成事件。
-- **`useMemos.ts`**：备忘与分类，同时落 `memos.json` 和 `memo-categories.json`。每条备忘带 `pomodoroCount`，是当前唯一的专注对象
+- **`useMemos.ts`**：备忘与分类，同时落 `memos.json` 和 `memo-categories.json`。每条备忘带 `pomodoroCount`，是当前唯一的专注对象；`completedAt` 用于完成归档（不物理删除，可恢复），`order` 保存用户拖动后的手动顺序，首页取 `activeMemos` 前三条
 - **`useSettings.ts`**：主题、时长、透明度（`islandOpacity`）、缩放（`islandScale`）、显示模式（常驻/边缘停靠）、顶部位置（`islandXRatio`）、`idleMottos`、快捷键、开机自启、全屏避让（`hideOnFullscreen`）、AI Key（硅基主力 / 智谱兜底）/模型/自动建议开关
 - **`useDockMode.ts`**：边缘停靠模式，消费主窗口统一的指针轮询结果（`is_mouse_over_window`）决定展开或收起细条
 - **`useDailyStats.ts` / `useAchievements.ts`**：每日统计与成就，日期一律用 `src/utils/date.ts` 的本地日期
@@ -114,17 +114,17 @@ alert → 恢复（窗口内有鼠标/键盘活动）
   - 每次请求有整体超时（短任务 20 秒，`generatePlan` 40 秒），超时、非 2xx 或空返回都会切下一家
   - 短任务把 `max_tokens` 压到 1024；只有 `generatePlan` 开启思考、给 2048
   - `parseTaskList` / `parseNameList` 先按 JSON 解析，失败后退化为按行拆分，容忍模型返回代码围栏
-- **`useAiButler.ts`**：后台自动建议调度 + `ai-insights.json`。四道闸门按顺序拦：`aiAutoEnabled` → 7:00–23:00 → 距上次 ≥10 分钟 → 当日 <30 次。触发源是 upcoming 事件 / memos / 今日番茄的 `watch`，90 秒防抖；另有一个每小时一次的定时刷新，避免一整天重复同一句。失败也写 `lastAutoAt`，避免网络异常时反复重试。
-  - 上下文包含最近 5 条小记（含番茄轮数）、未来日程与离最近一条还有多少分钟、当前时刻、一个番茄的分钟数，以及上一次的建议（要求模型换角度）
-  - 结果只取最新一条 coach 建议，显示在首页「小管家说」卡片；旧的 insights 仍保留在 `ai-insights.json` 里，最多 50 条
+- **`useAiButler.ts`**：后台自动建议调度 + `ai-insights.json`。四道闸门按顺序拦：`aiAutoEnabled` → 7:00–23:00 → 距上次 ≥10 分钟 → 当日 <30 次。触发源是 upcoming 事件 / memos（含完成归档）/ 今日番茄的 `watch`，90 秒防抖；另有一个每小时一次的定时刷新，避免一整天重复同一句。失败也写 `lastAutoAt`，避免网络异常时反复重试。
+  - 上下文包含当前时段、最近 5 条进行中小记（番茄轮数、放置天数、置顶）、未来日程及剩余分钟、今日番茄与专注分钟、今天完成的小记，以及最近 3 条旧建议
+  - `coachToday` 返回结构化 JSON（开场关心 / 1-3 条安排 / 生活提醒 / 收尾）。模型只给 `memo` 序号，`useAiButler` 在本地映射成真实小记 id，首页每条安排可直接开始专注
+  - 结果只取最新一条 coach 建议，显示在首页「小管家说」卡片；旧格式只存 `content` 时首页退回纯文本展示。旧的 insights 仍保留在 `ai-insights.json` 里，最多 50 条
 
 ### Rust 后端（src-tauri/src/lib.rs）
 
 前端会调用的 Tauri commands：
 - `is_mouse_over_window(pad)` — 鼠标是否在当前窗口内（macOS: CoreGraphics, Windows: Win32, Linux: X11）
 - `set_click_through(ignore)` — 窗口鼠标穿透
-- `is_foreground_fullscreen()` — 前台窗口是否铺满整屏（仅 Windows 实现，其它平台返回 false）。灵动岛每秒轮询一次，全屏时藏岛与面板，通知出现再临时浮回来
-- `set_island_visible(visible)` — 显隐灵动岛窗口（全屏避让用）
+- `is_foreground_fullscreen()` — 前台窗口是否铺满整屏（仅 Windows 实现，其它平台返回 false）。灵动岛每秒轮询一次，全屏时岛淡出（不隐藏窗口，避免 JS 计时器被降频）并收起面板，通知出现再浮回来
 - `set_island_size(scale)` / `set_island_custom_size(width, height)` — 调整灵动岛窗口尺寸并水平居中
 - `toggle_panel` / `animate_panel_close` / `hide_panel` / `is_panel_visible` / `position_panel_under_island` / `get_panel_transition_metrics` / `emit_island_panel_motion` — panel 显示与动画。Rust 端只负责定位、显示，并发出 `panel-window-transition` 事件，动画由前端完成
 
