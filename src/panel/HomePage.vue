@@ -3,12 +3,19 @@ import { computed, ref } from 'vue'
 import { useMemos, type Memo } from '../composables/useMemos'
 import { useTimerBridge } from '../composables/useTimerBridge'
 import { eventRelativeLabel, eventTime, eventsNow, useEvents } from '../composables/useEvents'
-import { useAiButler } from '../composables/useAiButler'
+import { useAiButler, type CoachFeedback } from '../composables/useAiButler'
 import type { CoachPlan } from '../composables/useAi'
 
 const emit = defineEmits<{ navigateEvents: [] }>()
 
-const { memos, activeMemos, getDisplayTitle, completeMemo, restoreMemo } = useMemos()
+const {
+  memos,
+  activeMemos,
+  completedMemos,
+  getDisplayTitle,
+  completeMemo,
+  restoreMemo,
+} = useMemos()
 const { withinDays } = useEvents()
 const {
   start,
@@ -31,12 +38,27 @@ function startMemo(memo: Memo) {
   start(memo.id, getDisplayTitle(memo))
 }
 
-const undoState = ref<{ id: string; title: string } | null>(null)
+const undoState = ref<{ id: string; title: string; count: number } | null>(null)
 let undoTimer: ReturnType<typeof setTimeout> | null = null
+
+function todayCompletedCount(): number {
+  const now = new Date()
+  return completedMemos.value.filter((memo) => {
+    if (!memo.completedAt) return false
+    const done = new Date(memo.completedAt)
+    return done.getFullYear() === now.getFullYear()
+      && done.getMonth() === now.getMonth()
+      && done.getDate() === now.getDate()
+  }).length
+}
 
 function completeHomeMemo(memo: Memo, event: Event) {
   event.stopPropagation()
-  undoState.value = { id: memo.id, title: getDisplayTitle(memo) }
+  undoState.value = {
+    id: memo.id,
+    title: getDisplayTitle(memo),
+    count: todayCompletedCount() + 1,
+  }
   completeMemo(memo.id)
   if (undoTimer) clearTimeout(undoTimer)
   undoTimer = setTimeout(() => {
@@ -51,8 +73,8 @@ function undoComplete() {
   if (undoTimer) clearTimeout(undoTimer)
 }
 
-/** 小管家建议直接放在首页，不再单独占一个页面 */
-const { coachInsight, refreshCoach, configured } = useAiButler()
+/** 团子的建议直接放在首页，不再单独占一个页面 */
+const { coachInsight, refreshCoach, configured, preference } = useAiButler()
 const coachMessage = computed(() => coachInsight.value?.coach ?? null)
 
 function planMemo(plan: CoachPlan): Memo | null {
@@ -70,19 +92,46 @@ function startPlan(plan: CoachPlan) {
 const coachLoading = ref(false)
 const coachError = ref('')
 const coachErrorExpanded = ref(false)
+const coachNote = ref('')
 
-async function handleRefreshCoach() {
+async function runCoach(feedback: CoachFeedback = {}) {
   if (coachLoading.value) return
   coachLoading.value = true
   coachError.value = ''
   coachErrorExpanded.value = false
   try {
-    await refreshCoach()
+    await refreshCoach(feedback)
   } catch (e) {
     coachError.value = e instanceof Error ? e.message : String(e)
   } finally {
     coachLoading.value = false
   }
+}
+
+function handleRefreshCoach() {
+  void runCoach()
+}
+
+function handlePreference(next: 'hard-first' | 'easy-first') {
+  void runCoach({ preference: next })
+}
+
+function handleDismissPlan(plan: CoachPlan) {
+  void runCoach({ dismissTitle: plan.title })
+}
+
+function sendCoachNote() {
+  const text = coachNote.value.trim()
+  if (!text || coachLoading.value) return
+  coachNote.value = ''
+  void runCoach({ userNote: text })
+}
+
+function onCoachNoteEnter(event: KeyboardEvent) {
+  // 中文输入法还在选词时，回车是确认候选，不是发送
+  if (event.isComposing) return
+  event.preventDefault()
+  sendCoachNote()
 }
 </script>
 
@@ -90,9 +139,9 @@ async function handleRefreshCoach() {
   <div class="home-page">
     <section v-if="configured" class="coach-card">
       <div class="coach-head">
-        <span class="coach-title">小管家说</span>
+        <span class="coach-title">团子说</span>
         <button class="link-btn" :disabled="coachLoading" @click="handleRefreshCoach">
-          {{ coachLoading ? '想着呢…' : '再想想' }}
+          {{ coachLoading ? '团子正在想…' : '再想想' }}
         </button>
       </div>
       <template v-if="coachMessage">
@@ -105,16 +154,64 @@ async function handleRefreshCoach() {
                 <span class="coach-plan-title">{{ plan.title }}</span>
                 <span class="coach-plan-pomo">{{ plan.pomodoros }} 个番茄</span>
               </div>
-              <p class="coach-plan-reason">{{ plan.reason }}</p>
+              <p class="coach-plan-reason">
+                <span v-if="plan.when" class="coach-plan-when">{{ plan.when }}</span>{{ plan.reason }}
+              </p>
             </div>
-            <button v-if="planMemo(plan)" class="coach-start-btn" @click="startPlan(plan)">开始</button>
+            <div class="coach-plan-actions">
+              <button
+                v-if="planMemo(plan)"
+                class="coach-start-btn"
+                :disabled="coachLoading"
+                @click="startPlan(plan)"
+              >开始</button>
+              <button
+                class="coach-swap-btn"
+                :disabled="coachLoading"
+                title="换掉这条，重新安排"
+                @click="handleDismissPlan(plan)"
+              >换</button>
+            </div>
           </div>
         </div>
+
+        <div class="coach-interact">
+          <div class="coach-prefs">
+            <button
+              class="coach-pref-btn"
+              :class="{ active: preference === 'hard-first' }"
+              :disabled="coachLoading"
+              @click="handlePreference('hard-first')"
+            >先啃难的</button>
+            <button
+              class="coach-pref-btn"
+              :class="{ active: preference === 'easy-first' }"
+              :disabled="coachLoading"
+              @click="handlePreference('easy-first')"
+            >先做轻松的</button>
+          </div>
+          <div class="coach-note-row">
+            <input
+              v-model="coachNote"
+              class="coach-note-input"
+              type="text"
+              placeholder="跟团子说一句，比如「我有点累」"
+              :disabled="coachLoading"
+              @keydown.enter="onCoachNoteEnter"
+            />
+            <button
+              class="coach-send-btn"
+              :disabled="coachLoading || !coachNote.trim()"
+              @click="sendCoachNote"
+            >说</button>
+          </div>
+        </div>
+
         <p v-if="coachMessage.care" class="coach-care">{{ coachMessage.care }}</p>
         <p v-if="coachMessage.closing" class="coach-closing">{{ coachMessage.closing }}</p>
       </template>
       <p v-else-if="coachInsight" class="coach-content">{{ coachInsight.content }}</p>
-      <p v-else class="coach-empty">记点小记或日程，我就悄悄帮你想办法呀～</p>
+      <p v-else class="coach-empty">记点小记或日程，团子就能帮你排啦～</p>
       <p
         v-if="coachError"
         class="coach-error"
@@ -185,7 +282,7 @@ async function handleRefreshCoach() {
     </section>
 
     <div v-if="undoState" class="undo-toast">
-      <span class="undo-text">做完「{{ undoState.title }}」啦</span>
+      <span class="undo-text">团子收下「{{ undoState.title }}」啦，今天第 {{ undoState.count }} 条</span>
       <button class="undo-btn" @click="undoComplete">撤销</button>
     </div>
   </div>
@@ -334,6 +431,135 @@ async function handleRefreshCoach() {
 
 .coach-start-btn:hover {
   background: color-mix(in srgb, var(--focus-color) 28%, transparent);
+}
+
+.coach-start-btn:disabled,
+.coach-swap-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.coach-plan-actions {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.coach-swap-btn {
+  padding: 4px 7px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.coach-swap-btn:hover {
+  color: rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.coach-plan-when {
+  margin-right: 6px;
+  color: color-mix(in srgb, var(--focus-color) 75%, transparent);
+  font-variant-numeric: tabular-nums;
+}
+
+.coach-interact {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.coach-prefs {
+  display: flex;
+  gap: 6px;
+}
+
+.coach-pref-btn {
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.coach-pref-btn:hover {
+  border-color: color-mix(in srgb, var(--focus-color) 40%, transparent);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.coach-pref-btn.active {
+  background: color-mix(in srgb, var(--focus-color) 16%, transparent);
+  border-color: color-mix(in srgb, var(--focus-color) 45%, transparent);
+  color: var(--focus-color);
+}
+
+.coach-pref-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.coach-note-row {
+  display: flex;
+  gap: 6px;
+}
+
+.coach-note-input {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0 9px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 12px;
+  font-family: inherit;
+  outline: none;
+}
+
+.coach-note-input::placeholder {
+  color: rgba(255, 255, 255, 0.28);
+}
+
+.coach-note-input:focus {
+  border-color: color-mix(in srgb, var(--focus-color) 45%, transparent);
+}
+
+.coach-note-input:disabled {
+  opacity: 0.5;
+}
+
+.coach-send-btn {
+  flex-shrink: 0;
+  padding: 0 12px;
+  height: 28px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--focus-color) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--focus-color) 38%, transparent);
+  color: var(--focus-color);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.coach-send-btn:hover {
+  background: color-mix(in srgb, var(--focus-color) 28%, transparent);
+}
+
+.coach-send-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .coach-care {

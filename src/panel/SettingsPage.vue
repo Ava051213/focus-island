@@ -244,7 +244,7 @@ onUnmounted(() => {
 
     <!-- AI 助手 -->
     <div class="settings-section">
-      <div class="section-title">小管家</div>
+      <div class="section-title">团子</div>
 
       <div class="section-subtitle">硅基流动</div>
       <div class="ai-field">

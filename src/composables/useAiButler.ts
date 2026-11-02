@@ -19,12 +19,30 @@ export interface AiInsight {
   coach?: CoachMessage
 }
 
+export type CoachPreference = 'hard-first' | 'easy-first'
+
+export interface CoachFeedback {
+  /** 用户临时说的一句话 */
+  userNote?: string
+  /** 先难还是先轻松 */
+  preference?: CoachPreference
+  /** 换掉的小记标题 */
+  dismissTitle?: string
+}
+
 interface ButlerState {
   insights: AiInsight[]
   lastAutoAt: number
   autoDate: string
   autoRunsToday: number
   lastSeenAt: number
+  /** 用户选的先后偏好 */
+  preference: CoachPreference | ''
+  /** 用户最近跟团子说过的话，最多保留 3 条 */
+  userNotes: Array<{ text: string; at: number }>
+  /** 用户换掉、当天不想再看到的小记标题 */
+  dismissed: string[]
+  dismissedDate: string
 }
 
 const MAX_INSIGHTS = 50
@@ -40,6 +58,10 @@ const state = ref<ButlerState>({
   autoDate: '',
   autoRunsToday: 0,
   lastSeenAt: 0,
+  preference: '',
+  userNotes: [],
+  dismissed: [],
+  dismissedDate: '',
 })
 
 const store = createPersistedStore({
@@ -57,12 +79,27 @@ const store = createPersistedStore({
             && typeof (item as AiInsight).createdAt === 'number')
           .slice(0, MAX_INSIGHTS)
       : []
+    const preference = raw.preference === 'hard-first' || raw.preference === 'easy-first'
+      ? raw.preference
+      : ''
+    const userNotes = Array.isArray(raw.userNotes)
+      ? raw.userNotes
+          .filter((note): note is { text: string; at: number } =>
+            !!note && typeof note === 'object' && typeof note.text === 'string')
+          .slice(-3)
+      : []
     state.value = {
       insights,
       lastAutoAt: Number(raw.lastAutoAt) || 0,
       autoDate: typeof raw.autoDate === 'string' ? raw.autoDate : '',
       autoRunsToday: Number(raw.autoRunsToday) || 0,
       lastSeenAt: Number(raw.lastSeenAt) || 0,
+      preference,
+      userNotes,
+      dismissed: Array.isArray(raw.dismissed)
+        ? raw.dismissed.filter((title): title is string => typeof title === 'string').slice(-5)
+        : [],
+      dismissedDate: typeof raw.dismissedDate === 'string' ? raw.dismissedDate : '',
     }
   },
 })
@@ -160,11 +197,20 @@ function buildContext(): CoachContext {
       .map(memo => memo.title || stripHtml(memo.content).slice(0, 20))
       .filter(title => title.length > 0)
       .slice(0, 5),
+    // 只传上次推荐过的小记标题，不传整段旧建议，避免模型照抄旧的时刻
     recentCoaches: state.value.insights
       .filter(item => item.kind === 'coach')
       .slice(0, 3)
-      .map(item => item.content)
-      .filter(content => content.length > 0),
+      .map((item) => {
+        if (item.coach) {
+          return item.coach.plans.map(plan => plan.title).filter(Boolean).join('、')
+        }
+        return Array.from(item.content.matchAll(/「([^」]+)」/g)).map(match => match[1]).join('、')
+      })
+      .filter(text => text.length > 0),
+    preference: state.value.preference,
+    userNotes: state.value.userNotes.map(note => note.text),
+    dismissed: state.value.dismissed,
   }
 }
 
@@ -172,7 +218,8 @@ function buildContext(): CoachContext {
 function formatCoach(message: CoachMessage): string {
   const lines = [message.greeting]
   message.plans.forEach((plan, index) => {
-    lines.push(`${index + 1}. ${plan.title} · ${plan.pomodoros} 个番茄：${plan.reason}`)
+    const when = plan.when ? `${plan.when} ` : ''
+    lines.push(`${index + 1}. ${when}${plan.title} · ${plan.pomodoros} 个番茄：${plan.reason}`)
   })
   if (message.care) lines.push(message.care)
   if (message.closing) lines.push(message.closing)
@@ -183,6 +230,13 @@ let started = false
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 let running = false
 
+/** 最新建议还是旧结构（没有 coach 或没有 when 时段）时，需要补一次新版 */
+function needsCoachUpgrade(): boolean {
+  const latest = state.value.insights.find(item => item.kind === 'coach')
+  if (!latest?.coach) return true
+  return latest.coach.plans.some(plan => !('when' in plan))
+}
+
 function canRunAuto(): boolean {
   const { settings } = useSettings()
   const { configured } = useAi()
@@ -191,9 +245,7 @@ function canRunAuto(): boolean {
   const now = new Date()
   const hour = now.getHours()
   if (hour < AUTO_START_HOUR || hour >= AUTO_END_HOUR) return false
-  // 最新一条还是旧格式（没有结构化 coach）时，跳过十分钟间隔，先补一次新版
-  const latestCoach = state.value.insights.find(item => item.kind === 'coach')
-  const needsUpgrade = !latestCoach?.coach
+  const needsUpgrade = needsCoachUpgrade()
   if (!needsUpgrade && Date.now() - state.value.lastAutoAt < AUTO_MIN_INTERVAL_MS) return false
 
   const today = toLocalDateStr(now)
@@ -205,20 +257,29 @@ function canRunAuto(): boolean {
 }
 
 async function generateCoach(): Promise<CoachMessage> {
+  const today = toLocalDateStr(new Date())
+  // 换掉的条目只在当天有效，跨日清空
+  if (state.value.dismissedDate !== today) {
+    state.value.dismissed = []
+    state.value.dismissedDate = today
+  }
   const { coachToday } = useAi()
   const ctx = buildContext()
   const message = await coachToday(ctx)
   // 模型只负责给序号，真正的小记 id 和标题由本地匹配，避免编造
-  const plans = message.plans.map((plan) => {
-    const memo = plan.memoIndex ? ctx.memos[plan.memoIndex - 1] ?? null : null
-    return {
-      ...plan,
-      memoId: memo?.id ?? null,
-      title: memo?.title ?? plan.title,
-    }
-  })
+  const plans = message.plans
+    .map((plan) => {
+      const memo = plan.memoIndex ? ctx.memos[plan.memoIndex - 1] ?? null : null
+      return {
+        ...plan,
+        memoId: memo?.id ?? null,
+        title: memo?.title ?? plan.title,
+      }
+    })
+    // 模型有时会忽略 dismissed，这里再兜一层，保证换掉的条目真的不再出现
+    .filter(plan => !state.value.dismissed.includes(plan.title))
   const enriched: CoachMessage = { ...message, plans }
-  addInsight('coach', '小管家说', formatCoach(enriched), enriched)
+  addInsight('coach', '团子说', formatCoach(enriched), enriched)
   return enriched
 }
 
@@ -271,10 +332,9 @@ export function startAiButler() {
   )
   watch(() => todayStat.value?.pomodoros ?? 0, onChange)
 
-  // 启动时给一次机会：旧格式建议立即补一次新结构，其余情况稍后补
+  // 启动时给一次机会：旧结构建议立即补一次新版，其余情况稍后补
   setTimeout(() => {
-    const latestCoach = state.value.insights.find(item => item.kind === 'coach')
-    if (!latestCoach?.coach) scheduleAuto(0)
+    if (needsCoachUpgrade()) scheduleAuto(0)
     else onChange()
   }, 30_000)
 
@@ -291,7 +351,24 @@ export function useAiButler() {
     state.value.insights.find(item => item.kind === 'coach') ?? null,
   )
 
-  async function refreshCoach(): Promise<void> {
+  async function refreshCoach(feedback: CoachFeedback = {}): Promise<void> {
+    if (feedback.preference) {
+      state.value.preference = feedback.preference
+    }
+    if (feedback.userNote) {
+      const text = feedback.userNote.trim().slice(0, 120)
+      if (text) {
+        state.value.userNotes.push({ text, at: Date.now() })
+        if (state.value.userNotes.length > 3) state.value.userNotes.shift()
+      }
+    }
+    if (feedback.dismissTitle) {
+      const title = feedback.dismissTitle.trim()
+      if (title && !state.value.dismissed.includes(title)) {
+        state.value.dismissed.push(title)
+        if (state.value.dismissed.length > 5) state.value.dismissed.shift()
+      }
+    }
     await generateCoach()
     state.value.lastAutoAt = Date.now()
     const today = toLocalDateStr(new Date())
@@ -307,6 +384,7 @@ export function useAiButler() {
     coachInsight,
     configured,
     autoEnabled: computed(() => settings.value.aiAutoEnabled),
+    preference: computed(() => state.value.preference),
     refreshCoach,
   }
 }

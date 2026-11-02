@@ -94,7 +94,7 @@ alert → 恢复（窗口内有鼠标/键盘活动）
 
 ### Panel 页面路由
 
-`PanelApp.vue` 通过 `currentView` ref 切换 5 个视图：`tasks`（HomePage，首页）、`events`（EventsPage，日程）、`memos`（MemoPage）、`stats`（StatsPage）、`settings`（SettingsPage）。底部导航 `navItems` 的顺序与图标也定义在这里。AI 不单独占页面：首页顶部有「小管家说」卡片，备忘与日程各自内嵌整理入口。
+`PanelApp.vue` 通过 `currentView` ref 切换 5 个视图：`tasks`（HomePage，首页）、`events`（EventsPage，日程）、`memos`（MemoPage）、`stats`（StatsPage）、`settings`（SettingsPage）。底部导航 `navItems` 的顺序与图标也定义在这里。AI 不单独占页面：首页顶部有「团子说」卡片，备忘与日程各自内嵌整理入口。
 
 ### 专注对象
 
@@ -116,8 +116,9 @@ alert → 恢复（窗口内有鼠标/键盘活动）
   - `parseTaskList` / `parseNameList` 先按 JSON 解析，失败后退化为按行拆分，容忍模型返回代码围栏
 - **`useAiButler.ts`**：后台自动建议调度 + `ai-insights.json`。四道闸门按顺序拦：`aiAutoEnabled` → 7:00–23:00 → 距上次 ≥10 分钟 → 当日 <30 次。触发源是 upcoming 事件 / memos（含完成归档）/ 今日番茄的 `watch`，90 秒防抖；另有一个每小时一次的定时刷新，避免一整天重复同一句。失败也写 `lastAutoAt`，避免网络异常时反复重试。
   - 上下文包含当前时段、最近 5 条进行中小记（番茄轮数、放置天数、置顶）、未来日程及剩余分钟、今日番茄与专注分钟、今天完成的小记，以及最近 3 条旧建议
-  - `coachToday` 返回结构化 JSON（开场关心 / 1-3 条安排 / 生活提醒 / 收尾）。模型只给 `memo` 序号，`useAiButler` 在本地映射成真实小记 id，首页每条安排可直接开始专注
-  - 结果只取最新一条 coach 建议，显示在首页「小管家说」卡片；旧格式只存 `content` 时首页退回纯文本展示。旧的 insights 仍保留在 `ai-insights.json` 里，最多 50 条
+  - `coachToday` 返回结构化 JSON（开场关心 / 1-3 条带 `when` 时段的先后安排 / 生活提醒 / 收尾）。模型只给 `memo` 序号，`useAiButler` 在本地映射成真实小记 id，首页每条安排可直接开始专注
+  - 卡片支持互动：用户可输入一句话（如「我有点累」）、选择「先啃难的 / 先做轻松的」、或逐条换掉。偏好、最近 3 条用户发言、当天换掉的标题都存在 `ai-insights.json`，并随下一次生成传给模型；换掉的条目当天不再出现，跨日清空
+  - 结果只取最新一条 coach 建议，显示在首页「团子说」卡片；旧格式只存 `content` 时首页退回纯文本展示。旧的 insights 仍保留在 `ai-insights.json` 里，最多 50 条
 
 ### Rust 后端（src-tauri/src/lib.rs）
 

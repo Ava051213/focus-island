@@ -57,12 +57,20 @@ export interface CoachContext {
   focusMinutesToday: number
   /** 今天完成归档的小记标题 */
   completedToday: string[]
-  /** 最近三条管家建议，用来提醒模型换角度 */
+  /** 最近三条旧建议，用来提醒模型换角度 */
   recentCoaches: string[]
+  /** 用户当前的先后偏好 */
+  preference: 'hard-first' | 'easy-first' | ''
+  /** 用户最近跟团子说过的话，按时间从旧到新 */
+  userNotes: string[]
+  /** 用户刚刚换掉、不想再看到的小记标题 */
+  dismissed: string[]
 }
 
 export interface CoachPlan {
   title: string
+  /** 建议的时间窗，例如「现在起」「约 21:00」「今天收尾」 */
+  when: string
   /** 对应 memos 数组的序号，从 1 开始；没有对应小记为 null */
   memoIndex: number | null
   /** 数据层匹配后回填的小记 id */
@@ -260,7 +268,7 @@ export function useAi() {
     options: ChatOptions = {},
   ): Promise<string> {
     const providers = collectProviders()
-    if (providers.length === 0) throw new Error('我还没拿到钥匙呢～去「设置 → 小管家」填一下 Key 呀')
+    if (providers.length === 0) throw new Error('我还没拿到钥匙呢～去「设置 → 团子」填一下 Key 呀')
 
     const failures: string[] = []
     for (const provider of providers) {
@@ -341,18 +349,21 @@ export function useAi() {
 
   async function coachToday(ctx: CoachContext): Promise<CoachMessage> {
     const text = await chat(
-      `你是用户的私人小管家，不是客服，也不是只会喊口号的助手。你记得他的小记、日程和专注记录，说话像一个了解他节奏的朋友：具体、温和、有分寸，偶尔可以俏皮，但不要腻。
+      `你叫团子，住在用户屏幕顶部的专注岛里，是他的小伙伴，不是客服。说话软一点、短一点，可以偶尔调皮，但不要腻，也不要每句都撒娇。
 
-请主动关心他，并给出现在能照着做的安排。只输出 JSON：
-{"greeting":"开场关心，结合当下时间和今天的事实，20-35 字","plans":[{"memo":小记序号,"title":"小记标题","pomodoros":1,"reason":"为什么现在做，15-25 字"}],"care":"主动提醒，15-30 字","closing":"收尾一句，10-20 字"}
+你要先接住用户，再给今天排个先后。只输出 JSON：
+{"greeting":"先回应 userNotes 的最后一句，再带一个今天的具体数字，25-40 字","plans":[{"when":"现在起","memo":小记序号,"title":"小记标题","pomodoros":1,"reason":"为什么现在做，15-25 字"}],"care":"生活提醒，15-30 字","closing":"收尾一句，10-20 字"}
 
 规则：
-1. plans 给 1-3 条，按先后顺序排好。memo 是 memos 数组里的序号（从 1 开始），没有对应小记就写 0，不要编造标题。
-2. 每条 reason 必须引用数据里的事实：放了几天没动、已经跑过几个番茄、离下一条日程还有多久、今天已专注多久。禁止“提高效率”“加油”“合理安排时间”这类空话。
-3. greeting 要带一个具体数字或时段，例如今天已经专注了多久、现在几点、下一条日程还剩多少分钟。
-4. care 按当前时段说人话：早上提醒吃早饭，中午提醒歇一会儿，傍晚提醒收尾，深夜劝睡。不要编造天气、位置、心情或数据里没有的事。
-5. 最近三条建议都在 recentCoaches 里，这次必须换句式和角度，不要复读。
-6. 一个番茄是 ${ctx.focusMinutes} 分钟。全文不要 Markdown、不要编号前缀，不要复述原始数据。`,
+1. plans 给 1-3 条，顺序就是先做什么、再做什么、最后做什么。when 写建议时间窗：第一条用「现在起」或具体时刻，后面可以写「约 21:10」「今天收尾」。when 不能早于 now 里的当前时刻。
+2. 每条 reason 必须引用数据里的事实：放了几天没动、跑过几个番茄、离下一条日程还有多久、今天已专注多久。几条安排的理由要引用不同的事实，别每条都写“今天已专注多久”。禁止“提高效率”“加油”“合理安排时间”这类空话。
+3. userNotes 是用户跟你要说的话。非空时，greeting 必须先自然回应最后一句，比如他说累就先让他松口气，不要装没听见。
+4. preference 为 hard-first 时先排费脑或重要的小记，easy-first 时先排轻松、能快速完成的。
+5. dismissed 里的小记不要再推荐。没有合适的小记时，plans 可以只给 1 条，或推荐处理最近的日程。
+6. care 按当前时段说人话，不要编造天气、位置、心情或数据里没有的事。
+7. recentCoaches 只是告诉你最近推荐过哪些小记，用来换角度；里面不含时间，也不要照抄任何旧的时刻。现在几点只看 now。
+8. closing 要贴合当前时段，晚上还早的时候不要随口说晚安。
+9. 一个番茄是 ${ctx.focusMinutes} 分钟。不要 Markdown、不要编号前缀，不要复述原始数据。`,
       JSON.stringify(ctx),
       0.8,
     )
@@ -369,6 +380,7 @@ export function useAi() {
           const memoIndexRaw = Number(plan.memo)
           return {
             title: String(plan.title ?? '').trim().slice(0, 30),
+            when: String(plan.when ?? '').trim().slice(0, 12),
             memoIndex: Number.isFinite(memoIndexRaw) && memoIndexRaw > 0 ? memoIndexRaw : null,
             memoId: null,
             pomodoros: Math.min(3, Math.max(1, Number(plan.pomodoros) || 1)),
