@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { parseQuickEvent, resolveEventAt, useEvents } from '../useEvents'
+import { eventsNow, parseQuickEvent, resolveEventAt, useEvents } from '../useEvents'
 
 vi.mock('@tauri-apps/plugin-fs', () => ({
   BaseDirectory: { AppData: 'AppData' },
@@ -137,6 +137,8 @@ describe('useEvents 排序与分档', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     vi.setSystemTime(NOW)
+    // eventsNow 是模块级时间快照，不跟着 fake timers 走，这里手动对齐
+    eventsNow.value = NOW
     const { events } = useEvents()
     events.value = []
   })
