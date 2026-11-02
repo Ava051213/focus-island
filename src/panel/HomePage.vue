@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useMemos, type Memo } from '../composables/useMemos'
 import { useTimerBridge } from '../composables/useTimerBridge'
 import { eventRelativeLabel, eventTime, eventsNow, useEvents } from '../composables/useEvents'
@@ -99,6 +99,13 @@ const coachLoading = ref(false)
 const coachError = ref('')
 const coachErrorExpanded = ref(false)
 const coachNote = ref('')
+// 默认收起，首屏优先留给计时和今天要做的事
+const coachExpanded = ref(false)
+
+// 新一轮计时开始时自动收起，用户手动展开后本轮不再反复切
+watch(activeTaskId, (next, prev) => {
+  if (next && !prev) coachExpanded.value = false
+})
 
 async function runCoach(feedback: CoachFeedback = {}) {
   if (coachLoading.value) return
@@ -146,13 +153,36 @@ function onCoachNoteEnter(event: KeyboardEvent) {
     <section v-if="configured" class="coach-card">
       <div class="coach-head">
         <span class="coach-title">团子说<span v-if="mascotFace" class="coach-face">{{ mascotFace }}</span></span>
-        <button class="link-btn" :disabled="coachLoading" @click="handleRefreshCoach">
-          {{ coachLoading ? '团子正在想…' : '再想想' }}
-        </button>
+        <div class="coach-head-actions">
+          <button class="link-btn" :disabled="coachLoading" @click="handleRefreshCoach">
+            {{ coachLoading ? '团子正在想…' : '再想想' }}
+          </button>
+          <button v-if="coachMessage" class="link-btn" @click="coachExpanded = !coachExpanded">
+            {{ coachExpanded ? '收起' : '展开' }}
+          </button>
+        </div>
       </div>
       <template v-if="coachMessage">
         <p v-if="coachMessage.greeting" class="coach-greeting">{{ coachMessage.greeting }}</p>
-        <div v-if="coachMessage.plans.length > 0" class="coach-plans">
+
+        <!-- 收起时只留第一条安排和一个开始按钮 -->
+        <div v-if="!coachExpanded && coachMessage.plans.length > 0" class="coach-preview">
+          <div class="coach-preview-copy">
+            <span class="coach-preview-title">{{ coachMessage.plans[0].title }}</span>
+            <span class="coach-preview-meta">
+              <span v-if="coachMessage.plans[0].when" class="coach-preview-when">{{ coachMessage.plans[0].when }}</span>
+              {{ coachMessage.plans[0].pomodoros }} 个番茄
+            </span>
+          </div>
+          <button
+            v-if="planMemo(coachMessage.plans[0])"
+            class="coach-start-btn"
+            :disabled="coachLoading"
+            @click="startPlan(coachMessage.plans[0])"
+          >开始</button>
+        </div>
+
+        <div v-if="coachExpanded && coachMessage.plans.length > 0" class="coach-plans">
           <div v-for="(plan, index) in coachMessage.plans" :key="index" class="coach-plan">
             <div class="coach-plan-copy">
               <div class="coach-plan-line">
@@ -181,7 +211,7 @@ function onCoachNoteEnter(event: KeyboardEvent) {
           </div>
         </div>
 
-        <div class="coach-interact">
+        <div v-if="coachExpanded" class="coach-interact">
           <div class="coach-prefs">
             <button
               class="coach-pref-btn"
@@ -213,8 +243,8 @@ function onCoachNoteEnter(event: KeyboardEvent) {
           </div>
         </div>
 
-        <p v-if="coachMessage.care" class="coach-care">{{ coachMessage.care }}</p>
-        <p v-if="coachMessage.closing" class="coach-closing">{{ coachMessage.closing }}</p>
+        <p v-if="coachExpanded && coachMessage.care" class="coach-care">{{ coachMessage.care }}</p>
+        <p v-if="coachExpanded && coachMessage.closing" class="coach-closing">{{ coachMessage.closing }}</p>
       </template>
       <p v-else-if="coachInsight" class="coach-content">{{ coachInsight.content }}</p>
       <p v-else class="coach-empty">记点小记或日程，团子就能帮你排啦～</p>
@@ -332,6 +362,12 @@ function onCoachNoteEnter(event: KeyboardEvent) {
   justify-content: space-between;
 }
 
+.coach-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .coach-title {
   font-size: 10px;
   font-weight: 800;
@@ -359,6 +395,45 @@ function onCoachNoteEnter(event: KeyboardEvent) {
   font-size: 12px;
   line-height: 1.65;
   color: rgba(255, 255, 255, 0.86);
+}
+
+/* 收起时的第一条安排 */
+.coach-preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.coach-preview-copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.coach-preview-title {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.9);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.coach-preview-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.coach-preview-when {
+  color: color-mix(in srgb, var(--focus-color) 75%, transparent);
 }
 
 .coach-plans {
