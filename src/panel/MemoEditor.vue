@@ -3,6 +3,8 @@ import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { readText } from '@tauri-apps/plugin-clipboard-manager'
 import type { Memo, MemoCategory } from '../composables/useMemos'
 import MemoCategoryDropdown from './MemoCategoryDropdown.vue'
+import EditorToolbar from './EditorToolbar.vue'
+import EditorContextMenu from './EditorContextMenu.vue'
 import { useAi } from '../composables/useAi'
 import { sanitizeHtml } from '../utils/sanitizeHtml'
 
@@ -33,7 +35,6 @@ const showDeleteConfirm = ref(false)
 const showColorPicker = ref(false)
 const showContextMenu = ref(false)
 const contextMenuPosition = ref({ x: 0, y: 0 })
-const contextMenuRef = ref<HTMLDivElement | null>(null)
 const hasSelection = ref(false)
 
 // Track active formatting states
@@ -41,17 +42,6 @@ const activeFormats = ref<{ bold: boolean; italic: boolean }>({ bold: false, ita
 
 // Track current font color
 const currentColor = ref('#ffffff')
-
-// Available colors
-const colors = [
-  { value: '#ffffff', label: '白色' },
-  { value: '#f87171', label: '红色' },
-  { value: '#fbbf24', label: '黄色' },
-  { value: '#4ade80', label: '绿色' },
-  { value: '#60a5fa', label: '蓝色' },
-  { value: '#a78bfa', label: '紫色' },
-  { value: '#f472b6', label: '粉色' },
-]
 
 // Store last selection to restore after toolbar button clicks
 let lastSelectionRange: Range | null = null
@@ -741,84 +731,18 @@ function formatUpdateTime(timestamp: number): string {
     </div>
 
     <!-- Rich Text Toolbar -->
-    <div class="editor-toolbar">
-      <button
-        class="toolbar-btn"
-        :class="{ active: activeFormats.bold }"
-        @click="toggleBold"
-        title="粗体 (Ctrl+B)"
-      >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-          <path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"/>
-          <path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"/>
-        </svg>
-      </button>
-
-      <button
-        class="toolbar-btn"
-        :class="{ active: activeFormats.italic }"
-        @click="toggleItalic"
-        title="斜体 (Ctrl+I)"
-      >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-          <line x1="19" y1="4" x2="10" y2="4"/>
-          <line x1="14" y1="20" x2="5" y2="20"/>
-          <line x1="15" y1="4" x2="9" y2="20"/>
-        </svg>
-      </button>
-
-      <div class="toolbar-divider"></div>
-
-      <div class="color-picker" :class="{ active: showColorPicker }">
-        <button
-          class="toolbar-btn color-btn"
-          title="文字颜色"
-          @click="showColorPicker = !showColorPicker"
-          :style="{ '--current-color': currentColor }"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M9 3v6M15 3v6M9 9h6M8 21h8M12 9v12"/>
-          </svg>
-          <span class="color-indicator" :style="{ backgroundColor: currentColor }"></span>
-        </button>
-        <div v-show="showColorPicker" class="color-dropdown">
-          <button
-            v-for="color in colors"
-            :key="color.value"
-            class="color-option"
-            :class="{ active: currentColor === color.value }"
-            :style="{ color: color.value }"
-            :title="color.label"
-            @click.stop="setTextColor(color.value)"
-          >
-            A
-          </button>
-        </div>
-      </div>
-
-      <div class="toolbar-divider"></div>
-
-      <button class="toolbar-btn" @click="insertCheckbox" title="打个勾选框">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-          <path d="M9 12l2 2 4-4"/>
-        </svg>
-      </button>
-
-      <button class="toolbar-btn" @click="insertDivider" title="画条分割线">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="5" y1="12" x2="19" y2="12"/>
-        </svg>
-      </button>
-
-      <button class="toolbar-btn" @click="triggerImageUpload" title="放张图">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-          <circle cx="8.5" cy="8.5" r="1.5"/>
-          <polyline points="21 15 16 10 5 21"/>
-        </svg>
-      </button>
-    </div>
+    <EditorToolbar
+      :active-formats="activeFormats"
+      :current-color="currentColor"
+      :color-picker-open="showColorPicker"
+      @toggle-bold="toggleBold"
+      @toggle-italic="toggleItalic"
+      @toggle-color-picker="showColorPicker = !showColorPicker"
+      @select-color="setTextColor"
+      @insert-checkbox="insertCheckbox"
+      @insert-divider="insertDivider"
+      @upload-image="triggerImageUpload"
+    />
 
     <!-- Editor Content -->
     <div class="editor-content-wrapper">
@@ -871,45 +795,15 @@ function formatUpdateTime(timestamp: number): string {
     </div>
 
     <!-- Context Menu -->
-    <div
+    <EditorContextMenu
       v-if="showContextMenu"
-      ref="contextMenuRef"
-      class="context-menu"
-      :style="{ left: contextMenuPosition.x + 'px', top: contextMenuPosition.y + 'px' }"
-      @click.stop
-    >
-      <div class="context-menu-group">
-        <button class="context-menu-item" :disabled="!hasSelection" @click="onContextMenuAction(execCopy)">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
-            <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
-          </svg>
-          <span>复制</span>
-        </button>
-        <button class="context-menu-item" @click="onContextMenuAction(execPaste)">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/>
-            <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
-          </svg>
-          <span>粘贴</span>
-        </button>
-        <button class="context-menu-item" @click="onContextMenuAction(execPasteAsPlainText)">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
-            <polyline points="14 2 14 8 20 8"/>
-            <line x1="16" y1="13" x2="8" y2="13"/>
-            <line x1="16" y1="17" x2="8" y2="17"/>
-          </svg>
-          <span>粘贴为纯文本</span>
-        </button>
-        <button class="context-menu-item" @click="onContextMenuAction(execSelectAll)">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M4 7V4h3M4 17v3h3M20 7V4h-3M20 17v3h-3M9 9h6v6H9z"/>
-          </svg>
-          <span>全选</span>
-        </button>
-      </div>
-    </div>
+      :position="contextMenuPosition"
+      :has-selection="hasSelection"
+      @copy="onContextMenuAction(execCopy)"
+      @paste="onContextMenuAction(execPaste)"
+      @paste-plain-text="onContextMenuAction(execPasteAsPlainText)"
+      @select-all="onContextMenuAction(execSelectAll)"
+    />
   </div>
 </template>
 
@@ -1044,118 +938,6 @@ function formatUpdateTime(timestamp: number): string {
 .rewrite-btn:disabled {
   opacity: 0.5;
   cursor: default;
-}
-
-/* Toolbar */
-.editor-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 8px 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  flex-shrink: 0;
-}
-
-.toolbar-btn {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  background: transparent;
-  border: 1px solid transparent;
-  color: rgba(255, 255, 255, 0.6);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
-}
-
-.toolbar-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.12);
-  color: #fff;
-}
-
-.toolbar-btn.active {
-  background: color-mix(in srgb, var(--focus-color) 20%, transparent);
-  border-color: color-mix(in srgb, var(--focus-color) 50%, transparent);
-  color: var(--focus-color);
-}
-
-.toolbar-divider {
-  width: 1px;
-  height: 18px;
-  background: rgba(255, 255, 255, 0.1);
-  margin: 0 4px;
-}
-
-/* Color Picker */
-.color-picker {
-  position: relative;
-}
-
-.color-dropdown {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  margin-top: 4px;
-  display: flex;
-  gap: 4px;
-  padding: 6px;
-  background: rgba(28, 28, 32, 0.98);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-  z-index: 100;
-}
-
-.color-option {
-  width: 22px;
-  height: 22px;
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  font-weight: 600;
-  transition: all 0.2s;
-}
-
-.color-option:hover {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.2);
-  transform: scale(1.05);
-}
-
-.color-option.active {
-  background: rgba(255, 255, 255, 0.2);
-  border-color: currentColor;
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.1);
-}
-
-.color-picker.active .color-btn {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.2);
-  color: #fff;
-}
-
-/* Color indicator on toolbar button */
-.color-btn {
-  position: relative;
-}
-
-.color-indicator {
-  position: absolute;
-  bottom: 3px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 14px;
-  height: 3px;
-  border-radius: 2px;
-  transition: background-color 0.2s;
 }
 
 /* Editor Content */
@@ -1403,100 +1185,5 @@ function formatUpdateTime(timestamp: number): string {
   border-color: rgba(248, 113, 113, 0.5);
 }
 
-/* Context Menu */
-.context-menu {
-  position: fixed;
-  z-index: 2000;
-  min-width: 180px;
-  max-width: 240px;
-  background: rgba(28, 28, 32, 0.98);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
-  padding: 6px 0;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(16px);
-  font-size: 13px;
-  user-select: none;
-  animation: contextMenuIn 0.12s ease-out;
-}
 
-@keyframes contextMenuIn {
-  from {
-    opacity: 0;
-    transform: scale(0.96);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-.context-menu-group {
-  display: flex;
-  flex-direction: column;
-  padding: 0 6px;
-}
-
-.context-menu-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 7px 10px;
-  border-radius: 6px;
-  background: transparent;
-  border: none;
-  color: rgba(255, 255, 255, 0.85);
-  font-size: 13px;
-  cursor: pointer;
-  transition: all 0.15s;
-  text-align: left;
-  font-family: inherit;
-}
-
-.context-menu-item:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
-}
-
-.context-menu-item:active:not(:disabled) {
-  background: rgba(255, 255, 255, 0.12);
-}
-
-.context-menu-item:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-
-.context-menu-item.active {
-  color: var(--focus-color);
-}
-
-.context-menu-item svg {
-  flex-shrink: 0;
-  opacity: 0.7;
-}
-
-.context-menu-item span {
-  flex: 1;
-  min-width: 0;
-}
-
-.context-menu-shortcut {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.35);
-  font-family: 'SF Mono', Monaco, monospace;
-  background: rgba(255, 255, 255, 0.06);
-  padding: 1px 5px;
-  border-radius: 3px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  flex-shrink: 0;
-  white-space: nowrap;
-}
-
-.context-menu-divider {
-  height: 1px;
-  background: rgba(255, 255, 255, 0.08);
-  margin: 6px 8px;
-}
 </style>
