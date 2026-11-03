@@ -1,8 +1,8 @@
 # AGENTS.md
 
-This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
+AI 编码工具（Codex、Claude Code、Trae、Cursor 等）在本仓库工作时的唯一说明文件。
 
-> 本文件是仓库唯一的架构说明。`CLAUDE.md` 只指向这里，改架构时只改这一份。
+> 本文件是仓库唯一的架构说明，改架构时只改这一份。
 
 ## Commands
 
