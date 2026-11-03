@@ -9,6 +9,7 @@ import { useMemos } from './useMemos'
 import { useDailyStats } from './useDailyStats'
 import { useAchievements } from './useAchievements'
 import { useSettings } from './useSettings'
+import { useAiButler } from './useAiButler'
 
 /**
  * 注意：activeTaskId / activeTaskTitle 沿用旧字段名，
@@ -34,6 +35,7 @@ export function useTimerBridge() {
   const { recordPomodoro } = useDailyStats()
   const { recordPomodoro: recordAchievementPomodoro, recordEarlyBird, recordNightOwl } = useAchievements()
   const { settings } = useSettings()
+  const { recordRound } = useAiButler()
   let lastPayloadKey = ''
 
   function buildPayload() {
@@ -72,6 +74,7 @@ export function useTimerBridge() {
         const focusMinutes = settings.value.focusDuration
         recordPomodoro(focusMinutes)
         recordAchievementPomodoro()
+        recordRound({ memoId: targetId, outcome: 'done', minutes: focusMinutes })
 
         const startHour = timer.focusStartedAt.value === null
           ? null
@@ -98,12 +101,20 @@ export function useTimerBridge() {
 
     // Listen for notification actions from the island window
     listen<string>('notification-action', ({ payload }) => {
+      const pending = timer.pendingNotification.value
+      const memoId = timer.activeTaskId.value
       if (payload === 'confirm') {
         timer.confirmNotification()
       } else if (payload === 'extend') {
         timer.extendNotification()
+        if (pending === 'focus-done') {
+          recordRound({ memoId, outcome: 'extended', minutes: settings.value.focusDuration })
+        }
       } else if (payload === 'dismiss') {
         timer.dismissNotification()
+        if (pending === 'focus-done') {
+          recordRound({ memoId, outcome: 'dismissed', minutes: settings.value.focusDuration })
+        }
       }
     }).catch(() => {})
 
@@ -118,6 +129,11 @@ export function useTimerBridge() {
         }
       } else if (payload === 'skip') {
         if (timer.phase.value === 'focus') {
+          const elapsed = Math.max(
+            0,
+            settings.value.focusDuration - Math.round(timer.remaining.value / 60),
+          )
+          recordRound({ memoId: timer.activeTaskId.value, outcome: 'skipped', minutes: elapsed })
           timer.skipToBreak()
         } else {
           timer.skipBreak()
@@ -159,5 +175,19 @@ export function useTimerBridge() {
     }).catch(() => {})
   }
 
-  return { ...timer, startBridge }
+  /** 放弃时先记录本轮已专注多久，再让计时器复位 */
+  function abandonAndRecord() {
+    const memoId = timer.activeTaskId.value
+    const wasFocus = timer.phase.value === 'focus'
+    const elapsed = Math.max(
+      0,
+      settings.value.focusDuration - Math.round(timer.remaining.value / 60),
+    )
+    timer.abandon()
+    if (wasFocus && memoId) {
+      recordRound({ memoId, outcome: 'abandoned', minutes: elapsed })
+    }
+  }
+
+  return { ...timer, abandon: abandonAndRecord, startBridge }
 }

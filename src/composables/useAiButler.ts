@@ -30,6 +30,16 @@ export interface CoachFeedback {
   dismissTitle?: string
 }
 
+export type RoundOutcome = 'done' | 'skipped' | 'abandoned' | 'extended' | 'dismissed'
+
+/** 一轮专注的结果，先只在本机积累，不用来改变界面 */
+export interface RoundRecord {
+  memoId: string | null
+  outcome: RoundOutcome
+  minutes: number
+  at: number
+}
+
 interface ButlerState {
   insights: AiInsight[]
   lastAutoAt: number
@@ -43,7 +53,12 @@ interface ButlerState {
   /** 用户换掉、当天不想再看到的小记标题 */
   dismissed: string[]
   dismissedDate: string
+  /** 最近 30 轮的专注结果，用来推断节奏 */
+  recentRounds: RoundRecord[]
 }
+
+const ROUND_OUTCOMES: RoundOutcome[] = ['done', 'skipped', 'abandoned', 'extended', 'dismissed']
+const MAX_ROUNDS = 30
 
 const MAX_INSIGHTS = 50
 const AUTO_MIN_INTERVAL_MS = 10 * 60 * 1000
@@ -62,6 +77,7 @@ const state = ref<ButlerState>({
   userNotes: [],
   dismissed: [],
   dismissedDate: '',
+  recentRounds: [],
 })
 
 const store = createPersistedStore({
@@ -88,6 +104,16 @@ const store = createPersistedStore({
             !!note && typeof note === 'object' && typeof note.text === 'string')
           .slice(-3)
       : []
+    const recentRounds = Array.isArray(raw.recentRounds)
+      ? raw.recentRounds
+          .filter((item): item is RoundRecord =>
+            !!item
+            && typeof item === 'object'
+            && typeof (item as RoundRecord).at === 'number'
+            && typeof (item as RoundRecord).minutes === 'number'
+            && ROUND_OUTCOMES.includes((item as RoundRecord).outcome))
+          .slice(-MAX_ROUNDS)
+      : []
     state.value = {
       insights,
       lastAutoAt: Number(raw.lastAutoAt) || 0,
@@ -100,6 +126,7 @@ const store = createPersistedStore({
         ? raw.dismissed.filter((title): title is string => typeof title === 'string').slice(-5)
         : [],
       dismissedDate: typeof raw.dismissedDate === 'string' ? raw.dismissedDate : '',
+      recentRounds,
     }
   },
 })
@@ -379,6 +406,14 @@ export function useAiButler() {
     state.value.autoRunsToday += 1
   }
 
+  /** 记录一轮专注的结果，先只积累，不影响界面和建议 */
+  function recordRound(record: Omit<RoundRecord, 'at'>) {
+    state.value.recentRounds.push({ ...record, at: Date.now() })
+    if (state.value.recentRounds.length > MAX_ROUNDS) {
+      state.value.recentRounds.splice(0, state.value.recentRounds.length - MAX_ROUNDS)
+    }
+  }
+
   return {
     insights: computed(() => state.value.insights),
     coachInsight,
@@ -386,5 +421,6 @@ export function useAiButler() {
     autoEnabled: computed(() => settings.value.aiAutoEnabled),
     preference: computed(() => state.value.preference),
     refreshCoach,
+    recordRound,
   }
 }
