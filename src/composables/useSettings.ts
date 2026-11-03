@@ -1,5 +1,5 @@
 import { ref, computed, watch, watchEffect } from 'vue'
-import { enable, disable, isEnabled } from '@tauri-apps/plugin-autostart'
+import { enable, disable } from '@tauri-apps/plugin-autostart'
 import { createPersistedStore } from './persistence'
 
 export interface ThemePreset {
@@ -136,13 +136,16 @@ const store = createPersistedStore({
 const loaded = store.loaded
 
 async function syncAutostart() {
+  // 以本地设置为准：开关开着就确保系统里有启动项，关着就确保删掉。
+  // 不要反过来用系统注册状态覆盖开关，启动项被清理时会把开关静默关掉。
   try {
-    settings.value.autoLaunch = await isEnabled()
-  } catch {
-    // autostart plugin unavailable (e.g. unsupported platform)
-  }
-  if (settings.value.autoLaunch) {
-    enable().catch(() => {})
+    if (settings.value.autoLaunch) {
+      await enable()
+    } else {
+      await disable()
+    }
+  } catch (e) {
+    console.error('[autostart] sync failed', e)
   }
 }
 
