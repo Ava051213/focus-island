@@ -6,6 +6,7 @@ import { eventRelativeLabel, eventTime, eventsNow, useEvents } from '../composab
 import { useAiButler, type CoachFeedback } from '../composables/useAiButler'
 import type { CoachPlan } from '../composables/useAi'
 import { useWeeklyGoals } from '../composables/useWeeklyGoals'
+import { useDailyStats } from '../composables/useDailyStats'
 import WeeklyGoals from './WeeklyGoals.vue'
 
 const emit = defineEmits<{ navigateEvents: [] }>()
@@ -106,6 +107,86 @@ const coachMessage = computed(() => coachInsight.value?.coach ?? null)
 // 团子的表情跟着本周完成的目标数走
 const { doneCount } = useWeeklyGoals()
 const mascotFace = computed(() => ['', '🌱', '✨', '🏆'][doneCount.value] ?? '')
+
+// 没配 AI Key 时，首页那张卡改成本地提示，不留空
+const { todayStat } = useDailyStats()
+
+/** 30 分钟内要发生的日程，本地提示优先提醒它 */
+const soonEvent = computed(() => {
+  const now = eventsNow.value.getTime()
+  const limitMs = 30 * 60 * 1000
+  for (const event of upcomingEvents.value) {
+    const time = eventTime(event.at)
+    if (!time) continue
+    const [hour = 0, minute = 0] = time.split(':').map(Number)
+    const [year = 0, month = 0, day = 0] = event.at.split('T')[0].split('-').map(Number)
+    const startAt = new Date(year, month - 1, day, hour, minute).getTime()
+    const diff = startAt - now
+    if (diff > 0 && diff <= limitMs) {
+      return { title: event.title, minutes: Math.max(1, Math.round(diff / 60000)) }
+    }
+  }
+  return null
+})
+
+function timeWord(): string {
+  const hour = new Date().getHours()
+  if (hour < 6) return '夜深了'
+  if (hour < 11) return '早上好'
+  if (hour < 14) return '中午好'
+  if (hour < 18) return '下午好'
+  return '晚上好'
+}
+
+interface LocalCoachMessage {
+  text: string
+  actionLabel: string | null
+  action: 'start' | 'events'
+}
+
+const localCoach = computed<LocalCoachMessage>(() => {
+  const first = recentMemos.value[0] ?? null
+  const pomodoros = todayStat.value.pomodoros
+
+  if (soonEvent.value) {
+    return {
+      text: `还有 ${soonEvent.value.minutes} 分钟到「${soonEvent.value.title}」，先准备一下吧～`,
+      actionLabel: '看日程',
+      action: 'events',
+    }
+  }
+  if (pomodoros === 0 && first) {
+    return { text: '今天还没开张，先挑一件小事做 25 分钟吧～', actionLabel: '开始', action: 'start' }
+  }
+  if (pomodoros >= 2) {
+    return {
+      text: `今天已经 ${pomodoros} 个番茄啦，累了就歇会儿，剩下的明天也行。`,
+      actionLabel: first ? '再来一个' : null,
+      action: 'start',
+    }
+  }
+  if (first) {
+    return {
+      text: `${timeWord()}，想做什么就从下面挑一条，我陪你慢慢来～`,
+      actionLabel: '开始',
+      action: 'start',
+    }
+  }
+  return {
+    text: `${timeWord()}，先随手记一条想做的事吧，我陪你一起开始～`,
+    actionLabel: null,
+    action: 'start',
+  }
+})
+
+function runLocalCoachAction() {
+  if (localCoach.value.action === 'events') {
+    emit('navigateEvents')
+    return
+  }
+  const memo = recentMemos.value[0]
+  if (memo) startMemo(memo)
+}
 
 function planMemo(plan: CoachPlan): Memo | null {
   if (plan.memoId) {
@@ -280,6 +361,16 @@ function onCoachNoteEnter(event: KeyboardEvent) {
       >{{ coachError }}</p>
     </section>
 
+    <section v-else class="coach-card">
+      <div class="coach-head">
+        <span class="coach-title">团子说<span v-if="mascotFace" class="coach-face">{{ mascotFace }}</span></span>
+      </div>
+      <p class="coach-content">{{ localCoach.text }}</p>
+      <div v-if="localCoach.actionLabel && !running" class="coach-local-action">
+        <button class="coach-start-btn" @click="runLocalCoachAction">{{ localCoach.actionLabel }}</button>
+      </div>
+    </section>
+
     <WeeklyGoals compact />
 
     <div class="quick-capture">
@@ -448,6 +539,11 @@ function onCoachNoteEnter(event: KeyboardEvent) {
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+.coach-local-action {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .coach-head-actions {
