@@ -9,13 +9,84 @@ import {
   type EventTag,
 } from '../composables/useEvents'
 import { useAi } from '../composables/useAi'
+import { refreshTronTodos, useTronTodos } from '../composables/useTronTodos'
 import EventCard from './EventCard.vue'
+import TronTodoCard from './TronTodoCard.vue'
 
 const { upcoming, overdue, handledEvents, addEvent, updateEvent, deleteEvent, toggleHandled } = useEvents()
 const { extractEvent, configured } = useAi()
+const {
+  sortedTodos: tronTodos,
+  loading: tronLoading,
+  failure: tronFailure,
+  stale: tronStale,
+  lastSuccessLabel: tronUpdatedAt,
+  now: tronNow,
+} = useTronTodos()
 
 const draft = ref('')
 const showHandled = ref(false)
+
+/* 下拉刷新：只有列表已经在顶部、并且是往下拖时才接管，避免和正常滚动打架 */
+const PULL_THRESHOLD = 46
+const PULL_MAX = 64
+const eventListRef = ref<HTMLElement | null>(null)
+const pullOffset = ref(0)
+const pulling = ref(false)
+let pullStartX = 0
+let pullStartY = 0
+let pullPressing = false
+let pullTracking = false
+
+const pullLabel = computed(() => {
+  if (tronLoading.value) return '正在刷新…'
+  return pullOffset.value >= PULL_THRESHOLD ? '松手就刷新' : '再往下拉一点'
+})
+
+function resetPull() {
+  pullPressing = false
+  pullTracking = false
+  pulling.value = false
+  pullOffset.value = 0
+}
+
+function onListPointerDown(event: PointerEvent) {
+  const list = eventListRef.value
+  if (!list || list.scrollTop > 0) return
+  if (event.pointerType === 'mouse' && event.button !== 0) return
+  pullStartX = event.clientX
+  pullStartY = event.clientY
+  pullPressing = true
+  pullTracking = false
+}
+
+function onListPointerMove(event: PointerEvent) {
+  const list = eventListRef.value
+  if (!list || !pullPressing) return
+  const dy = event.clientY - pullStartY
+  const dx = event.clientX - pullStartX
+  if (list.scrollTop > 0 || dy <= 0) {
+    if (pullTracking) resetPull()
+    return
+  }
+  if (!pullTracking) {
+    if (dy < 8 || Math.abs(dx) > dy) return
+    pullTracking = true
+    pulling.value = true
+  }
+  pullOffset.value = Math.min(PULL_MAX, dy * 0.55)
+}
+
+function onListPointerUp() {
+  if (!pullPressing) return
+  const shouldRefresh = pullTracking && pullOffset.value >= PULL_THRESHOLD
+  resetPull()
+  if (shouldRefresh) void refreshTronTodos({ force: true })
+}
+
+function onListPointerLeave() {
+  if (pullPressing) resetPull()
+}
 
 /** 只用来决定提示文案：短句提示解析结果，长句提示会交给 AI 整理 */
 const looksLikeSentence = computed(() => draft.value.trim().length > 20)
@@ -225,7 +296,53 @@ function removeEvent() {
       </span>
     </div>
 
-    <div class="event-list">
+    <div
+      ref="eventListRef"
+      class="event-list"
+      :class="{ pulling }"
+      @pointerdown="onListPointerDown"
+      @pointermove="onListPointerMove"
+      @pointerup="onListPointerUp"
+      @pointercancel="resetPull"
+      @pointerleave="onListPointerLeave"
+    >
+      <div class="pull-indicator" :style="{ height: `${pullOffset}px` }">
+        <span v-if="pullOffset > 0" class="pull-text" :class="{ ready: pullOffset >= PULL_THRESHOLD }">
+          {{ pullLabel }}
+        </span>
+      </div>
+
+      <div class="tron-section">
+        <div class="tron-head">
+          <span class="tron-label">课程待办</span>
+          <span class="tron-updated">
+            <template v-if="tronLoading">刷新中…</template>
+            <template v-else-if="tronUpdatedAt">
+              {{ tronUpdatedAt }} 更新<template v-if="tronStale"> · 可能过期</template>
+            </template>
+            <template v-else>还没拉到</template>
+          </span>
+        </div>
+
+        <div v-if="tronFailure" class="tron-error">
+          {{ tronFailure.message }}
+          <span v-if="tronStale" class="tron-error-note">下面保留的是上一次成功拉到的那份</span>
+        </div>
+
+        <div v-if="tronTodos.length === 0" class="tron-empty">
+          <template v-if="tronLoading">正在拉取课程待办…</template>
+          <template v-else-if="tronFailure">暂时没有可显示的待办</template>
+          <template v-else>课程里没有待办，安心专注吧</template>
+        </div>
+
+        <TronTodoCard
+          v-for="todo in tronTodos"
+          :key="todo.id"
+          :todo="todo"
+          :now-ms="tronNow.getTime()"
+        />
+      </div>
+
       <div v-if="upcoming.length === 0 && overdue.length === 0" class="empty-state">
         还没有约定呢～想到以后要做的事，就在上面写一句嘛
       </div>
@@ -455,6 +572,82 @@ function removeEvent() {
   display: flex;
   flex-direction: column;
   gap: 5px;
+}
+
+.event-list.pulling {
+  user-select: none;
+}
+
+.pull-indicator {
+  flex-shrink: 0;
+  height: 0;
+  margin-bottom: -5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  transition: height 0.16s ease;
+}
+
+.pull-text {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.pull-text.ready {
+  color: var(--focus-color);
+}
+
+.tron-section {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.tron-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 2px 3px;
+}
+
+.tron-label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: rgba(255, 255, 255, 0.28);
+}
+
+.tron-updated {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.tron-error {
+  padding: 7px 9px;
+  border-radius: 7px;
+  font-size: 10px;
+  line-height: 1.55;
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.1);
+  border: 1px solid rgba(248, 113, 113, 0.22);
+}
+
+.tron-error-note {
+  display: block;
+  margin-top: 2px;
+  color: rgba(248, 113, 113, 0.65);
+}
+
+.tron-empty {
+  padding: 18px 8px;
+  text-align: center;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.3);
 }
 
 .section-label {

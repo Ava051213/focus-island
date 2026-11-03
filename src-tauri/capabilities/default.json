@@ -18,7 +18,8 @@
       "allow": [
         { "url": "https://open.bigmodel.cn/*" },
         { "url": "https://api.siliconflow.cn/*" },
-        { "url": "https://raw.githubusercontent.com/*" }
+        { "url": "https://raw.githubusercontent.com/*" },
+        { "url": "http://127.0.0.1:8765/*" }
       ]
     },
     "clipboard-manager:default",
