@@ -11,6 +11,11 @@ import type { TronTodo } from '../utils/tronApi'
 const props = defineProps<{
   todo: TronTodo
   nowMs: number
+  done?: boolean
+}>()
+
+const emit = defineEmits<{
+  toggle: []
 }>()
 
 const overdue = computed(() => todoIsOverdue(props.todo, props.nowMs))
@@ -20,7 +25,25 @@ const dueLabel = computed(() => todoDueLabel(props.todo))
 </script>
 
 <template>
-  <div class="todo-card" :class="{ overdue, today: dueToday }">
+  <div class="todo-card" :class="{ overdue, today: dueToday, done }">
+    <button
+      class="todo-check"
+      :class="{ checked: done }"
+      :title="done ? '撤回，放回待办' : '做完了，归档'"
+      @click.stop="emit('toggle')"
+    >
+      <svg
+        v-if="done"
+        width="10"
+        height="10"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="3"
+      >
+        <path d="M20 6L9 17l-5-5" />
+      </svg>
+    </button>
     <div class="todo-text">
       <div class="todo-title">{{ todo.title }}</div>
       <div class="todo-course">{{ todo.course || '未标注课程' }}</div>
@@ -55,6 +78,42 @@ const dueLabel = computed(() => todoDueLabel(props.todo))
 .todo-card.overdue {
   opacity: 0.5;
   border-left-color: rgba(255, 255, 255, 0.2);
+}
+
+.todo-card.done {
+  opacity: 0.5;
+}
+
+.todo-card.done .todo-title {
+  text-decoration: line-through;
+}
+
+.todo-check {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  padding: 0;
+  border-radius: 4px;
+  border: 1.5px solid rgba(255, 255, 255, 0.25);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.todo-check:hover {
+  border-color: var(--focus-color);
+  color: var(--focus-color);
+}
+
+.todo-check.checked {
+  border-color: color-mix(in srgb, var(--focus-color) 70%, transparent);
+  background: color-mix(in srgb, var(--focus-color) 25%, transparent);
+  color: var(--focus-color);
 }
 
 .todo-text {

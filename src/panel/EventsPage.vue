@@ -17,12 +17,17 @@ const { upcoming, overdue, handledEvents, addEvent, updateEvent, deleteEvent, to
 const { extractEvent, configured } = useAi()
 const {
   sortedTodos: tronTodos,
+  archivedTodos: tronArchived,
+  markTodoDone,
+  restoreTodoDone,
   loading: tronLoading,
   failure: tronFailure,
   stale: tronStale,
   lastSuccessLabel: tronUpdatedAt,
   now: tronNow,
 } = useTronTodos()
+
+const showTodoArchive = ref(false)
 
 const draft = ref('')
 const showHandled = ref(false)
@@ -340,7 +345,27 @@ function removeEvent() {
           :key="todo.id"
           :todo="todo"
           :now-ms="tronNow.getTime()"
+          @toggle="markTodoDone(todo.id)"
         />
+
+        <button
+          v-if="tronArchived.length > 0"
+          class="todo-archive-toggle"
+          @click="showTodoArchive = !showTodoArchive"
+        >
+          {{ showTodoArchive ? '收起来' : '看看做过的' }}（{{ tronArchived.length }}）
+        </button>
+
+        <template v-if="showTodoArchive">
+          <TronTodoCard
+            v-for="todo in tronArchived"
+            :key="todo.id"
+            :todo="todo"
+            :now-ms="tronNow.getTime()"
+            done
+            @toggle="restoreTodoDone(todo.id)"
+          />
+        </template>
       </div>
 
       <div v-if="upcoming.length === 0 && overdue.length === 0" class="empty-state">
@@ -648,6 +673,22 @@ function removeEvent() {
   text-align: center;
   font-size: 11px;
   color: rgba(255, 255, 255, 0.3);
+}
+
+.todo-archive-toggle {
+  margin-top: 2px;
+  padding: 4px 2px;
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.35);
+  font-size: 10px;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.todo-archive-toggle:hover {
+  color: rgba(255, 255, 255, 0.6);
 }
 
 .section-label {

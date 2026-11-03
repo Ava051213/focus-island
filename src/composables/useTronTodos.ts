@@ -8,6 +8,7 @@ import {
 } from '../utils/tronApi'
 import { eventRelativeLabel, eventsNow } from './useEvents'
 import { toLocalDateStr } from '../utils/date'
+import { createPersistedStore } from './persistence'
 
 /** 服务端有 3 秒缓存，自动刷新不要比这更频繁 */
 const MIN_REQUEST_INTERVAL_MS = 3000
@@ -17,6 +18,29 @@ const todos = ref<TronTodo[]>([])
 const loading = ref(false)
 const failure = ref<{ kind: TronTodosErrorKind; message: string } | null>(null)
 const lastSuccessAt = ref<number | null>(null)
+
+/** 本地勾掉的课程待办 id：只影响这边显示，不向畅课提交任何东西 */
+const doneIds = ref<string[]>([])
+
+function restoreDoneIds(data: unknown) {
+  if (!Array.isArray(data)) throw new Error('tron-todos-done.json is not an array')
+  doneIds.value = data.filter((id): id is string => typeof id === 'string')
+}
+
+const doneStore = createPersistedStore({
+  file: 'tron-todos-done.json',
+  snapshot: () => doneIds.value,
+  restore: restoreDoneIds,
+})
+
+function markTodoDone(id: string) {
+  if (doneIds.value.includes(id)) return
+  doneIds.value = [...doneIds.value, id]
+}
+
+function restoreTodoDone(id: string) {
+  doneIds.value = doneIds.value.filter(doneId => doneId !== id)
+}
 
 let watchersStarted = false
 let inflight: Promise<void> | null = null
@@ -119,17 +143,27 @@ export function todoDueLabel(todo: TronTodo): string {
 
 export function useTronTodos() {
   startWatchers()
+  void doneStore.ensureLoaded()
 
   /** 按 due_ts 升序；没有截止时间的排最后 */
-  const sortedTodos = computed(() =>
-    todos.value.slice().sort((a, b) => {
+  function sortByDue(list: TronTodo[]): TronTodo[] {
+    return list.slice().sort((a, b) => {
       const aDue = todoDueMs(a)
       const bDue = todoDueMs(b)
       if (aDue === null && bDue === null) return 0
       if (aDue === null) return 1
       if (bDue === null) return -1
       return aDue - bDue
-    }),
+    })
+  }
+
+  const sortedTodos = computed(() =>
+    sortByDue(todos.value.filter(todo => !doneIds.value.includes(todo.id))),
+  )
+
+  /** 本地勾掉、被归档的条目 */
+  const archivedTodos = computed(() =>
+    sortByDue(todos.value.filter(todo => doneIds.value.includes(todo.id))),
   )
 
   /** 有失败但手里还有上一次成功的列表 */
@@ -144,6 +178,9 @@ export function useTronTodos() {
   return {
     todos,
     sortedTodos,
+    archivedTodos,
+    markTodoDone,
+    restoreTodoDone,
     loading,
     failure,
     stale,
