@@ -9,7 +9,16 @@ type TimeRange = 'today' | 'week' | 'month' | 'all'
 
 const emit = defineEmits<{ back: [] }>()
 
-const { todayStat, weekStats, monthStats, allTimeStats, summarizeStats, getDateString, dailyStats } = useDailyStats()
+const {
+  todayStat,
+  weekStats,
+  monthStats,
+  allTimeStats,
+  summarizeStats,
+  getDateString,
+  getStatsInRange,
+  dailyStats,
+} = useDailyStats()
 const { starAchievements, streakAchievements, specialAchievements, state } = useAchievements()
 const { upcoming, overdue } = useEvents()
 
@@ -86,6 +95,41 @@ const allAchievements = computed(() => [
 
 const weekDays = ['日', '一', '二', '三', '四', '五', '六']
 
+// 本周（周一起）和上周同期的番茄对比，外加专注天数和日均
+const weeklyComparison = computed(() => {
+  const now = new Date()
+  const dayOffset = (now.getDay() + 6) % 7
+  const thisStart = new Date(now)
+  thisStart.setDate(thisStart.getDate() - dayOffset)
+  thisStart.setHours(0, 0, 0, 0)
+  const lastStart = new Date(thisStart)
+  lastStart.setDate(lastStart.getDate() - 7)
+  const lastEnd = new Date(lastStart)
+  lastEnd.setDate(lastEnd.getDate() + dayOffset)
+  lastEnd.setHours(23, 59, 59, 999)
+
+  const thisStats = getStatsInRange(thisStart, now)
+  const lastStats = getStatsInRange(lastStart, lastEnd)
+  const thisPomodoros = thisStats.reduce((sum, stat) => sum + stat.pomodoros, 0)
+  const lastPomodoros = lastStats.reduce((sum, stat) => sum + stat.pomodoros, 0)
+  const focusDays = thisStats.filter(stat => stat.pomodoros > 0).length
+  const diff = thisPomodoros - lastPomodoros
+
+  let comparison = ''
+  if (thisPomodoros === 0) comparison = '还没开始，慢慢来～'
+  else if (lastPomodoros === 0) comparison = '上周同期还没开始'
+  else if (diff > 0) comparison = `比上周同期多 ${diff} 个`
+  else if (diff < 0) comparison = `比上周同期少 ${-diff} 个`
+  else comparison = '和上周同期一样多'
+
+  return {
+    thisPomodoros,
+    focusDays,
+    average: (thisPomodoros / (dayOffset + 1)).toFixed(1),
+    comparison,
+  }
+})
+
 const pendingEventCount = computed(() => upcoming.value.length + overdue.value.length)
 
 const weekTrend = computed(() => {
@@ -150,6 +194,14 @@ const maxPomodoros = computed(() => Math.max(...weekTrend.value.map(d => d.pomod
       </div>
     </div>
 
+    <!-- Week Summary -->
+    <div class="week-summary">
+      <div class="week-summary-main">本周 {{ weeklyComparison.thisPomodoros }} 个番茄</div>
+      <div class="week-summary-sub">
+        {{ weeklyComparison.comparison }} · 专注 {{ weeklyComparison.focusDays }} 天，平均每天 {{ weeklyComparison.average }} 个
+      </div>
+    </div>
+
     <!-- Heatmap -->
     <div class="section">
       <div class="section-header">
@@ -165,8 +217,14 @@ const maxPomodoros = computed(() => Math.max(...weekTrend.value.map(d => d.pomod
             v-for="day in heatmapDays"
             :key="day.date"
             :class="['heat-cell', `intensity-${day.intensity}`]"
+            :title="`${day.date} · ${day.pomodoros} 颗番茄`"
+            :aria-label="`${day.date}，${day.pomodoros} 颗番茄`"
+            :tabindex="day.pomodoros > 0 ? 0 : -1"
             @mouseenter="hoveredDay = day"
             @mouseleave="hoveredDay = null"
+            @focus="hoveredDay = day"
+            @blur="hoveredDay = null"
+            @click="hoveredDay = hoveredDay?.date === day.date ? null : day"
           >
             <div v-if="hoveredDay?.date === day.date" class="cell-tooltip">
               {{ day.date.slice(5).replace('-', '月') }}日 · {{ day.pomodoros }} 颗番茄
@@ -328,6 +386,26 @@ const maxPomodoros = computed(() => Math.max(...weekTrend.value.map(d => d.pomod
   color: rgba(255, 255, 255, 0.45);
 }
 
+.week-summary {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--focus-color) 7%, rgba(255, 255, 255, 0.03));
+  border: 1px solid color-mix(in srgb, var(--focus-color) 15%, rgba(255, 255, 255, 0.05));
+}
+
+.week-summary-main {
+  font-size: 14px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.week-summary-sub {
+  margin-top: 3px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.45);
+}
+
 .section {
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.05);
@@ -391,6 +469,12 @@ const maxPomodoros = computed(() => Math.max(...weekTrend.value.map(d => d.pomod
 
 .heat-cell:hover {
   outline: 1px solid rgba(255, 255, 255, 0.35);
+  z-index: 1;
+}
+
+.heat-cell:focus-visible {
+  outline: 2px solid var(--focus-color);
+  outline-offset: 2px;
   z-index: 1;
 }
 
