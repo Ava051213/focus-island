@@ -435,9 +435,9 @@ function handleItemClick(memo: Memo) {
 }
 
 .memo-item-title {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
-  color: #fff;
+  color: rgba(255, 255, 255, 0.9);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

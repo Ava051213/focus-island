@@ -1,10 +1,20 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, onActivated, onDeactivated } from 'vue'
+import { computed, ref, onMounted, onUnmounted, onActivated, onDeactivated } from 'vue'
 import { useSettings } from '../composables/useSettings'
 
 const { settings } = useSettings()
 
 const isRecording = ref(false)
+// 低频开关默认收起，常用项留在外面
+const advancedOpen = ref(false)
+
+const advancedSummary = computed(() =>
+  [
+    settings.value.notificationSound ? '提示音开' : '提示音关',
+    settings.value.hideOnFullscreen ? '避让开' : '避让关',
+    settings.value.autoLaunch ? '自启开' : '自启关',
+  ].join(' · '),
+)
 
 function formatShortcut(key: string): string {
   if (!key) return '无'
@@ -119,8 +129,14 @@ defineExpose({ resetRecording })
 
 <template>
   <div class="settings-section">
-    <div class="section-title">日常小设置</div>
-    <div class="update-toggle-row">
+    <div class="section-title-row">
+      <div class="section-title">日常小设置</div>
+      <button class="section-toggle" @click="advancedOpen = !advancedOpen">
+        {{ advancedOpen ? '收起' : '更多开关' }}
+      </button>
+    </div>
+    <p v-if="!advancedOpen" class="section-summary">{{ advancedSummary }}</p>
+    <div v-if="advancedOpen" class="update-toggle-row">
       <div class="update-copy">
         <span class="update-label">结束提示音</span>
         <span class="update-hint">每颗番茄结束都会叮一下呀</span>
@@ -130,7 +146,7 @@ defineExpose({ resetRecording })
         <span class="switch-track"></span>
       </label>
     </div>
-    <div class="update-toggle-row" style="margin-top: 8px;">
+    <div v-if="advancedOpen" class="update-toggle-row" style="margin-top: 8px;">
       <div class="update-copy">
         <span class="update-label">全屏时自动避让</span>
         <span class="update-hint">看视频、打游戏、演示时先躲起来，番茄结束再冒出来提醒</span>
@@ -140,7 +156,7 @@ defineExpose({ resetRecording })
         <span class="switch-track"></span>
       </label>
     </div>
-    <div class="update-toggle-row" style="margin-top: 8px;">
+    <div v-if="advancedOpen" class="update-toggle-row" style="margin-top: 8px;">
       <div class="update-copy">
         <span class="update-label">开机就来陪你</span>
         <span class="update-hint">开机自动出现，不用你找我啦</span>
@@ -208,6 +224,37 @@ defineExpose({ resetRecording })
   font-weight: 500;
   letter-spacing: 0.5px;
   margin-bottom: 6px;
+}
+
+.section-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.section-title-row .section-title {
+  margin-bottom: 0;
+}
+
+.section-toggle {
+  background: none;
+  border: none;
+  padding: 2px 0;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.45);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.section-toggle:hover {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.section-summary {
+  margin: 4px 0 0;
+  font-size: 10px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.35);
 }
 
 .update-toggle-row {
