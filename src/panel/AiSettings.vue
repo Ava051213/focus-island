@@ -1,10 +1,21 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useSettings } from '../composables/useSettings'
 import { useAi } from '../composables/useAi'
 
 const { settings } = useSettings()
 const { testProvider } = useAi()
+
+// 和「日常小设置」一样，低频配置默认收起，只留一行状态
+const aiOpen = ref(false)
+
+const aiSummary = computed(() =>
+  [
+    settings.value.aiSiliconKey ? '硅基流动已配' : '硅基流动未配',
+    settings.value.aiApiKey ? '智谱已配' : '智谱未配',
+    settings.value.aiAutoEnabled ? '自动建议开' : '自动建议关',
+  ].join(' · '),
+)
 
 const testingProvider = ref<'' | 'silicon' | 'zhipu'>('')
 const testMessages = ref<{ silicon: string; zhipu: string }>({ silicon: '', zhipu: '' })
@@ -24,8 +35,15 @@ async function runAiTest(id: 'silicon' | 'zhipu') {
 
 <template>
   <div class="settings-section">
-    <div class="section-title">团子</div>
+    <div class="section-title-row">
+      <div class="section-title">团子</div>
+      <button class="section-toggle" @click="aiOpen = !aiOpen">
+        {{ aiOpen ? '收起' : '更多设置' }}
+      </button>
+    </div>
+    <p v-if="!aiOpen" class="section-summary">{{ aiSummary }}</p>
 
+    <div v-if="aiOpen">
     <div class="section-subtitle">硅基流动</div>
     <div class="ai-field">
       <span class="ai-label">API Key</span>
@@ -98,6 +116,7 @@ async function runAiTest(id: 'silicon' | 'zhipu') {
         <span class="switch-track"></span>
       </label>
     </div>
+    </div>
   </div>
 </template>
 
@@ -115,6 +134,37 @@ async function runAiTest(id: 'silicon' | 'zhipu') {
   font-weight: 500;
   letter-spacing: 0.5px;
   margin-bottom: 6px;
+}
+
+.section-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.section-title-row .section-title {
+  margin-bottom: 0;
+}
+
+.section-toggle {
+  background: none;
+  border: none;
+  padding: 2px 0;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.45);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.section-toggle:hover {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.section-summary {
+  margin: 4px 0 0;
+  font-size: 10px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.35);
 }
 
 .section-subtitle {
