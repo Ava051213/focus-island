@@ -128,8 +128,8 @@ const tag = computed(() => EVENT_TAGS.find(t => t.id === props.event.tag) ?? EVE
 
 .event-check {
   flex-shrink: 0;
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   border-radius: 4px;
   border: 1.5px solid rgba(255, 255, 255, 0.25);
   background: transparent;

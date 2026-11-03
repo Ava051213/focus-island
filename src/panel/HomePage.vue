@@ -705,6 +705,9 @@ function onCoachNoteEnter(event: KeyboardEvent) {
 .link-btn {
   background: none;
   border: none;
+  /* 扩大点击区域，但不影响排版 */
+  padding: 2px 4px;
+  margin: -2px -4px;
   color: rgba(255, 255, 255, 0.35);
   font-size: 10px;
   font-family: inherit;

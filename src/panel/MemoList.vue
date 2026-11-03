@@ -511,8 +511,8 @@ function handleItemClick(memo: Memo) {
 /* 播放键常驻可见：列表里最常用的动作不该藏在悬停后面 */
 .memo-play-btn {
   flex-shrink: 0;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   background: color-mix(in srgb, var(--focus-color) 16%, transparent);
   border: 1px solid color-mix(in srgb, var(--focus-color) 38%, transparent);
@@ -535,8 +535,8 @@ function handleItemClick(memo: Memo) {
 }
 
 .action-btn {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   border-radius: 5px;
   background: transparent;
   border: 1px solid transparent;
