@@ -110,6 +110,22 @@ function extractTitleFromContent(content: string, maxLength: number = 10): strin
   return plainText.slice(0, maxLength) + (plainText.length > maxLength ? '...' : '')
 }
 
+/** 快速捕捉进来的是纯文本，先转义再按换行拆成段落，编辑器能直接接着改 */
+function quickMemoContent(text: string): string {
+  return text
+    .split(/\n+/)
+    .map(line => line.trim())
+    .filter(Boolean)
+    .map(line => `<p>${line.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>`)
+    .join('')
+}
+
+function quickMemoTitle(text: string, maxLength: number = 10): string {
+  const plainText = text.replace(/\s+/g, ' ').trim()
+  if (plainText.length === 0) return '无标题'
+  return plainText.slice(0, maxLength) + (plainText.length > maxLength ? '...' : '')
+}
+
 export function useMemos() {
   void memoStore.ensureLoaded()
   void categoryStore.ensureLoaded()
@@ -134,6 +150,17 @@ export function useMemos() {
       updatedAt: now,
     }
     memos.value.unshift(memo)
+    return memo
+  }
+
+  /** 随手记一句：不选分类、不写标题，标题取正文前几个字 */
+  function addQuickMemo(text: string): Memo | null {
+    const trimmed = text.trim()
+    if (!trimmed) return null
+    const memo = addMemo('work')
+    memo.title = quickMemoTitle(trimmed)
+    memo.content = quickMemoContent(trimmed)
+    memo.updatedAt = Date.now()
     return memo
   }
 
@@ -294,6 +321,7 @@ export function useMemos() {
     currentCategoryName,
     memoCount,
     addMemo,
+    addQuickMemo,
     updateMemo,
     deleteMemo,
     togglePin,

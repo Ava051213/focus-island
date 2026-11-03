@@ -17,6 +17,7 @@ const {
   getDisplayTitle,
   completeMemo,
   restoreMemo,
+  addQuickMemo,
 } = useMemos()
 const { withinDays } = useEvents()
 const {
@@ -35,6 +36,29 @@ const {
 const recentMemos = computed(() => activeMemos.value.slice(0, 3))
 
 const upcomingEvents = computed(() => withinDays(7).slice(0, 5))
+
+/** 随手记一句：回车或点按钮保存，不选分类、不写标题 */
+const quickText = ref('')
+const quickSaved = ref(false)
+let quickSavedTimer: ReturnType<typeof setTimeout> | null = null
+
+function saveQuickMemo() {
+  const created = addQuickMemo(quickText.value)
+  if (!created) return
+  quickText.value = ''
+  quickSaved.value = true
+  if (quickSavedTimer) clearTimeout(quickSavedTimer)
+  quickSavedTimer = setTimeout(() => {
+    quickSaved.value = false
+  }, 1600)
+}
+
+function onQuickEnter(event: KeyboardEvent) {
+  // 中文输入法还在选词时，回车是确认候选，不是保存
+  if (event.isComposing) return
+  event.preventDefault()
+  saveQuickMemo()
+}
 
 function startMemo(memo: Memo) {
   start(memo.id, getDisplayTitle(memo))
@@ -258,6 +282,18 @@ function onCoachNoteEnter(event: KeyboardEvent) {
 
     <WeeklyGoals compact />
 
+    <div class="quick-capture">
+      <input
+        v-model="quickText"
+        class="quick-input"
+        type="text"
+        :placeholder="quickSaved ? '记下了，等你想整理再打开' : '想到什么，随手记一句'"
+        @input="quickSaved = false"
+        @keydown.enter="onQuickEnter"
+      />
+      <button class="quick-save-btn" :disabled="!quickText.trim()" @click="saveQuickMemo">记下</button>
+    </div>
+
     <section class="zone">
       <div class="zone-title">现在陪你做</div>
 
@@ -343,6 +379,58 @@ function onCoachNoteEnter(event: KeyboardEvent) {
   display: flex;
   flex-direction: column;
   gap: 7px;
+}
+
+/* 随手记一句的轻输入，不占额外页面 */
+.quick-capture {
+  display: flex;
+  gap: 6px;
+}
+
+.quick-input {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  padding: 0 9px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 12px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.quick-input::placeholder {
+  color: rgba(255, 255, 255, 0.28);
+}
+
+.quick-input:focus {
+  border-color: color-mix(in srgb, var(--focus-color) 45%, transparent);
+}
+
+.quick-save-btn {
+  flex-shrink: 0;
+  padding: 0 12px;
+  height: 30px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--focus-color) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--focus-color) 38%, transparent);
+  color: var(--focus-color);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.quick-save-btn:hover {
+  background: color-mix(in srgb, var(--focus-color) 28%, transparent);
+}
+
+.quick-save-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 /* 小管家建议卡：一句话就够，不再单独占一页 */
