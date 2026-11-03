@@ -10,6 +10,7 @@ import {
 } from '@tauri-apps/plugin-fs'
 import { emitTo, listen } from '@tauri-apps/api/event'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
+import { migrate, UnknownSchemaVersionError, wrapWithVersion } from '../utils/schema'
 
 const DATA_DIR = 'focus-island'
 const baseDir = BaseDirectory.AppData
@@ -24,6 +25,9 @@ function refreshSaveError() {
     ? `数据没存上（${Array.from(failingFiles).join('、')}），检查一下磁盘空间或权限`
     : null
 }
+
+/** 数据版本高于当前应用时给界面的提示；本次会话不会再写这个文件 */
+export const restoreWarning = ref<string | null>(null)
 
 let dataDirReady: Promise<void> | null = null
 
@@ -46,11 +50,13 @@ interface JsonFile {
   read(): Promise<ReadResult>
   /** Back up an unreadable file before it can be overwritten. */
   quarantine(): Promise<void>
+  /** Stop writing for this session (used when the file format is too new to understand). */
+  blockWrites(): void
   /** Debounced; writes for the same file are applied strictly in order. */
   write(json: string): void
 }
 
-function createJsonFile(name: string): JsonFile {
+function createJsonFile(name: string, debounceMs: number = WRITE_DEBOUNCE_MS): JsonFile {
   const path = `${DATA_DIR}/${name}`
   let pending: string | null = null
   let timer: ReturnType<typeof setTimeout> | null = null
@@ -109,10 +115,14 @@ function createJsonFile(name: string): JsonFile {
   function write(json: string) {
     pending = json
     if (timer !== null) clearTimeout(timer)
-    timer = setTimeout(flush, WRITE_DEBOUNCE_MS)
+    timer = setTimeout(flush, debounceMs)
   }
 
-  return { read, quarantine, write }
+  function blockWrites() {
+    writeBlocked = true
+  }
+
+  return { read, quarantine, blockWrites, write }
 }
 
 function emitToOtherWindow(event: string, payload: string) {
@@ -130,6 +140,10 @@ export interface PersistedStoreOptions {
   restore: (data: unknown) => void
   /** Event used to mirror changes into the other window. */
   syncEvent?: string
+  /** 写入文件时套上 { schemaVersion, data }；不传保持旧的裸格式 */
+  schemaVersion?: number
+  /** 写入防抖，默认 300ms；进行中快照传 0 立刻落盘 */
+  debounceMs?: number
 }
 
 export interface PersistedStore {
@@ -138,11 +152,17 @@ export interface PersistedStore {
 }
 
 export function createPersistedStore(opts: PersistedStoreOptions): PersistedStore {
-  const file = createJsonFile(opts.file)
+  const file = createJsonFile(opts.file, opts.debounceMs)
   const loaded = ref(false)
   let loadPromise: Promise<void> | null = null
   // JSON of the state as last loaded, received or saved; unchanged state is never written back.
   let lastJson: string | null = null
+
+  function serialize(data: unknown): string {
+    return JSON.stringify(
+      opts.schemaVersion === undefined ? data : wrapWithVersion(data, opts.schemaVersion),
+    )
+  }
 
   async function load() {
     const result = await file.read()
@@ -150,23 +170,40 @@ export function createPersistedStore(opts: PersistedStoreOptions): PersistedStor
     if (loaded.value) return
 
     let restored = false
+    let fileData: unknown = undefined
+    let migrated = false
     if (result.status === 'ok') {
+      fileData = result.data
       try {
-        opts.restore(result.data)
+        if (opts.schemaVersion !== undefined) {
+          const migratedResult = migrate(result.data, { currentVersion: opts.schemaVersion })
+          fileData = migratedResult.data
+          migrated = migratedResult.migrated
+        }
+        opts.restore(fileData)
         restored = true
       } catch (e) {
-        console.error(`[persistence] invalid data in ${opts.file}`, e)
-        await file.quarantine()
+        if (e instanceof UnknownSchemaVersionError) {
+          // 不认识的高版本：先备份，再禁止写入，避免把用户数据覆盖成旧结构
+          await file.quarantine()
+          file.blockWrites()
+          restoreWarning.value = `${opts.file} 的数据版本高于当前应用支持的版本，已备份原文件并停止写入`
+          console.error(`[persistence] ${opts.file} has an unsupported schema version`, e)
+        } else {
+          console.error(`[persistence] invalid data in ${opts.file}`, e)
+          await file.quarantine()
+        }
       }
     } else if (result.status === 'unreadable') {
       await file.quarantine()
     }
 
-    lastJson = JSON.stringify(opts.snapshot())
+    const current = opts.snapshot()
+    lastJson = JSON.stringify(current)
     loaded.value = true
     // Persist migrations/normalization applied by restore().
-    if (restored && result.status === 'ok' && lastJson !== JSON.stringify(result.data)) {
-      file.write(lastJson)
+    if (restored && result.status === 'ok' && (migrated || lastJson !== JSON.stringify(fileData))) {
+      file.write(serialize(current))
     }
   }
 
@@ -179,10 +216,11 @@ export function createPersistedStore(opts: PersistedStoreOptions): PersistedStor
     opts.snapshot,
     () => {
       if (!loaded.value) return
-      const json = JSON.stringify(opts.snapshot())
+      const data = opts.snapshot()
+      const json = JSON.stringify(data)
       if (json === lastJson) return
       lastJson = json
-      file.write(json)
+      file.write(serialize(data))
       if (opts.syncEvent) emitToOtherWindow(opts.syncEvent, json)
     },
     { deep: true },

@@ -18,7 +18,8 @@ import SettingsPage from './SettingsPage.vue'
 import MemoPage from './MemoPage.vue'
 import StatsPage from './StatsPage.vue'
 import PanelTitleBar from './PanelTitleBar.vue'
-import { saveError } from '../composables/persistence'
+import RecoveryPrompt from './RecoveryPrompt.vue'
+import { restoreWarning, saveError } from '../composables/persistence'
 
 interface PanelTransitionMetrics {
   island_x: number
@@ -31,7 +32,10 @@ interface PanelTransitionMetrics {
   panel_height: number
 }
 
-const { startBridge } = useTimerBridge()
+const { startBridge, recoveryPlan, resolveRecovery } = useTimerBridge()
+const pendingRecovery = computed(() =>
+  recoveryPlan.value.kind === 'none' ? null : recoveryPlan.value,
+)
 useSettings()
 useShortcut()
 function prewarmPanelData() {
@@ -401,6 +405,12 @@ async function closeWindow() {
     <div class="panel-vignette" />
     <div class="panel-inner">
       <div v-if="saveError" class="save-error">{{ saveError }}</div>
+      <div v-if="restoreWarning" class="save-error">{{ restoreWarning }}</div>
+      <RecoveryPrompt
+        v-if="pendingRecovery"
+        :plan="pendingRecovery"
+        @resolve="resolveRecovery"
+      />
       <PanelTitleBar
         :title="currentTitleMeta.title"
         :icon-paths="[...currentTitleMeta.iconPaths]"

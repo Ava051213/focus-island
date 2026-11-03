@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { nextTick, ref } from 'vue'
-import { createPersistedStore } from '../persistence'
+import { createPersistedStore, restoreWarning } from '../persistence'
 
 const h = vi.hoisted(() => ({
   files: new Map<string, string>(),
@@ -60,6 +60,7 @@ describe('createPersistedStore', () => {
     h.emits.length = 0
     h.copies = 0
     h.copyShouldFail = false
+    restoreWarning.value = null
     vi.useFakeTimers()
   })
 
@@ -194,6 +195,56 @@ describe('createPersistedStore', () => {
     h.listens[0]({ payload: '{"value":42}' })
 
     expect(data.value).toEqual({ value: 42 })
+  })
+
+  it('开启 schemaVersion 后写入信封格式，旧裸数据仍能读取', async () => {
+    h.files.set(FILE, '{"value":1}')
+    const data = ref({ value: 1 })
+    const store = createPersistedStore({
+      file: 'data.json',
+      schemaVersion: 1,
+      snapshot: () => data.value,
+      restore: (raw) => {
+        data.value = raw as { value: number }
+      },
+    })
+
+    await store.ensureLoaded()
+    expect(data.value).toEqual({ value: 1 })
+
+    data.value = { value: 2 }
+    await nextTick()
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(JSON.parse(h.files.get(FILE)!)).toEqual({
+      schemaVersion: 1,
+      data: { value: 2 },
+    })
+  })
+
+  it('未知高版本先备份，再停止写入，不覆盖用户数据', async () => {
+    const original = JSON.stringify({ schemaVersion: 99, data: { value: 1 } })
+    h.files.set(FILE, original)
+    const data = ref({ value: 1 })
+    const store = createPersistedStore({
+      file: 'data.json',
+      schemaVersion: 1,
+      snapshot: () => data.value,
+      restore: (raw) => {
+        data.value = raw as { value: number }
+      },
+    })
+
+    await store.ensureLoaded()
+
+    expect(h.copies).toBe(1)
+    expect(restoreWarning.value).toContain('data.json')
+
+    data.value = { value: 2 }
+    await nextTick()
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(h.files.get(FILE)).toBe(original)
   })
 
   it('收到非法跨窗口数据时不崩溃，状态保持不变', async () => {

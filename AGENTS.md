@@ -63,9 +63,10 @@ alert → 恢复（窗口内有鼠标/键盘活动）
 ### 持久化（`src/composables/persistence.ts`）
 
 所有数据存放在 `$APPDATA/focus-island/`，统一通过 `createPersistedStore` 读写：
-- 300ms 防抖，单文件串行写入，先写 `<file>.<窗口label>.tmp` 再 `rename`，保证原子性
+- 默认 300ms 防抖（可用 `debounceMs` 覆盖，进行中快照传 0），单文件串行写入，先写 `<file>.<窗口label>.tmp` 再 `rename`，保证原子性
 - 读取或解析失败时先备份为 `<file>.corrupt-<时间戳>`；备份失败则本次会话禁止写入，避免覆盖原文件
 - `restore()` 负责校验和迁移数据，数据不合法时应抛错；归一化后与文件内容不同会回写一次
+- 可选 `schemaVersion`：文件写成 `{ schemaVersion, data }`，旧裸数据按当前结构读取；未知高版本备份原文件、本次会话停止写入，并通过 `restoreWarning` 提示
 - 传入 `syncEvent` 时，改动通过 `emitTo` 同步到另一个窗口；以"上次快照 JSON"判断是否需要写入，避免回写循环
 
 | 文件 | composable | 跨窗口事件 |
@@ -76,20 +77,34 @@ alert → 恢复（窗口内有鼠标/键盘活动）
 | `daily-stats.json` | `useDailyStats` | — |
 | `achievements.json` | `useAchievements` | — |
 | `ai-insights.json` | `useAiButler` | —（只在 panel 窗口写入） |
+| `sessions.json` | `useSessions` | —（焦点轮次账本，只在 panel 窗口写入） |
+| `timer-snapshot.json` | `useTimerSnapshot` | —（进行中快照，0 防抖，只在 panel 窗口读写） |
 
 新增持久化数据时请复用 `createPersistedStore`，不要直接调用 `writeTextFile`。
+
+### 计时内核（`src/timer/`）
+
+计时不再用 setInterval 累加秒数，而是「状态机 + deadline + 系统时间」：
+
+- `machine.ts`：纯状态机，状态 `idle / focus / focusPaused / break / breakPaused / completed`，事件 `START / PAUSE / RESUME / SKIP / COMPLETE / RESET / RESTORE`。非法转移返回 `{ ok: false, reason }`，不静默改状态。暂停记录 `pausedAt` 与累计暂停时长，恢复时按当前时间重算 deadline。
+- `clock.ts`：剩余时间只认 `deadline - now`；系统时间回拨超过容差时按上次剩余时间重锚 deadline；实际专注时长不含暂停，且钳制到计划时长。
+- `snapshot.ts`：生成/校验进行中快照，`planRecovery` 区分 active / expired，`applyRecovery` 决定恢复、记为完成或记为中断，全部是纯函数。
+- `sessions.ts`：Session 类型（`completed / skipped / interrupted`）、按 id 去重、按结束日本地日期聚合、旧累加统计与 Session 合并。
+
+`useTimer.ts` 内部由状态机驱动，但对外仍保留原来的 `phase / remaining / running / ...` 接口；`useTimerBridge.ts` 在完成/跳过/放弃时写且只写一条 Session，并维护 `timer-snapshot.json`。面板启动时若读到快照，`RecoveryPrompt.vue` 会询问继续或放弃；放弃一定落一条 interrupted Session。统计以 Session 为主，`daily-stats.json` 只作为升级前的历史基线。
 
 ### Composables 职责
 
 - **`useIslandState.ts`**：灵动岛状态 + 闲置检测（`@vueuse/core useIdle`）
-- **`useTimer.ts`**：计时器纯逻辑，与 UI 解耦，以 `phaseEndAtMs` 计算剩余时间。`onPhaseDoneCallback` 注册阶段结束回调；提供 `skipToBreak()`、`skipBreak()`、`abandon()` 和通知相关的 `confirm/extend/dismissNotification()`
-- **`useTimerBridge.ts`**：panel 窗口专用，包装 useTimer，负责广播状态、记录番茄（累加到对应备忘、每日统计、成就）以及处理通知操作
+- **`useTimer.ts`**：计时器对外接口，内部由 `src/timer/machine.ts` 驱动，以 deadline 计算剩余时间。`onPhaseDoneCallback` 注册阶段结束回调，`onPhaseEventCallback` 接收完成/跳过效果；提供 `restore()`、`getSnapshot()`、`getRoundInfo()`、`skipToBreak()`、`skipBreak()`、`abandon()` 和通知相关的 `confirm/extend/dismissNotification()`
+- **`useTimerBridge.ts`**：panel 窗口专用，包装 useTimer，负责广播状态、写入 Session（同时更新备忘番茄数、成就、AI 轮次记录）、维护进行中快照、处理通知操作与启动恢复
 - **`useEvents.ts`**：日程事件 CRUD。每条只有发生时间（`YYYY-MM-DD` 或 `YYYY-MM-DDTHH:mm`）、标题、描述、单个标签、是否已处理，按时间升序排列，过期的单独归档。`parseQuickEvent()` 负责把「周五 10:00 交报告 #工作」这类一句话解析成事件。
 - **`useMemos.ts`**：备忘与分类，同时落 `memos.json` 和 `memo-categories.json`。每条备忘带 `pomodoroCount`，是当前唯一的专注对象；`completedAt` 用于完成归档（不物理删除，可恢复），`order` 保存用户拖动后的手动顺序，首页取 `activeMemos` 前三条
 - **`useSettings.ts`**：主题、时长、透明度（`islandOpacity`）、缩放（`islandScale`）、显示模式（常驻/边缘停靠）、顶部位置（`islandXRatio`）、`idleMottos`、快捷键、开机自启、全屏避让（`hideOnFullscreen`）、AI Key（硅基主力 / 智谱兜底）/模型/自动建议开关。开机自启以本地设置为准：开关开着就在启动时重新登记系统启动项，不要用系统注册状态反向覆盖开关（否则启动项被清理时开关会被静默关掉）
 - **`useDockMode.ts`**：边缘停靠模式，消费主窗口统一的指针轮询结果（`is_mouse_over_window`）决定展开或收起细条
-- **`useDailyStats.ts` / `useAchievements.ts`**：每日统计与成就，日期一律用 `src/utils/date.ts` 的本地日期
-- **`useWeeklyGoals.ts`**：本周目标（番茄 8 个、专注 3 天、完成 2 条小记），进度从 `dailyStats` 和 `memos.completedAt` 实时计算，周一自动换周，不新增持久化；首页显示紧凑条，记录页显示进度条
+- **`useSessions.ts` / `useTimerSnapshot.ts`**：Session 账本与进行中快照的持久化封装，都只在 panel 窗口使用
+- **`useDailyStats.ts` / `useAchievements.ts`**：每日统计与成就，日期一律用 `src/utils/date.ts` 的本地日期。`useDailyStats` 对外提供 `effectiveDailyStats`，由旧 `daily-stats.json` 累加值与 Session 聚合合并而成
+- **`useWeeklyGoals.ts`**：本周目标（番茄 8 个、专注 3 天、完成 2 条小记），进度从 `effectiveDailyStats` 和 `memos.completedAt` 实时计算，周一自动换周，不新增持久化；首页显示紧凑条，记录页显示进度条
 - **`useShortcut.ts`**：全局快捷键，只在 `Pressed` 时切换面板
 - **`useAi.ts` / `useAiButler.ts`**：见下方「AI 模块」
 
@@ -99,7 +114,7 @@ alert → 恢复（窗口内有鼠标/键盘活动）
 
 ### 专注对象
 
-番茄钟现在只挂一条**备忘**：`useTimer()` 的 `activeTaskId` 字段名沿用旧的，实际存的是 `memo.id`，一轮专注结束时 `useTimerBridge` 调 `useMemos().incrementPomodoro()`。日程事件不承担专注，也不统计番茄。
+番茄钟现在只挂一条**备忘**：`useTimer()` 的 `activeTaskId` 字段名沿用旧的，实际存的是 `memo.id`。一轮专注结束时 `useTimerBridge` 先写一条 Session，再调 `useMemos().incrementPomodoro()`；Session 是统计与恢复的唯一来源。日程事件不承担专注，也不统计番茄。
 
 ### 备忘录体系
 

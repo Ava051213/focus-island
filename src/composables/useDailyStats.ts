@@ -1,5 +1,6 @@
 import { ref, computed } from 'vue'
 import { createPersistedStore } from './persistence'
+import { useSessions } from './useSessions'
 import { toLocalDateStr } from '../utils/date'
 
 export interface DailyStat {
@@ -13,6 +14,7 @@ const dailyStats = ref<DailyStat[]>([])
 
 const store = createPersistedStore({
   file: 'daily-stats.json',
+  schemaVersion: 1,
   snapshot: () => dailyStats.value,
   restore: (data) => {
     if (!Array.isArray(data)) throw new Error('daily-stats.json is not an array')
@@ -22,8 +24,16 @@ const store = createPersistedStore({
 
 const getDateString = toLocalDateStr
 
+/** 旧累加值保留为历史基线，新轮次从 Session 账本合并进来 */
+const { mergeDaily } = useSessions()
+const effectiveDailyStats = computed<DailyStat[]>(() => mergeDaily(dailyStats.value))
+
 function getStatByDate(date: string): DailyStat | undefined {
   return dailyStats.value.find(s => s.date === date)
+}
+
+function getEffectiveStatByDate(date: string): DailyStat | undefined {
+  return effectiveDailyStats.value.find(s => s.date === date)
 }
 
 export function useDailyStats() {
@@ -53,7 +63,7 @@ export function useDailyStats() {
   function getStatsInRange(startDate: Date, endDate: Date): DailyStat[] {
     const start = getDateString(startDate)
     const end = getDateString(endDate)
-    return dailyStats.value.filter(s => s.date >= start && s.date <= end)
+    return effectiveDailyStats.value.filter(s => s.date >= start && s.date <= end)
   }
 
   function getMonthStats(year: number, month: number): DailyStat[] {
@@ -64,7 +74,7 @@ export function useDailyStats() {
 
   const todayStat = computed(() => {
     const today = getDateString()
-    return getStatByDate(today) ?? { date: today, pomodoros: 0, focusMinutes: 0, tasksCompleted: 0 }
+    return getEffectiveStatByDate(today) ?? { date: today, pomodoros: 0, focusMinutes: 0, tasksCompleted: 0 }
   })
 
   const weekStats = computed(() => {
@@ -82,7 +92,7 @@ export function useDailyStats() {
 
   const allTimeStats = computed(() => {
     const total = { pomodoros: 0, focusMinutes: 0, tasksCompleted: 0 }
-    for (const stat of dailyStats.value) {
+    for (const stat of effectiveDailyStats.value) {
       total.pomodoros += stat.pomodoros
       total.focusMinutes += stat.focusMinutes
       total.tasksCompleted += stat.tasksCompleted
@@ -103,6 +113,7 @@ export function useDailyStats() {
 
   return {
     dailyStats,
+    effectiveDailyStats,
     todayStat,
     weekStats,
     monthStats,

@@ -117,6 +117,7 @@ function applyThemeToDOM() {
 
 const store = createPersistedStore({
   file: 'settings.json',
+  schemaVersion: 1,
   snapshot: () => settings.value,
   restore: (data) => {
     if (!data || typeof data !== 'object') throw new Error('settings.json is not an object')

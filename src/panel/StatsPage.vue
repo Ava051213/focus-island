@@ -17,7 +17,7 @@ const {
   summarizeStats,
   getDateString,
   getStatsInRange,
-  dailyStats,
+  effectiveDailyStats,
 } = useDailyStats()
 const { starAchievements, streakAchievements, specialAchievements, state } = useAchievements()
 const { upcoming, overdue } = useEvents()
@@ -69,7 +69,7 @@ const heatmapDays = computed<HeatDay[]>(() => {
   // 对齐到周日，保证每列是完整的一周
   start.setDate(start.getDate() - start.getDay())
 
-  const statMap = new Map(dailyStats.value.map(s => [s.date, s.pomodoros]))
+  const statMap = new Map(effectiveDailyStats.value.map(s => [s.date, s.pomodoros]))
   const days: HeatDay[] = []
   const cursor = new Date(start)
   while (cursor <= now) {

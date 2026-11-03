@@ -1,15 +1,25 @@
 /**
  * useTimerBridge — panel 窗口专用
- * 计时器逻辑在此运行，关键状态变化时广播状态到灵动岛窗口
+ * 计时器逻辑在此运行，关键状态变化时广播状态到灵动岛窗口，
+ * 并把每轮结果写进 Session 账本与进行中快照。
  */
 import { emit, listen } from '@tauri-apps/api/event'
-import { watch } from 'vue'
+import { ref, watch } from 'vue'
 import { useTimer, type TimerPhase, type NotificationType } from './useTimer'
 import { useMemos } from './useMemos'
-import { useDailyStats } from './useDailyStats'
 import { useAchievements } from './useAchievements'
 import { useSettings } from './useSettings'
 import { useAiButler } from './useAiButler'
+import { useSessions } from './useSessions'
+import { useTimerSnapshot } from './useTimerSnapshot'
+import type { PhaseEffect } from '../timer/machine'
+import { buildSession } from '../timer/sessions'
+import {
+  applyRecovery,
+  planRecovery,
+  type RecoveryDecision,
+  type RecoveryPlan,
+} from '../timer/snapshot'
 
 /**
  * 注意：activeTaskId / activeTaskTitle 沿用旧字段名，
@@ -27,15 +37,18 @@ export interface TimerStatePayload {
   syncedAt: number
 }
 
+const recoveryPlan = ref<RecoveryPlan>({ kind: 'none', reason: 'missing' })
+
 let bridgeStarted = false
 
 export function useTimerBridge() {
   const timer = useTimer()
   const { incrementPomodoro } = useMemos()
-  const { recordPomodoro } = useDailyStats()
   const { recordPomodoro: recordAchievementPomodoro, recordEarlyBird, recordNightOwl } = useAchievements()
   const { settings } = useSettings()
   const { recordRound } = useAiButler()
+  const sessions = useSessions()
+  const snapshot = useTimerSnapshot()
   let lastPayloadKey = ''
 
   function buildPayload() {
@@ -64,30 +77,97 @@ export function useTimerBridge() {
     emit('notification-show', type)
   }
 
+  function saveSnapshot() {
+    snapshot.save(timer.getSnapshot())
+  }
+
+  function recordCompletedRound(session: ReturnType<typeof buildSession>, startedAt: number | null) {
+    if (session.status !== 'completed') return
+    if (session.taskId) incrementPomodoro(session.taskId)
+    recordAchievementPomodoro()
+    recordRound({
+      memoId: session.taskId,
+      outcome: 'done',
+      minutes: Math.round(session.actualDuration / 60),
+    })
+    const startHour = startedAt === null ? null : new Date(startedAt).getHours()
+    if (startHour !== null) {
+      if (startHour < 6) recordEarlyBird()
+      else if (startHour >= 23) recordNightOwl()
+    }
+  }
+
+  /** 完成或跳过一个专注阶段时，只写一条 Session */
+  function handlePhaseEffect(effect: PhaseEffect) {
+    if (effect.phase !== 'focus') return
+
+    const actualDurationMs = effect.type === 'phase-completed'
+      ? effect.plannedDurationMs
+      : Math.max(0, effect.plannedDurationMs - effect.remainingMs)
+    const now = Date.now()
+    const session = buildSession({
+      roundId: effect.roundId,
+      taskId: effect.taskId,
+      taskTitle: effect.taskTitle,
+      startAt: effect.startedAt ?? now,
+      endAt: now,
+      plannedDurationMs: effect.plannedDurationMs,
+      actualDurationMs,
+      status: effect.type === 'phase-completed' ? 'completed' : 'skipped',
+    })
+
+    if (!sessions.append(session)) return
+
+    if (session.status === 'completed') {
+      recordCompletedRound(session, effect.startedAt)
+    } else {
+      recordRound({
+        memoId: session.taskId,
+        outcome: 'skipped',
+        minutes: Math.round(session.actualDuration / 60),
+      })
+    }
+  }
+
+  async function initRecovery() {
+    await snapshot.ensureLoaded()
+    recoveryPlan.value = planRecovery(snapshot.snapshot.value, Date.now())
+  }
+
+  function resolveRecovery(decision: RecoveryDecision) {
+    const plan = recoveryPlan.value
+    if (plan.kind === 'none') return
+    recoveryPlan.value = { kind: 'none', reason: 'missing' }
+
+    const outcome = applyRecovery(plan, decision, Date.now())
+    if (outcome.session) {
+      if (sessions.append(outcome.session)) {
+        if (outcome.session.status === 'completed') {
+          recordCompletedRound(outcome.session, outcome.session.startAt)
+        } else {
+          recordRound({
+            memoId: outcome.session.taskId,
+            outcome: 'abandoned',
+            minutes: Math.round(outcome.session.actualDuration / 60),
+          })
+        }
+      }
+    }
+
+    if (outcome.action === 'restore') {
+      timer.restore(outcome.restore)
+      return
+    }
+
+    snapshot.clear()
+    if (timer.status.value !== 'idle') timer.dismissNotification()
+  }
+
   function startBridge() {
     if (bridgeStarted) return
     bridgeStarted = true
 
-    timer.onPhaseDoneCallback((phase, targetId) => {
-      if (phase === 'focus' && targetId) {
-        incrementPomodoro(targetId)
-        const focusMinutes = settings.value.focusDuration
-        recordPomodoro(focusMinutes)
-        recordAchievementPomodoro()
-        recordRound({ memoId: targetId, outcome: 'done', minutes: focusMinutes })
-
-        const startHour = timer.focusStartedAt.value === null
-          ? null
-          : new Date(timer.focusStartedAt.value).getHours()
-        if (startHour !== null) {
-          if (startHour < 6) {
-            recordEarlyBird()
-          } else if (startHour >= 23) {
-            recordNightOwl()
-          }
-        }
-      }
-    })
+    timer.onPhaseEventCallback(handlePhaseEffect)
 
     // Broadcast notification state to island when pendingNotification changes
     watch(
@@ -129,11 +209,6 @@ export function useTimerBridge() {
         }
       } else if (payload === 'skip') {
         if (timer.phase.value === 'focus') {
-          const elapsed = Math.max(
-            0,
-            settings.value.focusDuration - Math.round(timer.remaining.value / 60),
-          )
-          recordRound({ memoId: timer.activeTaskId.value, outcome: 'skipped', minutes: elapsed })
           timer.skipToBreak()
         } else {
           timer.skipBreak()
@@ -165,6 +240,12 @@ export function useTimerBridge() {
       },
     )
 
+    // 状态一变就落快照；运行中每 30 秒刷新一次 updatedAt
+    watch(() => timer.status.value, saveSnapshot)
+    setInterval(() => {
+      if (timer.running.value) saveSnapshot()
+    }, 30_000)
+
     // 灵动岛窗口重启/晚启动时，允许主动请求一次当前快照。
     listen('timer-state-request', () => {
       emitTimerState(true)
@@ -173,21 +254,43 @@ export function useTimerBridge() {
         emitNotification(timer.pendingNotification.value)
       }
     }).catch(() => {})
+
+    void initRecovery()
   }
 
   /** 放弃时先记录本轮已专注多久，再让计时器复位 */
   function abandonAndRecord() {
-    const memoId = timer.activeTaskId.value
-    const wasFocus = timer.phase.value === 'focus'
-    const elapsed = Math.max(
-      0,
-      settings.value.focusDuration - Math.round(timer.remaining.value / 60),
-    )
+    const info = timer.getRoundInfo()
     timer.abandon()
-    if (wasFocus && memoId) {
-      recordRound({ memoId, outcome: 'abandoned', minutes: elapsed })
-    }
+
+    if (info.phase !== 'focus' || !info.roundId) return
+    if (info.status !== 'focus' && info.status !== 'focusPaused') return
+
+    const now = Date.now()
+    const session = buildSession({
+      roundId: info.roundId,
+      taskId: info.taskId,
+      taskTitle: info.taskTitle,
+      startAt: info.startedAt ?? now,
+      endAt: now,
+      plannedDurationMs: info.plannedDurationMs,
+      actualDurationMs: info.elapsedMs,
+      status: 'interrupted',
+      interruptReason: 'user',
+    })
+    if (!sessions.append(session)) return
+    recordRound({
+      memoId: session.taskId,
+      outcome: 'abandoned',
+      minutes: Math.round(session.actualDuration / 60),
+    })
   }
 
-  return { ...timer, abandon: abandonAndRecord, startBridge }
+  return {
+    ...timer,
+    abandon: abandonAndRecord,
+    startBridge,
+    recoveryPlan,
+    resolveRecovery,
+  }
 }

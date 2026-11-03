@@ -97,7 +97,7 @@ function calcProgress(start: Date, stats: DailyStat[], memos: Memo[]) {
 let syncInstalled = false
 
 export function useWeeklyGoals() {
-  const { dailyStats } = useDailyStats()
+  const { effectiveDailyStats } = useDailyStats()
   const { memos } = useMemos()
   // 每分钟看一眼日期，跨周时目标自动换成新一周
   const now = useNow({ interval: 60_000 })
@@ -114,7 +114,7 @@ export function useWeeklyGoals() {
       state.value.weekStart = startStr
       state.value.completed = {}
     }
-    const progress = calcProgress(start, dailyStats.value, memos.value)
+    const progress = calcProgress(start, effectiveDailyStats.value, memos.value)
     for (const def of DEFINITIONS) {
       if (state.value.completed[def.id] || progress[def.id] < def.target) continue
       state.value.completed[def.id] = Date.now()
@@ -129,7 +129,7 @@ export function useWeeklyGoals() {
     syncInstalled = true
     watch(
       () => [
-        dailyStats.value.map(stat => `${stat.date}:${stat.pomodoros}`).join('|'),
+        effectiveDailyStats.value.map(stat => `${stat.date}:${stat.pomodoros}`).join('|'),
         memos.value.map(memo => `${memo.id}:${memo.completedAt ?? 0}`).join('|'),
       ],
       () => sync(),
@@ -139,7 +139,7 @@ export function useWeeklyGoals() {
 
   const goals = computed<WeeklyGoal[]>(() => {
     const start = weekStart.value
-    const progress = calcProgress(start, dailyStats.value, memos.value)
+    const progress = calcProgress(start, effectiveDailyStats.value, memos.value)
     return DEFINITIONS.map((def) => {
       const value = progress[def.id]
       return {
