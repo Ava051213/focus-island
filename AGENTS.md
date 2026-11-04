@@ -109,9 +109,9 @@ alert → 恢复（窗口内有鼠标/键盘活动）
 - **`useTimerBridge.ts`**：panel 窗口专用，包装 useTimer，负责广播状态、写入 Session（同时更新备忘番茄数、成就、AI 轮次记录）、维护进行中快照、处理通知操作与启动恢复
 - **`useEvents.ts`**：日程事件 CRUD。每条只有发生时间（`YYYY-MM-DD` 或 `YYYY-MM-DDTHH:mm`）、标题、描述、单个标签、是否已处理，按时间升序排列，过期的单独归档。`parseQuickEvent()` 负责把「周五 10:00 交报告 #工作」这类一句话解析成事件。
 - **`useMemos.ts`**：备忘与分类，同时落 `memos.json` 和 `memo-categories.json`。每条备忘带 `pomodoroCount`，是当前唯一的专注对象；`completedAt` 用于完成归档（不物理删除，可恢复），`order` 保存用户拖动后的手动顺序，首页取 `activeMemos` 前三条
-- **`useSettings.ts`**：主题、时长、透明度（`islandOpacity`）、缩放（`islandScale`）、显示模式（常驻/边缘停靠）、顶部位置（`islandXRatio`）、`idleMottos`、`shortcuts`（toggleTimer / showWindow / enabled）、`tray.closeToTray`、`notifications`（enabled / sound / permissionAsked）、开机自启、全屏避让（`hideOnFullscreen`）、AI Key（硅基主力 / 智谱兜底）/模型/自动建议开关。开机自启以本地设置为准：开关开着就在启动时重新登记系统启动项，不要用系统注册状态反向覆盖开关（否则启动项被清理时开关会被静默关掉）；`syncAutostart` 带 `isTauri()` 守卫，Web 预览与 Vitest 不调用系统接口
+- **`useSettings.ts`**：主题、时长、透明度（`islandOpacity`）、缩放（`islandScale`）、显示模式（常驻/边缘停靠）、顶部位置（`islandXRatio`）、`idleMottos`、`shortcuts`（toggleTimer / showWindow / enabled）、`tray.closeToTray`、`notifications`（enabled / sound / permissionAsked）、开机自启、全屏避让（`hideOnFullscreen`）、AI Key（硅基主力 / 智谱兜底）/模型/自动建议开关。开机自启以本地设置为准：开关开着就在启动时重新登记系统启动项，不要用系统注册状态反向覆盖开关（否则启动项被清理时开关会被静默关掉）；`syncAutostart` 带 `isTauri()` 守卫，Web 预览与 Vitest 不调用系统接口。同步失败写入 `autostartError`，由设置页展示
 - **`useDockMode.ts`**：边缘停靠模式，消费主窗口统一的指针轮询结果（`is_mouse_over_window`）决定展开或收起细条
-- **`useSessions.ts` / `useTimerSnapshot.ts`**：Session 账本与进行中快照的持久化封装，都只在 panel 窗口使用
+- **`useSessions.ts` / `useTimerSnapshot.ts`**：Session 账本与进行中快照的持久化封装，都只在 panel 窗口使用。备忘列表用 `aggregateSessionsByTask()` 按 `taskId` 聚合每条小记的番茄数与累计专注时长
 - **`useDailyStats.ts` / `useAchievements.ts`**：每日统计与成就，日期一律用 `src/utils/date.ts` 的本地日期。`useDailyStats` 对外提供 `effectiveDailyStats`，由旧 `daily-stats.json` 累加值与 Session 聚合合并而成
 - **`useWeeklyGoals.ts`**：本周目标（番茄 8 个、专注 3 天、完成 2 条小记），进度从 `effectiveDailyStats` 和 `memos.completedAt` 实时计算，周一自动换周，不新增持久化；首页显示紧凑条，记录页显示进度条
 - **`useShortcut.ts`**：panel 窗口专用，调用 Rust `update_shortcuts` 注册快捷键，监听 `shortcut-command` 并复用计时动作；`shortcutError` 对外给设置页展示冲突原因
@@ -160,6 +160,7 @@ alert → 恢复（窗口内有鼠标/键盘活动）
 - `set_island_size(scale)` / `set_island_custom_size(width, height)` — 调整灵动岛窗口尺寸并水平居中
 - `toggle_panel` / `animate_panel_close` / `hide_panel` / `is_panel_visible` / `position_panel_under_island` / `get_panel_transition_metrics` / `emit_island_panel_motion` — panel 显示与动画。Rust 端只负责定位、显示，并发出 `panel-window-transition` 事件，动画由前端完成
 - `set_close_to_tray(enabled)` — 同步关闭窗口行为（隐藏到托盘 / 直接退出）
+- `set_autostart(enabled)` — 按本地开关同步系统启动项；Windows 下额外修正 `StartupApproved\Run` 的禁用标记，失败原因回传设置页
 - `update_tray_state(state)` — 前端推送计时状态，Rust 更新托盘菜单文案、跳过是否可用、tooltip 与 macOS 菜单栏标题
 - `update_shortcuts(config)` — 重新注册全局快捷键，返回每个动作的注册错误
 
