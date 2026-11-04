@@ -1,10 +1,13 @@
 import { computed, ref, watch } from 'vue'
 import { createPersistedStore } from './persistence'
-import { useAi, type CoachContext, type CoachMessage } from './useAi'
+import { useAi, type CoachContext, type CoachMessage, type DailySummaryInput, type DailySummaryResult } from './useAi'
+import { useDailySummaries } from './useDailySummaries'
+import { useSessions } from './useSessions'
 import { useSettings } from './useSettings'
 import { useEvents } from './useEvents'
 import { useMemos } from './useMemos'
 import { useDailyStats } from './useDailyStats'
+import { aggregateSessionsByTask } from '../timer/sessions'
 import { toLocalDateStr } from '../utils/date'
 
 export type AiInsightKind = 'coach' | 'review'
@@ -66,6 +69,11 @@ const AUTO_DEBOUNCE_MS = 90 * 1000
 const AUTO_DAILY_CAP = 30
 const AUTO_START_HOUR = 7
 const AUTO_END_HOUR = 23
+
+/** 晚上这个点之后完成的轮次，就当作当天收尾并生成总结 */
+const SUMMARY_HOUR = 20
+
+let summaryGenerating = false
 
 const state = ref<ButlerState>({
   insights: [],
@@ -311,6 +319,90 @@ async function generateCoach(): Promise<CoachMessage> {
   return enriched
 }
 
+/** 无 Key 或请求失败时的本地总结，保证晚上仍有内容 */
+function localSummary(input: DailySummaryInput): DailySummaryResult {
+  const parts = [`今天完成 ${input.pomodoros} 个番茄，专注 ${input.focusMinutes} 分钟`]
+  if (input.completedMemos.length > 0) parts.push(`收起了 ${input.completedMemos.length} 条小记`)
+  const summary = `${parts.join('，')}。${input.pomodoros >= 6 ? '今天挺拼的，晚上早点歇着。' : '慢慢来就好。'}`
+  const tomorrow = input.completedMemos[0]
+    ? `明天可以接着安排「${input.completedMemos[0]}」之后的事。`
+    : '明天挑一件最想做的，先从 25 分钟开始。'
+  return { summary, tomorrow }
+}
+
+/** 生成某天的总结；当天没番茄就跳过，统计有变化时覆盖当天的旧总结 */
+async function generateDailySummary(date: string = toLocalDateStr(new Date())): Promise<void> {
+  if (summaryGenerating) return
+
+  const { getByDate, save } = useDailySummaries()
+  const { effectiveDailyStats } = useDailyStats()
+  const stat = effectiveDailyStats.value.find(item => item.date === date)
+  if (!stat || stat.pomodoros <= 0) return
+
+  const existing = getByDate(date)
+  if (existing && existing.pomodoros >= stat.pomodoros) return
+
+  const { memos } = useMemos()
+  const { sessions } = useSessions()
+  const byTask = aggregateSessionsByTask(sessions.value, date)
+
+  const completedMemos = memos.value
+    .filter(memo => memo.completedAt && toLocalDateStr(new Date(memo.completedAt)) === date)
+    .map(memo => memo.title || stripHtml(memo.content).slice(0, 20))
+    .filter(title => title.length > 0)
+    .slice(0, 8)
+
+  const workedMemos = Array.from(byTask.entries())
+    .filter(([, stats]) => stats.todayPomodoros > 0)
+    .map(([id, stats]) => {
+      const memo = memos.value.find(item => item.id === id)
+      return {
+        title: memo?.title || '已删除的小记',
+        pomodoros: stats.todayPomodoros,
+        estimatedPomodoros: memo?.estimatedPomodoros ?? 0,
+      }
+    })
+    .slice(0, 5)
+
+  const input: DailySummaryInput = {
+    date,
+    pomodoros: stat.pomodoros,
+    focusMinutes: stat.focusMinutes,
+    completedMemos,
+    workedMemos,
+  }
+
+  summaryGenerating = true
+  try {
+    const { configured, summarizeDay } = useAi()
+    const result = configured.value ? await summarizeDay(input) : localSummary(input)
+    save({
+      date: input.date,
+      pomodoros: input.pomodoros,
+      focusMinutes: input.focusMinutes,
+      completedMemos: input.completedMemos,
+      summary: result.summary,
+      tomorrow: result.tomorrow,
+      createdAt: Date.now(),
+    })
+  } catch (e) {
+    // 网络失败也要留下总结，避免晚上什么都没有
+    console.error('[ai-butler] daily summary failed', e)
+    const result = localSummary(input)
+    save({
+      date: input.date,
+      pomodoros: input.pomodoros,
+      focusMinutes: input.focusMinutes,
+      completedMemos: input.completedMemos,
+      summary: result.summary,
+      tomorrow: result.tomorrow,
+      createdAt: Date.now(),
+    })
+  } finally {
+    summaryGenerating = false
+  }
+}
+
 async function runAuto() {
   if (running || !canRunAuto()) return
   running = true
@@ -364,6 +456,10 @@ export function startAiButler() {
   setTimeout(() => {
     if (needsCoachUpgrade()) scheduleAuto(0)
     else onChange()
+    // 白天收工、晚上没再打开的情况，次日打开时补昨天的总结
+    const yesterday = new Date()
+    yesterday.setDate(yesterday.getDate() - 1)
+    void generateDailySummary(toLocalDateStr(yesterday))
   }, 30_000)
 
   // 每小时主动换一条建议，免得一整天都在复读同一句
@@ -374,6 +470,7 @@ export function useAiButler() {
   void store.ensureLoaded()
   const { configured } = useAi()
   const { settings } = useSettings()
+  const { latest: dailySummary } = useDailySummaries()
 
   const coachInsight = computed(() =>
     state.value.insights.find(item => item.kind === 'coach') ?? null,
@@ -407,17 +504,21 @@ export function useAiButler() {
     state.value.autoRunsToday += 1
   }
 
-  /** 记录一轮专注的结果，先只积累，不影响界面和建议 */
+  /** 记录一轮专注的结果；晚上完成的轮次顺带收尾今天的总结 */
   function recordRound(record: Omit<RoundRecord, 'at'>) {
     state.value.recentRounds.push({ ...record, at: Date.now() })
     if (state.value.recentRounds.length > MAX_ROUNDS) {
       state.value.recentRounds.splice(0, state.value.recentRounds.length - MAX_ROUNDS)
+    }
+    if (record.outcome === 'done' && new Date().getHours() >= SUMMARY_HOUR) {
+      void generateDailySummary()
     }
   }
 
   return {
     insights: computed(() => state.value.insights),
     coachInsight,
+    dailySummary,
     configured,
     autoEnabled: computed(() => settings.value.aiAutoEnabled),
     preference: computed(() => state.value.preference),
