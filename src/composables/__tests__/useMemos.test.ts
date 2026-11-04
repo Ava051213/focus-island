@@ -48,4 +48,15 @@ describe('useMemos addQuickMemo', () => {
 
     expect(created?.content).toBe('<p>a &lt; b</p><p>第二行</p>')
   })
+
+  it('标题重复时允许创建两条独立备忘，不静默去重', async () => {
+    const memos = await freshMemos()
+    const first = memos.addQuickMemo('买牛奶')
+    const second = memos.addQuickMemo('买牛奶')
+
+    expect(first?.title).toBe('买牛奶')
+    expect(second?.title).toBe('买牛奶')
+    expect(first?.id).not.toBe(second?.id)
+    expect(memos.activeMemos.value).toHaveLength(2)
+  })
 })

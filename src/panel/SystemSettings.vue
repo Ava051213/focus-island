@@ -60,7 +60,7 @@ watch(
     </div>
 
     <div class="shortcut-row">
-      <span class="shortcut-label">打开清单</span>
+      <span class="shortcut-label">快速记一条</span>
       <ShortcutRecorder
         v-model="settings.shortcuts.showWindow"
         placeholder="未设置"

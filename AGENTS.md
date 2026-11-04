@@ -116,6 +116,7 @@ alert → 恢复（窗口内有鼠标/键盘活动）
 - **`useWeeklyGoals.ts`**：本周目标（番茄 8 个、专注 3 天、完成 2 条小记），进度从 `effectiveDailyStats` 和 `memos.completedAt` 实时计算，周一自动换周，不新增持久化；首页显示紧凑条，记录页显示进度条
 - **`useShortcut.ts`**：panel 窗口专用，调用 Rust `update_shortcuts` 注册快捷键，监听 `shortcut-command` 并复用计时动作；`shortcutError` 对外给设置页展示冲突原因
 - **`useTraySync.ts`**：panel 窗口专用，把计时状态按分钟粒度推给 Rust（托盘菜单/tooltip），监听 `tray-command`，并把 `tray.closeToTray` 同步给 Rust
+- **`useQuickAddFocus.ts`**：模块级计数器。`showWindow` 快捷键触发时，`useShortcut` 确保面板可见并递增计数，`PanelApp` 切回首页、`HomePage` 聚焦快速输入框；不新增快捷键注册
 - **`useTimerCommands.ts`**：`toggle-timer` / `skip` 到 `useTimer` 动作的唯一映射，托盘与快捷键共用
 - **`useSystemNotify.ts`**：系统通知权限、发送与首次隐藏到托盘提示；不承载计时逻辑
 - **`useAi.ts` / `useAiButler.ts`**：见下方「AI 模块」
@@ -127,6 +128,8 @@ alert → 恢复（窗口内有鼠标/键盘活动）
 ### 专注对象
 
 番茄钟现在只挂一条**备忘**：`useTimer()` 的 `activeTaskId` 字段名沿用旧的，实际存的是 `memo.id`。一轮专注结束时 `useTimerBridge` 先写一条 Session，再调 `useMemos().incrementPomodoro()`；Session 是统计与恢复的唯一来源。日程事件不承担专注，也不统计番茄。
+
+`useTimerBridge` 额外提供 `lastMemo`（从最近一条带 `taskId` 的 Session 推导，任务已删除或已完成时为空）和 `repeatLastRound()`。所有开始入口统一走 `start(taskId, title)`：显式对象失效时回退为空，不传对象时默认带 `lastMemo`；再来一轮只复用 `start`，不额外写 Session。
 
 ### 备忘录体系
 

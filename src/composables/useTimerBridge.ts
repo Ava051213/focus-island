@@ -4,7 +4,7 @@
  * 并把每轮结果写进 Session 账本与进行中快照。
  */
 import { emit, listen } from '@tauri-apps/api/event'
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useTimer, type TimerPhase, type NotificationType } from './useTimer'
 import { useMemos } from './useMemos'
 import { useAchievements } from './useAchievements'
@@ -15,6 +15,7 @@ import { useTimerSnapshot } from './useTimerSnapshot'
 import { notifyPhaseEnd } from './useSystemNotify'
 import type { PhaseEffect } from '../timer/machine'
 import { buildSession } from '../timer/sessions'
+import { pickLastUsedMemo } from '../utils/lastTask'
 import {
   applyRecovery,
   planRecovery,
@@ -50,7 +51,11 @@ export function useTimerBridge() {
   const { recordRound } = useAiButler()
   const sessions = useSessions()
   const snapshot = useTimerSnapshot()
+  const memoApi = useMemos()
   let lastPayloadKey = ''
+
+  /** 上次真正跑过的备忘；从 Session 账本推导，不需要额外持久化字段 */
+  const lastMemo = computed(() => pickLastUsedMemo(sessions.sessions.value, memoApi.memos.value))
 
   function buildPayload() {
     return {
@@ -237,7 +242,7 @@ export function useTimerBridge() {
       (targetId) => {
         // 专注对象就是备忘本身，开跑即视为「最近在动它」
         if (targetId) {
-          const memo = useMemos().memos.value.find(m => m.id === targetId)
+          const memo = memoApi.memos.value.find(m => m.id === targetId)
           if (memo) memo.updatedAt = Date.now()
         }
       },
@@ -289,8 +294,40 @@ export function useTimerBridge() {
     })
   }
 
+  /**
+   * 所有“开始专注”的统一入口：
+   * - 显式传入的备必须还在进行中，否则退回未选中，避免拿已删除/已完成的对象开跑；
+   * - 不传对象时（托盘、快捷键、灵动岛）默认带上次用过的备。
+   */
+  function startRound(taskId: string | null, taskTitle?: string) {
+    if (taskId) {
+      const memo = memoApi.memos.value.find(item => item.id === taskId && !item.completedAt)
+      if (!memo) {
+        timer.start(null)
+        return
+      }
+      timer.start(memo.id, taskTitle ?? memoApi.getDisplayTitle(memo))
+      return
+    }
+
+    const last = lastMemo.value
+    if (last) timer.start(last.id, memoApi.getDisplayTitle(last))
+    else timer.start(null)
+  }
+
+  /** 再来一轮：只复用 start 路径，Session 仍由阶段结束时的 effect 写入 */
+  function repeatLastRound(): boolean {
+    const last = lastMemo.value
+    if (!last) return false
+    timer.start(last.id, memoApi.getDisplayTitle(last))
+    return true
+  }
+
   return {
     ...timer,
+    start: startRound,
+    repeatLastRound,
+    lastMemo,
     abandon: abandonAndRecord,
     startBridge,
     recoveryPlan,

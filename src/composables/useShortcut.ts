@@ -13,6 +13,7 @@ import { useSettings } from './useSettings'
 import { useTimer } from './useTimer'
 import { runTimerCommand, type TimerCommandTarget } from './useTimerCommands'
 import { validateShortcutConfig, type ShortcutConfig } from '../utils/shortcuts'
+import { requestQuickAddFocus } from './useQuickAddFocus'
 
 interface ShortcutUpdateResult {
   ok: boolean
@@ -24,14 +25,29 @@ export const shortcutError = ref<string | null>(null)
 
 let listenerStarted = false
 
+/**
+ * showWindow 的语义是「快速记一条」：清单没开就打开，已经开着就不关，
+ * 然后统一聚焦首页的快速输入框。失败只影响聚焦，不影响计时。
+ */
+async function openPanelForQuickAdd() {
+  if (isTauri()) {
+    try {
+      const visible = await invoke<boolean>('is_panel_visible')
+      if (!visible) await invoke('toggle_panel')
+    } catch {
+      // 窗口操作失败时仍然尝试聚焦，不打断当前计时
+    }
+  }
+  requestQuickAddFocus()
+}
+
 function startCommandListener(timer: TimerCommandTarget) {
   if (listenerStarted) return
   listenerStarted = true
   listen<string>('shortcut-command', ({ payload }) => {
     const action = String(payload ?? '')
     if (action === 'show-window') {
-      // 打开/收起专注清单，和托盘「打开专注清单」行为一致
-      invoke('toggle_panel').catch(() => {})
+      void openPanelForQuickAdd()
       return
     }
     runTimerCommand(action, timer)

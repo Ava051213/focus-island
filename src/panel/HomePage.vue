@@ -6,6 +6,7 @@ import { eventRelativeLabel, eventTime, eventsNow, useEvents } from '../composab
 import { useAiButler, type CoachFeedback } from '../composables/useAiButler'
 import type { CoachPlan } from '../composables/useAi'
 import { useWeeklyGoals } from '../composables/useWeeklyGoals'
+import { quickAddRequest } from '../composables/useQuickAddFocus'
 import { useDailyStats } from '../composables/useDailyStats'
 import WeeklyGoals from './WeeklyGoals.vue'
 
@@ -31,6 +32,8 @@ const {
   displayTime,
   activeTaskId,
   activeTaskTitle,
+  lastMemo,
+  repeatLastRound,
 } = useTimerBridge()
 
 /** 按用户拖好的顺序取前三条，作为「现在可以动手」的候选 */
@@ -41,12 +44,23 @@ const upcomingEvents = computed(() => withinDays(7).slice(0, 5))
 /** 随手记一句：回车或点按钮保存，不选分类、不写标题 */
 const quickText = ref('')
 const quickSaved = ref(false)
+const quickInputRef = ref<HTMLInputElement | null>(null)
 let quickSavedTimer: ReturnType<typeof setTimeout> | null = null
 
+// 快捷键「快速记一条」：等首页切回来后再把焦点送进输入框
+watch(quickAddRequest, () => {
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => quickInputRef.value?.focus())
+  })
+})
+
 function saveQuickMemo() {
+  // 标题重复也允许：每条备忘是独立对象，不静默去重
   const created = addQuickMemo(quickText.value)
   if (!created) return
   quickText.value = ''
+  // 点「记下」按钮会抢走焦点，这里拉回输入框，方便连续录入
+  quickInputRef.value?.focus()
   quickSaved.value = true
   if (quickSavedTimer) clearTimeout(quickSavedTimer)
   quickSavedTimer = setTimeout(() => {
@@ -375,6 +389,7 @@ function onCoachNoteEnter(event: KeyboardEvent) {
 
     <div class="quick-capture">
       <input
+        ref="quickInputRef"
         v-model="quickText"
         class="quick-input"
         type="text"
@@ -418,7 +433,12 @@ function onCoachNoteEnter(event: KeyboardEvent) {
       </div>
 
       <div v-else class="empty">
-        还没有小记呢～先去「小记」随手写一条，回来我陪你开始呀
+        还没有要做的事呀～在上面输入一条，回车添加；点顶部胶囊就能开始专注
+      </div>
+
+      <div v-if="!activeTaskId && lastMemo" class="repeat-row">
+        <span class="repeat-title">上次：{{ getDisplayTitle(lastMemo) }}</span>
+        <button class="repeat-btn" @click="repeatLastRound">再来一轮</button>
       </div>
     </section>
 
@@ -1111,6 +1131,43 @@ function onCoachNoteEnter(event: KeyboardEvent) {
 .empty.small {
   padding: 16px;
   font-size: 11px;
+}
+
+.repeat-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.repeat-title {
+  min-width: 0;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.45);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.repeat-btn {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border: none;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--focus-color) 22%, transparent);
+  color: color-mix(in srgb, var(--focus-color) 78%, white);
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.repeat-btn:hover {
+  background: color-mix(in srgb, var(--focus-color) 34%, transparent);
 }
 
 .undo-toast {

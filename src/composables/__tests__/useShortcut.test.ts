@@ -160,9 +160,42 @@ describe('useShortcut', () => {
 
     shortcutListener()?.({ payload: 'toggle-timer' })
     expect(timer.pause).toHaveBeenCalledTimes(1)
+  })
+
+  it('show-window 打开关闭的清单并请求聚焦，不重新注册快捷键', async () => {
+    await setup({ enabled: true, toggleTimer: 'Ctrl+Alt+Space', showWindow: 'Ctrl+Shift+Space' })
+    h.invoke.mockClear()
+    h.invoke.mockImplementation(async (...args: unknown[]) => {
+      if (String(args[0]) === 'is_panel_visible') return false
+      return { ok: true, errors: [] }
+    })
+    const { quickAddRequest } = await import('../useQuickAddFocus')
+    const before = quickAddRequest.value
 
     shortcutListener()?.({ payload: 'show-window' })
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(h.invoke).toHaveBeenCalledWith('is_panel_visible')
     expect(h.invoke).toHaveBeenCalledWith('toggle_panel')
+    expect(quickAddRequest.value).toBe(before + 1)
+    expect(h.invoke).not.toHaveBeenCalledWith('update_shortcuts', expect.anything())
+  })
+
+  it('清单已打开时 show-window 只聚焦，不关闭窗口', async () => {
+    await setup({ enabled: true, toggleTimer: 'Ctrl+Alt+Space', showWindow: 'Ctrl+Shift+Space' })
+    h.invoke.mockClear()
+    h.invoke.mockImplementation(async (...args: unknown[]) => {
+      if (String(args[0]) === 'is_panel_visible') return true
+      return { ok: true, errors: [] }
+    })
+
+    shortcutListener()?.({ payload: 'show-window' })
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(h.invoke).toHaveBeenCalledWith('is_panel_visible')
+    expect(h.invoke).not.toHaveBeenCalledWith('toggle_panel')
   })
 
   it('非 Tauri 环境不调用 invoke', async () => {

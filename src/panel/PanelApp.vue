@@ -8,6 +8,7 @@ import { useTimerBridge } from '../composables/useTimerBridge'
 import { useSettings } from '../composables/useSettings'
 import { useShortcut } from '../composables/useShortcut'
 import { useTraySync } from '../composables/useTraySync'
+import { quickAddRequest } from '../composables/useQuickAddFocus'
 import { useEvents } from '../composables/useEvents'
 import { useMemos } from '../composables/useMemos'
 import { useDailyStats } from '../composables/useDailyStats'
@@ -64,6 +65,11 @@ const CLOSE_ANIMATIONS = ['panel-close', 'panel-fade-out']
 startAiButler()
 
 const currentView = ref<'tasks' | 'events' | 'settings' | 'memos' | 'stats'>('tasks')
+
+// 快捷键「快速记一条」触发时，无论在哪个页面都切回首页
+watch(quickAddRequest, () => {
+  currentView.value = 'tasks'
+})
 const memoSearchQuery = ref('')
 const cachedPanelViews = ['HomePage', 'EventsPage', 'SettingsPage', 'MemoPage', 'StatsPage']
 
