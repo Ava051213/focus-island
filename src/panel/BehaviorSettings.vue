@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import { useSettings } from '../composables/useSettings'
 
-const { settings } = useSettings()
+const { settings, autostartError } = useSettings()
 
 // 低频开关默认收起，常用项留在外面
 const advancedOpen = ref(false)
@@ -49,6 +49,7 @@ const advancedSummary = computed(() =>
       <div class="update-copy">
         <span class="update-label">开机就来陪你</span>
         <span class="update-hint">开机自动出现，不用你找我啦</span>
+        <span v-if="autostartError" class="update-hint is-error">{{ autostartError }}</span>
       </div>
       <label class="switch" aria-label="开机就来陪你">
         <input v-model="settings.autoLaunch" type="checkbox" />
@@ -153,6 +154,10 @@ const advancedSummary = computed(() =>
   font-size: 10px;
   line-height: 1.4;
   color: rgba(255, 255, 255, 0.36);
+}
+
+.update-hint.is-error {
+  color: #f87171;
 }
 
 .switch {

@@ -10,6 +10,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
+mod autostart;
 mod shortcuts;
 mod tray;
 
@@ -426,6 +427,12 @@ fn set_close_to_tray<R: Runtime>(app: AppHandle<R>, enabled: bool) {
         .store(enabled, Ordering::Relaxed);
 }
 
+/// 按本地开关同步系统开机自启，失败原因回传给设置页。
+#[tauri::command]
+fn set_autostart(app: AppHandle, enabled: bool) -> Result<(), String> {
+    autostart::set_autostart(&app, enabled)
+}
+
 /// 前端把计时状态推过来，更新托盘菜单文案、tooltip 与 macOS 菜单栏标题。
 /// 只改文案，不承载计时逻辑。
 #[tauri::command]
@@ -683,6 +690,7 @@ pub fn run() {
             toggle_panel,
             is_panel_visible,
             set_close_to_tray,
+            set_autostart,
             update_tray_state,
             update_shortcuts,
         ])

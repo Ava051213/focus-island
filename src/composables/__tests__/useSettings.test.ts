@@ -4,18 +4,12 @@ import { DEFAULT_TOGGLE_SHORTCUT } from '../../utils/shortcuts'
 const h = vi.hoisted(() => ({
   tauri: true,
   files: new Map<string, string>(),
-  enable: vi.fn(async () => {}),
-  disable: vi.fn(async () => {}),
+  invoke: vi.fn(async () => {}),
 }))
 
 vi.mock('@tauri-apps/api/core', () => ({
   isTauri: () => h.tauri,
-  invoke: vi.fn(async () => {}),
-}))
-
-vi.mock('@tauri-apps/plugin-autostart', () => ({
-  enable: h.enable,
-  disable: h.disable,
+  invoke: h.invoke,
 }))
 
 vi.mock('@tauri-apps/plugin-fs', () => ({
@@ -54,8 +48,7 @@ describe('useSettings 系统集成', () => {
   beforeEach(() => {
     h.tauri = true
     h.files.clear()
-    h.enable.mockClear()
-    h.disable.mockClear()
+    h.invoke.mockClear()
     vi.resetModules()
   })
 
@@ -65,8 +58,7 @@ describe('useSettings 系统集成', () => {
 
     await syncAutostart()
 
-    expect(h.enable).not.toHaveBeenCalled()
-    expect(h.disable).not.toHaveBeenCalled()
+    expect(h.invoke).not.toHaveBeenCalled()
   })
 
   it('Tauri 环境按本地开关启用 / 关闭自启', async () => {
@@ -75,12 +67,11 @@ describe('useSettings 系统集成', () => {
 
     settings.value.autoLaunch = true
     await syncAutostart()
-    expect(h.enable).toHaveBeenCalled()
+    expect(h.invoke).toHaveBeenCalledWith('set_autostart', { enabled: true })
 
     settings.value.autoLaunch = false
     await syncAutostart()
-    // 设置监听和手动调用都会走 disable，这里只关心它确实被调用
-    expect(h.disable).toHaveBeenCalled()
+    expect(h.invoke).toHaveBeenCalledWith('set_autostart', { enabled: false })
   })
 
   it('启动时把 v1 settings 迁移成 v2 结构', async () => {

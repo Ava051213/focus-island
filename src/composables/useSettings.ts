@@ -1,6 +1,5 @@
 import { ref, computed, watch, watchEffect } from 'vue'
-import { isTauri } from '@tauri-apps/api/core'
-import { enable, disable } from '@tauri-apps/plugin-autostart'
+import { invoke, isTauri } from '@tauri-apps/api/core'
 import { createPersistedStore } from './persistence'
 import {
   defaultNotificationSettings,
@@ -162,19 +161,19 @@ const store = createPersistedStore({
 })
 const loaded = store.loaded
 
+/** 开机自启同步失败的原因，供设置页展示 */
+export const autostartError = ref<string | null>(null)
+
 export async function syncAutostart() {
   // 以本地设置为准：开关开着就确保系统里有启动项，关着就确保删掉。
   // 不要反过来用系统注册状态覆盖开关，启动项被清理时会把开关静默关掉。
   // Web 预览 / Vitest 没有 Tauri 运行时，直接跳过，避免无意义的 invoke 噪音。
   if (!isTauri()) return
   try {
-    if (settings.value.autoLaunch) {
-      await enable()
-    } else {
-      await disable()
-    }
+    await invoke('set_autostart', { enabled: settings.value.autoLaunch })
+    autostartError.value = null
   } catch (e) {
-    console.error('[autostart] sync failed', e)
+    autostartError.value = String(e)
   }
 }
 
@@ -184,13 +183,9 @@ function ensureInitialized() {
   if (!initPromise) initPromise = store.ensureLoaded().then(syncAutostart)
 }
 
-watch(() => settings.value.autoLaunch, (val) => {
+watch(() => settings.value.autoLaunch, () => {
   if (!loaded.value || !isTauri()) return
-  if (val) {
-    enable().catch(() => { settings.value.autoLaunch = false })
-  } else {
-    disable().catch(() => {})
-  }
+  void syncAutostart()
 })
 
 watchEffect(() => {
@@ -205,5 +200,5 @@ export function useSettings() {
   ensureSystemSchemeListener()
   ensureInitialized()
 
-  return { settings, settingsReady: loaded, activeTheme, applyThemeToDOM }
+  return { settings, settingsReady: loaded, activeTheme, applyThemeToDOM, autostartError }
 }
