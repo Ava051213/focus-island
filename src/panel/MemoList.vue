@@ -360,6 +360,7 @@ function handleItemClick(memo: Memo) {
           <div v-for="memo in completedMemos" :key="memo.id" class="archive-item">
             <div class="archive-copy">
               <span class="archive-item-title">{{ getDisplayTitle(memo) }}</span>
+              <span class="archive-item-stats">{{ memoStatsLabels[memo.id] }}</span>
               <span class="archive-item-time">{{ formatCompletedAt(memo) }} 完成</span>
             </div>
             <button class="archive-restore-btn" @click="handleRestoreMemo(memo)">放回来</button>
@@ -761,6 +762,11 @@ function handleItemClick(memo: Memo) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.archive-item-stats {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.46);
 }
 
 .archive-item-time {
