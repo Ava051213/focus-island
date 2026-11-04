@@ -177,6 +177,45 @@ export function aggregateSessionsByDate(
   }
 }
 
+export interface TaskFocusStats {
+  /** 完成的番茄轮数 */
+  pomodoros: number
+  /** 完成轮次的实际专注秒数 */
+  focusSeconds: number
+}
+
+/**
+ * 按小记聚合完成的番茄；跳过和中断不计入。
+ * 删除或改名都不影响，Session 里存的是小记 id。
+ */
+export function aggregateSessionsByTask(
+  sessions: readonly Session[],
+): Map<string, TaskFocusStats> {
+  const stats = new Map<string, TaskFocusStats>()
+
+  for (const session of sessions) {
+    if (session.status !== 'completed' || !session.taskId) continue
+    const entry = stats.get(session.taskId) ?? { pomodoros: 0, focusSeconds: 0 }
+    entry.pomodoros += 1
+    entry.focusSeconds += session.actualDuration
+    stats.set(session.taskId, entry)
+  }
+
+  return stats
+}
+
+/** 把专注秒数写成便于阅读的时长 */
+export function formatFocusDuration(seconds: number): string {
+  if (seconds < 60) return '不到 1 分钟'
+
+  const totalMinutes = Math.round(seconds / 60)
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  if (hours <= 0) return `${minutes} 分钟`
+  if (minutes === 0) return `${hours} 小时`
+  return `${hours} 小时 ${minutes} 分`
+}
+
 export interface DailyTotals {
   date: string
   pomodoros: number

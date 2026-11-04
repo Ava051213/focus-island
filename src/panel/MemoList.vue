@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useMemos, type Memo } from '../composables/useMemos'
+import { useSessions } from '../composables/useSessions'
 import { useTimerBridge } from '../composables/useTimerBridge'
+import { aggregateSessionsByTask, formatFocusDuration } from '../timer/sessions'
 import MemoCategoryTag from './MemoCategoryTag.vue'
 
 const props = defineProps<{
@@ -24,6 +26,24 @@ const {
   getDisplayTitle,
 } = useMemos()
 const { start } = useTimerBridge()
+const { sessions } = useSessions()
+
+/** 每条小记的番茄数与累计专注时长，没有记录就不显示 */
+const memoStatsLabels = computed(() => {
+  const byTask = aggregateSessionsByTask(sessions.value)
+  const labels: Record<string, string> = {}
+
+  for (const memo of [...props.memos, ...completedMemos.value]) {
+    const stat = byTask.get(memo.id)
+    const pomodoros = Math.max(stat?.pomodoros ?? 0, memo.pomodoroCount ?? 0)
+    if (pomodoros <= 0) continue
+
+    const duration = stat && stat.focusSeconds > 0 ? formatFocusDuration(stat.focusSeconds) : ''
+    labels[memo.id] = duration ? `${pomodoros} 个番茄 · ${duration}` : `${pomodoros} 个番茄`
+  }
+
+  return labels
+})
 
 /** 从列表里直接开一轮专注，和首页的播放键是同一套逻辑 */
 function handleStartFocus(memo: Memo, event: Event) {
@@ -286,6 +306,7 @@ function handleItemClick(memo: Memo) {
       </div>
       <div class="memo-item-meta">
         <MemoCategoryTag :category-id="memo.categoryId" />
+        <span v-if="memoStatsLabels[memo.id]" class="memo-item-stats">{{ memoStatsLabels[memo.id] }}</span>
         <span class="memo-item-time">{{ formatTime(memo.updatedAt) }}</span>
       </div>
       <div class="memo-item-preview">{{ getContentPreview(memo.content) }}</div>
@@ -580,6 +601,12 @@ function handleItemClick(memo: Memo) {
 .memo-item-time {
   font-size: 11px;
   color: rgba(255, 255, 255, 0.35);
+}
+
+.memo-item-stats {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.46);
+  white-space: nowrap;
 }
 
 .memo-item-preview {
