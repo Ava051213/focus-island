@@ -77,7 +77,7 @@ const heatmapDays = computed<HeatDay[]>(() => {
     days.push({
       date: getDateString(cursor),
       pomodoros,
-      intensity: pomodoros >= 5 ? 3 : pomodoros >= 3 ? 2 : pomodoros >= 1 ? 1 : 0,
+      intensity: pomodoros >= 24 ? 4 : pomodoros >= 12 ? 3 : pomodoros >= 6 ? 2 : pomodoros >= 1 ? 1 : 0,
       label: `${cursor.getMonth() + 1}-${cursor.getDate()}`,
     })
     cursor.setDate(cursor.getDate() + 1)
@@ -234,9 +234,10 @@ const maxPomodoros = computed(() => Math.max(...weekTrend.value.map(d => d.pomod
       </div>
       <div class="heatmap-legend">
         <span class="legend-item"><span class="legend-box intensity-0"></span>无</span>
-        <span class="legend-item"><span class="legend-box intensity-1"></span>1-2</span>
-        <span class="legend-item"><span class="legend-box intensity-2"></span>3-5</span>
-        <span class="legend-item"><span class="legend-box intensity-3"></span>5+</span>
+        <span class="legend-item"><span class="legend-box intensity-1"></span>1-5</span>
+        <span class="legend-item"><span class="legend-box intensity-2"></span>6-11</span>
+        <span class="legend-item"><span class="legend-box intensity-3"></span>12-23</span>
+        <span class="legend-item"><span class="legend-box intensity-4"></span>24+</span>
       </div>
     </div>
 
@@ -483,15 +484,20 @@ const maxPomodoros = computed(() => Math.max(...weekTrend.value.map(d => d.pomod
 }
 
 .heat-cell.intensity-1 {
-  background: color-mix(in srgb, var(--focus-color) 25%, transparent);
+  background: color-mix(in srgb, var(--focus-color) 20%, transparent);
 }
 
 .heat-cell.intensity-2 {
-  background: color-mix(in srgb, var(--focus-color) 55%, transparent);
+  background: color-mix(in srgb, var(--focus-color) 42%, transparent);
 }
 
 .heat-cell.intensity-3 {
+  background: color-mix(in srgb, var(--focus-color) 68%, transparent);
+}
+
+.heat-cell.intensity-4 {
   background: var(--focus-color);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--focus-color) 45%, transparent);
 }
 
 .cell-tooltip {
@@ -537,15 +543,20 @@ const maxPomodoros = computed(() => Math.max(...weekTrend.value.map(d => d.pomod
 }
 
 .legend-box.intensity-1 {
-  background: color-mix(in srgb, var(--focus-color) 25%, transparent);
+  background: color-mix(in srgb, var(--focus-color) 20%, transparent);
 }
 
 .legend-box.intensity-2 {
-  background: color-mix(in srgb, var(--focus-color) 55%, transparent);
+  background: color-mix(in srgb, var(--focus-color) 42%, transparent);
 }
 
 .legend-box.intensity-3 {
+  background: color-mix(in srgb, var(--focus-color) 68%, transparent);
+}
+
+.legend-box.intensity-4 {
   background: var(--focus-color);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--focus-color) 45%, transparent);
 }
 
 .trend-chart {
