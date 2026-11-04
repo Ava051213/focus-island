@@ -10,7 +10,6 @@ const advancedOpen = ref(false)
 const advancedSummary = computed(() =>
   [
     settings.value.notifications.sound ? '提示音开' : '提示音关',
-    settings.value.hideOnFullscreen ? '避让开' : '避让关',
     settings.value.autoLaunch ? '自启开' : '自启关',
   ].join(' · '),
 )
@@ -32,16 +31,6 @@ const advancedSummary = computed(() =>
       </div>
       <label class="switch" aria-label="结束提示音">
         <input v-model="settings.notifications.sound" type="checkbox" />
-        <span class="switch-track"></span>
-      </label>
-    </div>
-    <div v-if="advancedOpen" class="update-toggle-row" style="margin-top: 8px;">
-      <div class="update-copy">
-        <span class="update-label">全屏时自动避让</span>
-        <span class="update-hint">看视频、打游戏、演示时先躲起来，番茄结束再冒出来提醒</span>
-      </div>
-      <label class="switch" aria-label="全屏时自动避让">
-        <input v-model="settings.hideOnFullscreen" type="checkbox" />
         <span class="switch-track"></span>
       </label>
     </div>

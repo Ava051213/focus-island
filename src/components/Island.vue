@@ -29,18 +29,16 @@ const {
     onCapsuleSkip,
 } = bridge;
 
-// 窗口交互：悬停、全屏避让、点击穿透、拖动、尺寸与位置
+// 窗口交互：悬停、点击穿透、拖动、尺寸与位置
 const interaction = useIslandInteraction({ notificationType });
 const {
     hoverActive,
-    islandHiddenByFullscreen,
     dragging,
     onIslandClick,
     onCapsulePointerDown,
     onCapsulePointerMove,
     onCapsulePointerUp,
     syncClickThrough,
-    applyFullscreenVisibility,
     applyWindowSize,
 } = interaction;
 
@@ -76,8 +74,6 @@ watch(notificationType, (val) => {
     setNotificationVisible(val !== null);
     syncClickThrough();
     void applyWindowSize();
-    // 全屏把岛藏起来时，通知照常浮出来；处理完再藏回去
-    applyFullscreenVisibility();
 });
 
 onMounted(async () => {
@@ -94,7 +90,6 @@ onUnmounted(() => {
 <template>
     <div
         class="island-container w-full h-full flex items-start justify-center"
-        :class="{ 'fullscreen-hidden': islandHiddenByFullscreen }"
     >
         <div class="island-stack">
             <div
@@ -140,7 +135,6 @@ onUnmounted(() => {
                     <template v-else>
                         <CapsuleIdle
                             v-if="state === 'idle' || state === 'alert'"
-                            :paused="islandHiddenByFullscreen"
                         />
                         <CapsuleFocus
                             v-else-if="state === 'focus' || state === 'break'"
@@ -185,13 +179,6 @@ onUnmounted(() => {
 <style scoped>
 .island-container {
     /* items-start justify-center to stick to top edge */
-}
-
-/* 全屏避让：只淡出，不隐藏窗口，保证轮询和本地倒计时照常运行 */
-.island-container.fullscreen-hidden {
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.2s ease;
 }
 
 .island-stack {

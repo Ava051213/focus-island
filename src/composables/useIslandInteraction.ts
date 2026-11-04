@@ -23,9 +23,6 @@ const BASE_HEIGHT = 34
 const HOVER_POLL_IDLE_MS = 400
 const HOVER_POLL_ACTIVE_MS = 200
 
-// 全屏检测本身不便宜，1.5 秒一次足够；上一次检查结束后再排下一次，避免调用堆叠
-const FULLSCREEN_POLL_MS = 1500
-
 export function useIslandInteraction(options: IslandInteractionOptions) {
   const { settings, settingsReady } = useSettings()
   const { dockCollapsed, updatePointerOver, DOCK_STRIP_WINDOW_H } = useDockMode()
@@ -35,12 +32,9 @@ export function useIslandInteraction(options: IslandInteractionOptions) {
 
   const islandWindow = getCurrentWindow()
   const hoverActive = ref(false)
-  const fullscreenActive = ref(false)
-  const islandHiddenByFullscreen = ref(false)
   const dragging = ref(false)
 
   let hoverTimer: ReturnType<typeof setTimeout> | null = null
-  let fullscreenTimer: ReturnType<typeof setTimeout> | null = null
 
   let dragPointerId: number | null = null
   let dragStartScreenX = 0
@@ -54,62 +48,9 @@ export function useIslandInteraction(options: IslandInteractionOptions) {
   let windowWidth = 0
   let currentWindowX = 0
 
-  async function applyFullscreenVisibility() {
-    const shouldHide = fullscreenActive.value && notificationType.value === null
-    if (shouldHide === islandHiddenByFullscreen.value) return
-    islandHiddenByFullscreen.value = shouldHide
-    if (shouldHide) hoverActive.value = false
-    // 不真正 hide 窗口：藏起来的窗口 JS 计时器会被系统降频，轮询就停了。
-    syncClickThrough()
-  }
-
-  function scheduleFullscreenPoll() {
-    if (fullscreenTimer !== null) window.clearTimeout(fullscreenTimer)
-    fullscreenTimer = window.setTimeout(runFullscreenPoll, FULLSCREEN_POLL_MS)
-  }
-
-  async function runFullscreenPoll() {
-    fullscreenTimer = null
-    try {
-      if (!settings.value.hideOnFullscreen) {
-        if (fullscreenActive.value) {
-          fullscreenActive.value = false
-          applyFullscreenVisibility()
-        }
-        return
-      }
-      const full = await invoke<boolean>('is_foreground_fullscreen')
-      if (full !== fullscreenActive.value) {
-        fullscreenActive.value = full
-        if (full) {
-          // 面板也一起收起，别挡着全屏内容
-          try {
-            if (await invoke<boolean>('is_panel_visible')) {
-              await invoke('hide_panel')
-            }
-          } catch {
-            // 忽略
-          }
-        }
-        applyFullscreenVisibility()
-      }
-    } catch {
-      // 不支持检测的平台直接忽略
-    } finally {
-      scheduleFullscreenPoll()
-    }
-  }
-
-  function startFullscreenPolling() {
-    if (fullscreenTimer !== null) return
-    void runFullscreenPoll()
-  }
-
   // 通知横幅可见，或鼠标正悬停在岛上时，关闭鼠标穿透以便接收点击。
-  // 全屏避让期间岛只是视觉上淡出，必须保持穿透。
   function syncClickThrough() {
-    const interactive = !islandHiddenByFullscreen.value
-      && (notificationType.value !== null || hoverActive.value)
+    const interactive = notificationType.value !== null || hoverActive.value
     invoke('set_click_through', { ignore: !interactive })
   }
 
@@ -121,23 +62,17 @@ export function useIslandInteraction(options: IslandInteractionOptions) {
 
   async function runHoverPoll() {
     hoverTimer = null
-    // 全屏避让期间岛不可见也不可点，没必要查鼠标；空转保持轮询，退出全屏后自动恢复
-    if (!islandHiddenByFullscreen.value) {
-      if (notificationType.value === null && !dragging.value) {
-        try {
-          const over = await invoke<boolean>('is_mouse_over_window', { pad: 2 })
-          updatePointerOver(over)
-          if (over !== hoverActive.value) {
-            hoverActive.value = over
-            syncClickThrough()
-          }
-        } catch {
-          // 命令不可用时忽略
+    if (notificationType.value === null && !dragging.value) {
+      try {
+        const over = await invoke<boolean>('is_mouse_over_window', { pad: 2 })
+        updatePointerOver(over)
+        if (over !== hoverActive.value) {
+          hoverActive.value = over
+          syncClickThrough()
         }
+      } catch {
+        // 命令不可用时忽略
       }
-    } else if (hoverActive.value) {
-      hoverActive.value = false
-      syncClickThrough()
     }
     scheduleHoverPoll()
   }
@@ -298,7 +233,6 @@ export function useIslandInteraction(options: IslandInteractionOptions) {
   function start() {
     syncClickThrough()
     startHoverPolling()
-    startFullscreenPolling()
     void applyWindowSize()
   }
 
@@ -306,10 +240,6 @@ export function useIslandInteraction(options: IslandInteractionOptions) {
     if (hoverTimer !== null) {
       window.clearTimeout(hoverTimer)
       hoverTimer = null
-    }
-    if (fullscreenTimer !== null) {
-      window.clearTimeout(fullscreenTimer)
-      fullscreenTimer = null
     }
   }
 
@@ -325,15 +255,12 @@ export function useIslandInteraction(options: IslandInteractionOptions) {
 
   return {
     hoverActive,
-    fullscreenActive,
-    islandHiddenByFullscreen,
     dragging,
     onIslandClick,
     onCapsulePointerDown,
     onCapsulePointerMove,
     onCapsulePointerUp,
     syncClickThrough,
-    applyFullscreenVisibility,
     applyWindowSize,
     start,
     stop,

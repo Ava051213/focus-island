@@ -40,7 +40,6 @@ export interface Settings {
   shortcuts: ShortcutSettings      // 全局快捷键（开始/暂停、打开清单）
   tray: TraySettings               // 关闭窗口时隐藏到托盘
   notifications: NotificationSettings // 系统通知开关与声音
-  hideOnFullscreen: boolean // 前台全屏（游戏/视频/演示）时自动把岛藏起来
   autoLaunch: boolean       // 开机自动启动
   aiSiliconKey: string      // 硅基流动 API Key（主力平台，仅存本机）
   aiSiliconModel: string    // 主力模型，默认 Qwen/Qwen3-8B
@@ -71,7 +70,6 @@ const DEFAULT_SETTINGS: Settings = {
   shortcuts: defaultShortcutSettings(),
   tray: defaultTraySettings(),
   notifications: defaultNotificationSettings(),
-  hideOnFullscreen: true,
   autoLaunch: true,
   aiSiliconKey: '',
   aiSiliconModel: 'Qwen/Qwen3-8B',

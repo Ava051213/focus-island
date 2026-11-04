@@ -20,19 +20,10 @@ use core_graphics::event::CGEvent;
 use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
 
 #[cfg(target_os = "windows")]
-use windows::Win32::Foundation::{POINT, RECT};
-#[cfg(target_os = "windows")]
-use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_EXTENDED_FRAME_BOUNDS};
-#[cfg(target_os = "windows")]
-use windows::Win32::Graphics::Gdi::{
-    GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
-};
-#[cfg(target_os = "windows")]
-use windows::Win32::System::Threading::GetCurrentProcessId;
+use windows::Win32::Foundation::POINT;
 #[cfg(target_os = "windows")]
 use windows::Win32::UI::WindowsAndMessaging::{
-    AllowSetForegroundWindow, GetClassNameW, GetCursorPos, GetForegroundWindow, GetWindowRect,
-    GetWindowThreadProcessId, ASFW_ANY,
+    AllowSetForegroundWindow, GetCursorPos, ASFW_ANY,
 };
 
 #[cfg(target_os = "linux")]
@@ -175,89 +166,6 @@ fn is_mouse_over_window<R: Runtime>(window: WebviewWindow<R>, pad: f64) -> bool 
 #[tauri::command]
 fn set_click_through<R: Runtime>(window: WebviewWindow<R>, ignore: bool) {
     let _ = window.set_ignore_cursor_events(ignore);
-}
-
-/// 前台窗口是否铺满整块屏幕（不含任务栏的最大化窗口不算全屏）。
-/// 目前只在 Windows 上检测，其它平台一律返回 false。
-#[cfg(target_os = "windows")]
-fn foreground_fullscreen() -> bool {
-    unsafe {
-        let hwnd = GetForegroundWindow();
-        if hwnd.0.is_null() {
-            return false;
-        }
-
-        // 自己的窗口（岛或面板）不算
-        let mut pid = 0u32;
-        GetWindowThreadProcessId(hwnd, Some(&mut pid as *mut u32));
-        if pid == GetCurrentProcessId() {
-            return false;
-        }
-
-        // 桌面、任务栏、开始菜单也铺满屏幕，但不是全屏应用
-        let mut class_buf = [0u16; 128];
-        let class_len = GetClassNameW(hwnd, &mut class_buf) as usize;
-        if class_len > 0 {
-            let class = String::from_utf16_lossy(&class_buf[..class_len.min(class_buf.len())]);
-            if matches!(
-                class.as_str(),
-                "Progman"
-                    | "WorkerW"
-                    | "Shell_TrayWnd"
-                    | "Shell_SecondaryTrayWnd"
-                    | "Windows.UI.Core.CoreWindow"
-            ) {
-                return false;
-            }
-        }
-
-        // 必须用 DWM 的真实可见边界：GetWindowRect 给最大化窗口的矩形会向外多出一圈
-        // 看不见的边框，导致宽高比屏幕还大，被误判成全屏
-        let mut rect = RECT::default();
-        let dwm_ok = DwmGetWindowAttribute(
-            hwnd,
-            DWMWA_EXTENDED_FRAME_BOUNDS,
-            &mut rect as *mut RECT as *mut std::ffi::c_void,
-            std::mem::size_of::<RECT>() as u32,
-        )
-        .is_ok();
-        if !dwm_ok && GetWindowRect(hwnd, &mut rect).is_err() {
-            return false;
-        }
-
-        let monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-        if monitor.0.is_null() {
-            return false;
-        }
-        let mut info = MONITORINFO {
-            cbSize: std::mem::size_of::<MONITORINFO>() as u32,
-            ..Default::default()
-        };
-        if !GetMonitorInfoW(monitor, &mut info).as_bool() {
-            return false;
-        }
-
-        let mon = info.rcMonitor;
-        let tolerance = 4;
-        let width = rect.right - rect.left;
-        let height = rect.bottom - rect.top;
-        let mon_width = mon.right - mon.left;
-        let mon_height = mon.bottom - mon.top;
-        (rect.left - mon.left).abs() <= tolerance
-            && (rect.top - mon.top).abs() <= tolerance
-            && (width - mon_width).abs() <= 8
-            && (height - mon_height).abs() <= 8
-    }
-}
-
-#[cfg(not(target_os = "windows"))]
-fn foreground_fullscreen() -> bool {
-    false
-}
-
-#[tauri::command]
-fn is_foreground_fullscreen() -> bool {
-    foreground_fullscreen()
 }
 
 #[tauri::command]
@@ -679,7 +587,6 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             is_mouse_over_window,
             set_click_through,
-            is_foreground_fullscreen,
             set_island_size,
             set_island_custom_size,
             emit_island_panel_motion,
