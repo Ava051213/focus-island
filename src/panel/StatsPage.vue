@@ -3,7 +3,6 @@ import { ref, computed } from 'vue'
 import { useDailyStats } from '../composables/useDailyStats'
 import { useAchievements } from '../composables/useAchievements'
 import { useEvents } from '../composables/useEvents'
-import WeeklyGoals from './WeeklyGoals.vue'
 
 type TimeRange = 'today' | 'week' | 'month' | 'all'
 
@@ -240,9 +239,6 @@ const maxPomodoros = computed(() => Math.max(...weekTrend.value.map(d => d.pomod
         <span class="legend-item"><span class="legend-box intensity-4"></span>24+</span>
       </div>
     </div>
-
-    <!-- Weekly Goals -->
-    <WeeklyGoals />
 
     <!-- Week Trend -->
     <div class="section">
