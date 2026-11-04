@@ -1,6 +1,17 @@
 import { ref, computed, watch, watchEffect } from 'vue'
+import { isTauri } from '@tauri-apps/api/core'
 import { enable, disable } from '@tauri-apps/plugin-autostart'
 import { createPersistedStore } from './persistence'
+import {
+  defaultNotificationSettings,
+  defaultShortcutSettings,
+  defaultTraySettings,
+  migrateSettingsV1ToV2,
+  normalizeSettingsShape,
+  type NotificationSettings,
+  type ShortcutSettings,
+  type TraySettings,
+} from '../utils/settingsMigration'
 
 export interface ThemePreset {
   id: string
@@ -27,8 +38,9 @@ export interface Settings {
   colorMode: ColorMode
   activeThemeId: string
   idleMottos: string[]       // 空闲时轮播的激励语，空数组则用内置默认
-  shortcutKey: string        // 全局快捷键，如 "Alt+Space"
-  notificationSound: boolean // 通知提示音开关
+  shortcuts: ShortcutSettings      // 全局快捷键（开始/暂停、打开清单）
+  tray: TraySettings               // 关闭窗口时隐藏到托盘
+  notifications: NotificationSettings // 系统通知开关与声音
   hideOnFullscreen: boolean // 前台全屏（游戏/视频/演示）时自动把岛藏起来
   autoLaunch: boolean       // 开机自动启动
   aiSiliconKey: string      // 硅基流动 API Key（主力平台，仅存本机）
@@ -57,8 +69,9 @@ const DEFAULT_SETTINGS: Settings = {
   colorMode: 'system',
   activeThemeId: 'classic',
   idleMottos: [],
-  shortcutKey: 'Ctrl+Alt+Space',
-  notificationSound: true,
+  shortcuts: defaultShortcutSettings(),
+  tray: defaultTraySettings(),
+  notifications: defaultNotificationSettings(),
   hideOnFullscreen: true,
   autoLaunch: true,
   aiSiliconKey: '',
@@ -68,7 +81,17 @@ const DEFAULT_SETTINGS: Settings = {
   aiAutoEnabled: true,
 }
 
-const settings = ref<Settings>({ ...DEFAULT_SETTINGS })
+/** 浅拷贝会共享嵌套对象，修改设置时会污染默认值 */
+function cloneSettings(source: Settings): Settings {
+  return {
+    ...source,
+    shortcuts: { ...source.shortcuts },
+    tray: { ...source.tray },
+    notifications: { ...source.notifications },
+  }
+}
+
+const settings = ref<Settings>(cloneSettings(DEFAULT_SETTINGS))
 let systemSchemeListenerBound = false
 
 function normalizeColorMode(mode: unknown): ColorMode {
@@ -117,28 +140,33 @@ function applyThemeToDOM() {
 
 const store = createPersistedStore({
   file: 'settings.json',
-  schemaVersion: 1,
+  schemaVersion: 2,
+  migrations: { 1: migrateSettingsV1ToV2 },
   snapshot: () => settings.value,
   restore: (data) => {
     if (!data || typeof data !== 'object') throw new Error('settings.json is not an object')
-    const parsed = data as Partial<Settings>
+    // 兼容没有版本号的旧文件：补齐 shortcuts / tray / notifications
+    const normalized = normalizeSettingsShape(data)
+    const parsed = normalized as Partial<Settings>
+    const defaults = cloneSettings(DEFAULT_SETTINGS)
     settings.value = {
-      ...DEFAULT_SETTINGS,
+      ...defaults,
       ...parsed,
+      shortcuts: { ...defaults.shortcuts, ...(parsed.shortcuts ?? {}) },
+      tray: { ...defaults.tray, ...(parsed.tray ?? {}) },
+      notifications: { ...defaults.notifications, ...(parsed.notifications ?? {}) },
       colorMode: normalizeColorMode(parsed.colorMode),
-      // Alt+Space 被 Windows 系统菜单占用，旧默认值迁移到新默认
-      shortcutKey: parsed.shortcutKey === 'Alt+Space'
-        ? DEFAULT_SETTINGS.shortcutKey
-        : (parsed.shortcutKey ?? DEFAULT_SETTINGS.shortcutKey),
     }
   },
   syncEvent: 'settings-changed',
 })
 const loaded = store.loaded
 
-async function syncAutostart() {
+export async function syncAutostart() {
   // 以本地设置为准：开关开着就确保系统里有启动项，关着就确保删掉。
   // 不要反过来用系统注册状态覆盖开关，启动项被清理时会把开关静默关掉。
+  // Web 预览 / Vitest 没有 Tauri 运行时，直接跳过，避免无意义的 invoke 噪音。
+  if (!isTauri()) return
   try {
     if (settings.value.autoLaunch) {
       await enable()
@@ -157,7 +185,7 @@ function ensureInitialized() {
 }
 
 watch(() => settings.value.autoLaunch, (val) => {
-  if (!loaded.value) return
+  if (!loaded.value || !isTauri()) return
   if (val) {
     enable().catch(() => { settings.value.autoLaunch = false })
   } else {

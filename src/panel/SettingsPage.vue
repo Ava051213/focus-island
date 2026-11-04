@@ -1,19 +1,17 @@
 <script setup lang="ts">
-import { ref, nextTick } from 'vue'
+import { ref } from 'vue'
 import AboutDialog from './AboutDialog.vue'
 import AppearanceSettings from './AppearanceSettings.vue'
 import BehaviorSettings from './BehaviorSettings.vue'
+import SystemSettings from './SystemSettings.vue'
 import AiSettings from './AiSettings.vue'
 
 const emit = defineEmits<{ back: [] }>()
 
 const showAbout = ref(false)
-const behaviorRef = ref<{ resetRecording: () => void } | null>(null)
 
 function goBack() {
   showAbout.value = false
-  behaviorRef.value?.resetRecording()
-  nextTick()
   emit('back')
 }
 </script>
@@ -34,7 +32,8 @@ function goBack() {
     </div>
 
     <AppearanceSettings />
-    <BehaviorSettings ref="behaviorRef" />
+    <BehaviorSettings />
+    <SystemSettings />
     <AiSettings />
   </div>
 

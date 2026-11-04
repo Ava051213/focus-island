@@ -10,7 +10,7 @@ import {
 } from '@tauri-apps/plugin-fs'
 import { emitTo, listen } from '@tauri-apps/api/event'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
-import { migrate, UnknownSchemaVersionError, wrapWithVersion } from '../utils/schema'
+import { migrate, UnknownSchemaVersionError, wrapWithVersion, type Migration } from '../utils/schema'
 
 const DATA_DIR = 'focus-island'
 const baseDir = BaseDirectory.AppData
@@ -142,6 +142,8 @@ export interface PersistedStoreOptions {
   syncEvent?: string
   /** 写入文件时套上 { schemaVersion, data }；不传保持旧的裸格式 */
   schemaVersion?: number
+  /** 低版本数据的迁移链，key 为源版本号 */
+  migrations?: Record<number, Migration>
   /** 写入防抖，默认 300ms；进行中快照传 0 立刻落盘 */
   debounceMs?: number
 }
@@ -176,7 +178,10 @@ export function createPersistedStore(opts: PersistedStoreOptions): PersistedStor
       fileData = result.data
       try {
         if (opts.schemaVersion !== undefined) {
-          const migratedResult = migrate(result.data, { currentVersion: opts.schemaVersion })
+          const migratedResult = migrate(result.data, {
+            currentVersion: opts.schemaVersion,
+            migrations: opts.migrations,
+          })
           fileData = migratedResult.data
           migrated = migratedResult.migrated
         }

@@ -12,6 +12,7 @@ import { useSettings } from './useSettings'
 import { useAiButler } from './useAiButler'
 import { useSessions } from './useSessions'
 import { useTimerSnapshot } from './useTimerSnapshot'
+import { notifyPhaseEnd } from './useSystemNotify'
 import type { PhaseEffect } from '../timer/machine'
 import { buildSession } from '../timer/sessions'
 import {
@@ -176,6 +177,8 @@ export function useTimerBridge() {
         emitNotification(notif)
         // Also emit timer state so island gets the stopped state
         emitTimerState(true)
+        // 复用现有阶段结束时机发系统通知，不新增计时触发点
+        if (notif) void notifyPhaseEnd(notif, timer.activeTaskTitle.value)
       },
     )
 

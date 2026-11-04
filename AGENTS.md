@@ -43,7 +43,15 @@ cd src-tauri && cargo check
 
 计时结束时 panel 设置 `pendingNotification` 并广播 `notification-show`，灵动岛显示通知横幅，用户操作通过 `notification-action`（confirm / extend / dismiss）回传 panel。灵动岛胶囊悬停时浮出的暂停/跳过按钮通过 `timer-command`（toggle / skip）回传 panel 执行，真正计时逻辑只在 panel。
 
-两个窗口都**不会真正关闭**：Rust 侧拦截 `CloseRequested` 改为 `hide()`，退出只能走托盘菜单。
+两个窗口都**不会真正关闭**：Rust 侧拦截 `CloseRequested`，默认 `hide()` 到托盘；`settings.tray.closeToTray` 关掉后改为直接退出。退出也可以走托盘菜单。
+
+### 系统集成（单实例 / 托盘 / 快捷键 / 通知）
+
+- **单实例**：`tauri-plugin-single-instance` 是第一个注册的 plugin；第二次启动只恢复并聚焦已有 `main` 窗口，不创建新窗口、托盘或快捷键。
+- **托盘**：菜单文案由 `src-tauri/src/tray.rs` 的纯函数根据前端推送的状态生成（`update_tray_state`）。菜单动作 `toggle_timer / skip_phase` 通过 `tray-command` 回前端执行；`open_panel / toggle_island / quit` 在 Rust 侧处理。左键单击托盘图标切换灵动岛显示/隐藏，右键出菜单。
+- **全局快捷键**：在 Rust 侧注册（`update_shortcuts` 命令），窗口隐藏或重载不影响注册。配置来自 `settings.shortcuts`，触发后 emit `shortcut-command`（`toggle-timer` / `show-window`），前端复用 `useTimer` 动作。注册冲突或解析失败通过命令返回值回传，设置页展示，不崩溃。
+- **系统通知**：`useSystemNotify.ts` 走官方 `tauri-plugin-notification`，只在现有 `pendingNotification`（专注/休息结束）时机发送，不新增计时触发点。`settings.notifications.enabled` 关闭时不申请权限、不发送；`permissionAsked` 记录拒绝，避免反复弹窗。首次隐藏到托盘也会通过 `island-hidden-to-tray` 给一次提示。
+- **前端事件**：新增 `tray-command`、`shortcut-command`、`island-hidden-to-tray`。
 
 ### 状态机
 
@@ -67,6 +75,7 @@ alert → 恢复（窗口内有鼠标/键盘活动）
 - 读取或解析失败时先备份为 `<file>.corrupt-<时间戳>`；备份失败则本次会话禁止写入，避免覆盖原文件
 - `restore()` 负责校验和迁移数据，数据不合法时应抛错；归一化后与文件内容不同会回写一次
 - 可选 `schemaVersion`：文件写成 `{ schemaVersion, data }`，旧裸数据按当前结构读取；未知高版本备份原文件、本次会话停止写入，并通过 `restoreWarning` 提示
+- 可选 `migrations`：低版本信封按迁移链升级后回写。`settings.json` 当前为 `schemaVersion: 2`，`src/utils/settingsMigration.ts` 负责把旧 `shortcutKey` / `notificationSound` 映射成 `shortcuts` / `notifications` 并补 `tray`
 - 传入 `syncEvent` 时，改动通过 `emitTo` 同步到另一个窗口；以"上次快照 JSON"判断是否需要写入，避免回写循环
 
 | 文件 | composable | 跨窗口事件 |
@@ -100,12 +109,15 @@ alert → 恢复（窗口内有鼠标/键盘活动）
 - **`useTimerBridge.ts`**：panel 窗口专用，包装 useTimer，负责广播状态、写入 Session（同时更新备忘番茄数、成就、AI 轮次记录）、维护进行中快照、处理通知操作与启动恢复
 - **`useEvents.ts`**：日程事件 CRUD。每条只有发生时间（`YYYY-MM-DD` 或 `YYYY-MM-DDTHH:mm`）、标题、描述、单个标签、是否已处理，按时间升序排列，过期的单独归档。`parseQuickEvent()` 负责把「周五 10:00 交报告 #工作」这类一句话解析成事件。
 - **`useMemos.ts`**：备忘与分类，同时落 `memos.json` 和 `memo-categories.json`。每条备忘带 `pomodoroCount`，是当前唯一的专注对象；`completedAt` 用于完成归档（不物理删除，可恢复），`order` 保存用户拖动后的手动顺序，首页取 `activeMemos` 前三条
-- **`useSettings.ts`**：主题、时长、透明度（`islandOpacity`）、缩放（`islandScale`）、显示模式（常驻/边缘停靠）、顶部位置（`islandXRatio`）、`idleMottos`、快捷键、开机自启、全屏避让（`hideOnFullscreen`）、AI Key（硅基主力 / 智谱兜底）/模型/自动建议开关。开机自启以本地设置为准：开关开着就在启动时重新登记系统启动项，不要用系统注册状态反向覆盖开关（否则启动项被清理时开关会被静默关掉）
+- **`useSettings.ts`**：主题、时长、透明度（`islandOpacity`）、缩放（`islandScale`）、显示模式（常驻/边缘停靠）、顶部位置（`islandXRatio`）、`idleMottos`、`shortcuts`（toggleTimer / showWindow / enabled）、`tray.closeToTray`、`notifications`（enabled / sound / permissionAsked）、开机自启、全屏避让（`hideOnFullscreen`）、AI Key（硅基主力 / 智谱兜底）/模型/自动建议开关。开机自启以本地设置为准：开关开着就在启动时重新登记系统启动项，不要用系统注册状态反向覆盖开关（否则启动项被清理时开关会被静默关掉）；`syncAutostart` 带 `isTauri()` 守卫，Web 预览与 Vitest 不调用系统接口
 - **`useDockMode.ts`**：边缘停靠模式，消费主窗口统一的指针轮询结果（`is_mouse_over_window`）决定展开或收起细条
 - **`useSessions.ts` / `useTimerSnapshot.ts`**：Session 账本与进行中快照的持久化封装，都只在 panel 窗口使用
 - **`useDailyStats.ts` / `useAchievements.ts`**：每日统计与成就，日期一律用 `src/utils/date.ts` 的本地日期。`useDailyStats` 对外提供 `effectiveDailyStats`，由旧 `daily-stats.json` 累加值与 Session 聚合合并而成
 - **`useWeeklyGoals.ts`**：本周目标（番茄 8 个、专注 3 天、完成 2 条小记），进度从 `effectiveDailyStats` 和 `memos.completedAt` 实时计算，周一自动换周，不新增持久化；首页显示紧凑条，记录页显示进度条
-- **`useShortcut.ts`**：全局快捷键，只在 `Pressed` 时切换面板
+- **`useShortcut.ts`**：panel 窗口专用，调用 Rust `update_shortcuts` 注册快捷键，监听 `shortcut-command` 并复用计时动作；`shortcutError` 对外给设置页展示冲突原因
+- **`useTraySync.ts`**：panel 窗口专用，把计时状态按分钟粒度推给 Rust（托盘菜单/tooltip），监听 `tray-command`，并把 `tray.closeToTray` 同步给 Rust
+- **`useTimerCommands.ts`**：`toggle-timer` / `skip` 到 `useTimer` 动作的唯一映射，托盘与快捷键共用
+- **`useSystemNotify.ts`**：系统通知权限、发送与首次隐藏到托盘提示；不承载计时逻辑
 - **`useAi.ts` / `useAiButler.ts`**：见下方「AI 模块」
 
 ### Panel 页面路由
@@ -144,16 +156,20 @@ alert → 恢复（窗口内有鼠标/键盘活动）
 - `is_foreground_fullscreen()` — 前台窗口是否铺满整屏（仅 Windows 实现，其它平台返回 false）。灵动岛每秒轮询一次，全屏时岛淡出（不隐藏窗口，避免 JS 计时器被降频）并收起面板，通知出现再浮回来
 - `set_island_size(scale)` / `set_island_custom_size(width, height)` — 调整灵动岛窗口尺寸并水平居中
 - `toggle_panel` / `animate_panel_close` / `hide_panel` / `is_panel_visible` / `position_panel_under_island` / `get_panel_transition_metrics` / `emit_island_panel_motion` — panel 显示与动画。Rust 端只负责定位、显示，并发出 `panel-window-transition` 事件，动画由前端完成
+- `set_close_to_tray(enabled)` — 同步关闭窗口行为（隐藏到托盘 / 直接退出）
+- `update_tray_state(state)` — 前端推送计时状态，Rust 更新托盘菜单文案、跳过是否可用、tooltip 与 macOS 菜单栏标题
+- `update_shortcuts(config)` — 重新注册全局快捷键，返回每个动作的注册错误
 
 拖动的水平位置完全在前端算：`Island.vue` 监听 `pointerdown/move`，把结果写进 `settings.islandXRatio`（0~1，`null` 表示居中），Rust 没有专门的拖动命令。
 
-系统托盘菜单提供"打开专注清单"、"显示/隐藏灵动岛"、"退出"；托盘图标左键点击直接切换面板。
+系统托盘菜单提供"开始专注 / 暂停专注"（随状态变化）、"跳过当前阶段"、"打开专注清单"、"显示/隐藏灵动岛"、"退出"；左键单击托盘图标切换灵动岛，右键出菜单。`src-tauri/src/tray.rs` 的 `labels()` 是纯函数，改动文案时优先改这里并补单测。
 
 ### 安全
 
 - `tauri.conf.json` 配置了 CSP（`csp` / `devCsp`）：脚本只允许同源；`style-src` 关闭了 Tauri 的 nonce 注入，以便内联样式生效。新增外部资源（图片、音频、接口）时需要同步调整 CSP
 - 写入 `innerHTML` 的富文本一律先经过 `src/utils/sanitizeHtml.ts`（DOMPurify）
 - AI Key 只存在本机 `settings.json`，不上传；无 Key 时整个 AI 模块静默关闭
+- `capabilities/default.json` 只开实际用到的权限：文件读写、HTTP 白名单、剪贴板、`notification:default`、`autostart:default`。快捷键已改为 Rust 注册，不再需要 `global-shortcut:allow-register/unregister`
 
 ### 跨平台
 
@@ -170,10 +186,11 @@ alert → 恢复（窗口内有鼠标/键盘活动）
 ## 测试
 
 - 栈：vitest + happy-dom + @vue/test-utils，配置在 `vite.config.ts` 的 `test` 段
-- 测试文件放 `src/composables/__tests__/`，命令 `npm run test`
-- `useTimer` / `useSettings` / `persistence` 都直接 import 了 Tauri 插件，测试里要先 `vi.mock` 掉 `@tauri-apps/plugin-fs`、`@tauri-apps/api/event`、`@tauri-apps/api/webviewWindow`、`@tauri-apps/plugin-http`
+- 测试文件放 `src/composables/__tests__/` 与 `src/utils/__tests__/`，命令 `npm run test`
+- `useTimer` / `useSettings` / `persistence` 都直接 import 了 Tauri 插件，测试里要先 `vi.mock` 掉 `@tauri-apps/plugin-fs`、`@tauri-apps/api/event`、`@tauri-apps/api/webviewWindow`、`@tauri-apps/plugin-http`、`@tauri-apps/plugin-autostart`、`@tauri-apps/plugin-notification`
 - `useTimer` 全部状态是**模块级单例**，同一个测试文件内多个用例会互相污染。需要独立状态时用 `vi.resetModules()` 配合动态 `import()`
 - 时钟相关一律 `vi.useFakeTimers()` + `vi.advanceTimersByTime()`，不要真的等
+- Rust 纯逻辑（`tray.rs` 菜单文案、`shortcuts.rs` 配置校验）有 `#[cfg(test)]` 单测，命令 `cd src-tauri && cargo test --lib`
 
 ## Windows 启动脚本
 

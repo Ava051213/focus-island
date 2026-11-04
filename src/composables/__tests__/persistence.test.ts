@@ -80,6 +80,29 @@ describe('createPersistedStore', () => {
     expect(store.loaded.value).toBe(true)
   })
 
+  it('低版本信封通过 migrations 升级并回写', async () => {
+    h.files.set(FILE, JSON.stringify({ schemaVersion: 1, data: { old: true } }))
+    const data = ref({ upgraded: false, old: false })
+    const store = createPersistedStore({
+      file: 'data.json',
+      schemaVersion: 2,
+      migrations: {
+        1: (raw) => ({ ...(raw as object), upgraded: true }),
+      },
+      snapshot: () => data.value,
+      restore: (raw) => { data.value = raw as { upgraded: boolean; old: boolean } },
+    })
+
+    await store.ensureLoaded()
+    expect(data.value).toEqual({ old: true, upgraded: true })
+
+    await vi.advanceTimersByTimeAsync(300)
+    expect(JSON.parse(h.files.get(FILE)!)).toEqual({
+      schemaVersion: 2,
+      data: { old: true, upgraded: true },
+    })
+  })
+
   it('restore 抛错时先备份原文件，再允许后续写入', async () => {
     h.files.set(FILE, '{"broken":true}')
     const data = ref({ value: 1 })

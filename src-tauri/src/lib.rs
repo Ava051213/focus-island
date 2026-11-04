@@ -1,11 +1,17 @@
 use tauri::{
     image::Image,
     menu::{Menu, MenuItem, PredefinedMenuItem},
-    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent},
     window::Color,
     AppHandle, Emitter, Manager, Runtime, WebviewWindow, WindowEvent,
 };
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+
+mod shortcuts;
+mod tray;
 
 #[cfg(target_os = "macos")]
 use core_graphics::event::CGEvent;
@@ -33,6 +39,52 @@ use x11::xlib;
 
 const PANEL_GAP_Y: i32 = 6;
 const TRAY_ICON_BYTES: &[u8] = include_bytes!("../icons/icon.png");
+
+/// 用户偏好里需要 Rust 侧即时读取的部分。
+/// 关闭窗口时按它决定「隐藏到托盘」还是「直接退出」，默认隐藏到托盘。
+struct AppPrefs {
+    close_to_tray: AtomicBool,
+}
+
+impl Default for AppPrefs {
+    fn default() -> Self {
+        Self {
+            close_to_tray: AtomicBool::new(true),
+        }
+    }
+}
+
+/// 托盘菜单项句柄，供 `update_tray_state` 动态改文案。
+struct TrayHandles {
+    toggle_timer: MenuItem<tauri::Wry>,
+    skip_phase: MenuItem<tauri::Wry>,
+    tray_icon: TrayIcon<tauri::Wry>,
+}
+
+/// 已注册快捷键的 id → 动作映射。
+/// 插件回调只拿到 Shortcut，不知道业务含义，需要通过 id 查这张表。
+#[derive(Default)]
+struct ShortcutBindings {
+    map: Mutex<HashMap<u32, String>>,
+}
+
+impl ShortcutBindings {
+    fn clear(&self) {
+        if let Ok(mut map) = self.map.lock() {
+            map.clear();
+        }
+    }
+
+    fn insert(&self, id: u32, action: &str) {
+        if let Ok(mut map) = self.map.lock() {
+            map.insert(id, action.to_string());
+        }
+    }
+
+    fn action_for(&self, id: u32) -> Option<String> {
+        self.map.lock().ok()?.get(&id).cloned()
+    }
+}
 
 static LAST_PANEL_SIZE: OnceLock<Mutex<Option<tauri::PhysicalSize<u32>>>> = OnceLock::new();
 
@@ -327,38 +379,98 @@ fn position_panel_under_island_inner<R: Runtime>(app: &AppHandle<R>) {
     let _ = panel.set_position(target_pos);
 }
 
-fn focus_panel<R: Runtime>(app: &AppHandle<R>) {
-    // Ensure the main (island) window is visible first
+/// 显示/隐藏灵动岛（托盘左键单击、托盘菜单「显示/隐藏灵动岛」都走这里）。
+/// 隐藏不会退出应用，托盘图标继续常驻。
+fn toggle_main_window<R: Runtime>(app: &AppHandle<R>) {
     if let Some(main) = app.get_webview_window("main") {
-        if !main.is_visible().unwrap_or(false) {
+        if main.is_visible().unwrap_or(true) {
+            let _ = main.hide();
+        } else {
+            let _ = main.unminimize();
             let _ = main.show();
-        }
-    }
-
-    let Some(panel) = app.get_webview_window("panel") else {
-        // No panel window yet, just focus main
-        if let Some(main) = app.get_webview_window("main") {
             let _ = main.set_focus();
         }
-        return;
-    };
-
-    let _ = panel.unminimize();
-    if panel.is_visible().unwrap_or(false) {
-        position_panel_under_island_inner(app);
-    } else {
-        animate_panel_open(app.clone());
     }
-    let _ = panel.set_focus();
+}
 
-    // On Windows, background apps cannot steal foreground focus
-    // due to OS restrictions. Use AllowSetForegroundWindow workaround.
+/// 第二次启动时恢复已有窗口：显示并聚焦灵动岛，不新建窗口或托盘。
+fn restore_main_window<R: Runtime>(app: &AppHandle<R>) {
+    if let Some(main) = app.get_webview_window("main") {
+        let _ = main.unminimize();
+        let _ = main.show();
+        let _ = main.set_focus();
+    }
+
+    // 面板已经开着的话也把焦点拿回来，但不额外打开新窗口
+    if let Some(panel) = app.get_webview_window("panel") {
+        if panel.is_visible().unwrap_or(false) {
+            let _ = panel.unminimize();
+            let _ = panel.set_focus();
+        }
+    }
+
+    // Windows 下后台进程抢前台焦点会被系统拦，和第二实例回调配合放行
     #[cfg(target_os = "windows")]
     {
         unsafe {
             let _ = AllowSetForegroundWindow(ASFW_ANY);
         }
     }
+}
+
+/// 前端设置加载/变更时同步「关闭窗口是否隐藏到托盘」。
+#[tauri::command]
+fn set_close_to_tray<R: Runtime>(app: AppHandle<R>, enabled: bool) {
+    app.state::<AppPrefs>()
+        .close_to_tray
+        .store(enabled, Ordering::Relaxed);
+}
+
+/// 前端把计时状态推过来，更新托盘菜单文案、tooltip 与 macOS 菜单栏标题。
+/// 只改文案，不承载计时逻辑。
+#[tauri::command]
+fn update_tray_state(app: AppHandle, state: tray::TrayMenuState) {
+    let Some(handles) = app.try_state::<TrayHandles>() else {
+        return;
+    };
+
+    let labels = tray::labels(&state);
+    let _ = handles.toggle_timer.set_text(labels.toggle);
+    let _ = handles.skip_phase.set_text(labels.skip);
+    let _ = handles.skip_phase.set_enabled(labels.skip_enabled);
+    let _ = handles.tray_icon.set_tooltip(Some(labels.tooltip));
+
+    // Windows/Linux 的托盘图标没有可用标题区，只有 macOS 菜单栏支持。
+    #[cfg(target_os = "macos")]
+    {
+        let _ = handles.tray_icon.set_title(labels.title);
+    }
+}
+
+/// 重新注册全局快捷键：先清空旧的，再按配置逐个注册。
+/// 单个组合失败只记录下来，不影响另一个，也不让应用崩溃。
+#[tauri::command]
+fn update_shortcuts(
+    app: AppHandle,
+    config: shortcuts::ShortcutConfig,
+) -> shortcuts::ShortcutUpdateResult {
+    let global = app.global_shortcut();
+    let bindings = app.state::<ShortcutBindings>();
+    bindings.clear();
+    let _ = global.unregister_all();
+
+    let (pending, mut errors) = shortcuts::collect(&config);
+    for binding in pending {
+        match global.register(binding.shortcut.clone()) {
+            Ok(_) => bindings.insert(binding.shortcut.id(), binding.action),
+            Err(e) => errors.push(shortcuts::ShortcutError {
+                action: binding.action.to_string(),
+                message: format!("系统拒绝注册这个快捷键：{e}"),
+            }),
+        }
+    }
+
+    shortcuts::ShortcutUpdateResult::from_errors(errors)
 }
 
 #[tauri::command]
@@ -495,10 +607,28 @@ fn is_panel_visible<R: Runtime>(app: AppHandle<R>) -> bool {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // 单实例插件必须最先注册：第二次启动在这里被拦截，不会创建新窗口/托盘/快捷键。
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            focus_panel(app);
+            restore_main_window(app);
         }))
+        // 快捷键在 Rust 侧注册：窗口隐藏/重载都不会掉，冲突也能同步返回给前端。
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, shortcut, event| {
+                    if event.state != ShortcutState::Pressed {
+                        return;
+                    }
+                    let Some(bindings) = app.try_state::<ShortcutBindings>() else {
+                        return;
+                    };
+                    if let Some(action) = bindings.action_for(shortcut.id()) {
+                        let _ = app.emit("shortcut-command", action);
+                    }
+                })
+                .build(),
+        )
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_clipboard_manager::init())
@@ -507,10 +637,23 @@ pub fn run() {
             Some(vec!["--hidden"]),
         ))
         .on_window_event(|window, event| {
-            // 误关窗口时隐藏到托盘，而不是直接退出；退出请用托盘菜单的“退出”
             if let WindowEvent::CloseRequested { api, .. } = event {
-                api.prevent_close();
-                let _ = window.hide();
+                let close_to_tray = window
+                    .app_handle()
+                    .state::<AppPrefs>()
+                    .close_to_tray
+                    .load(Ordering::Relaxed);
+                if close_to_tray {
+                    // 默认隐藏到托盘，退出请用托盘菜单的「退出」
+                    api.prevent_close();
+                    let _ = window.hide();
+                    if window.label() == "main" {
+                        // 首次隐藏时前端会给一次「已藏到托盘」的提示
+                        let _ = window.emit("island-hidden-to-tray", ());
+                    }
+                } else {
+                    window.app_handle().exit(0);
+                }
             }
         })
         .on_tray_icon_event(|app, event| {
@@ -521,7 +664,8 @@ pub fn run() {
             } = event
             {
                 if button == MouseButton::Left && button_state == MouseButtonState::Up {
-                    toggle_panel(app.clone());
+                    // 左键单击：切换灵动岛的显示/隐藏；右键才出菜单。
+                    toggle_main_window(app);
                 }
             }
         })
@@ -538,14 +682,14 @@ pub fn run() {
             hide_panel,
             toggle_panel,
             is_panel_visible,
+            set_close_to_tray,
+            update_tray_state,
+            update_shortcuts,
         ])
         .setup(|app| {
-            #[cfg(desktop)]
-            {
-                app.handle().plugin(
-                    tauri_plugin_global_shortcut::Builder::new().build(),
-                )?;
-            }
+            // 关闭行为 / 托盘状态都由前端设置驱动；先给出默认值，窗口事件才读得到。
+            app.manage(AppPrefs::default());
+            app.manage(ShortcutBindings::default());
 
             if let Some(window) = app.get_webview_window("main") {
                 if let Ok(Some(monitor)) = window.current_monitor() {
@@ -572,33 +716,51 @@ pub fn run() {
                 });
             }
 
+            // 托盘菜单顺序固定：计时动作 → 窗口动作 → 退出。
+            // 「开始/暂停」和「跳过」只 emit 给前端，真正计时逻辑仍在 panel 窗口。
+            let toggle_timer =
+                MenuItem::with_id(app, "toggle_timer", "开始专注", true, None::<&str>)?;
+            let skip_phase =
+                MenuItem::with_id(app, "skip_phase", "跳过当前阶段", false, None::<&str>)?;
             let open_panel =
                 MenuItem::with_id(app, "open_panel", "打开专注清单", true, None::<&str>)?;
             let toggle_island =
                 MenuItem::with_id(app, "toggle_island", "显示/隐藏灵动岛", true, None::<&str>)?;
-            let separator = PredefinedMenuItem::separator(app)?;
+            let separator_top = PredefinedMenuItem::separator(app)?;
+            let separator_bottom = PredefinedMenuItem::separator(app)?;
             let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
 
-            let menu = Menu::with_items(app, &[&open_panel, &toggle_island, &separator, &quit])?;
+            let menu = Menu::with_items(
+                app,
+                &[
+                    &toggle_timer,
+                    &skip_phase,
+                    &separator_top,
+                    &open_panel,
+                    &toggle_island,
+                    &separator_bottom,
+                    &quit,
+                ],
+            )?;
 
             let tray_icon = Image::from_bytes(TRAY_ICON_BYTES)?;
 
-            TrayIconBuilder::new()
+            let tray = TrayIconBuilder::new()
                 .icon(tray_icon)
                 .menu(&menu)
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id.as_ref() {
+                    "toggle_timer" => {
+                        let _ = app.emit("tray-command", "toggle-timer");
+                    }
+                    "skip_phase" => {
+                        let _ = app.emit("tray-command", "skip");
+                    }
                     "open_panel" => {
                         animate_panel_open(app.clone());
                     }
                     "toggle_island" => {
-                        if let Some(main) = app.get_webview_window("main") {
-                            if main.is_visible().unwrap_or(true) {
-                                let _ = main.hide();
-                            } else {
-                                let _ = main.show();
-                            }
-                        }
+                        toggle_main_window(app);
                     }
                     "quit" => {
                         app.exit(0);
@@ -606,6 +768,12 @@ pub fn run() {
                     _ => {}
                 })
                 .build(app)?;
+
+            app.manage(TrayHandles {
+                toggle_timer,
+                skip_phase,
+                tray_icon: tray,
+            });
 
             Ok(())
         })

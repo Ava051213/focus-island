@@ -7,6 +7,7 @@ import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { useTimerBridge } from '../composables/useTimerBridge'
 import { useSettings } from '../composables/useSettings'
 import { useShortcut } from '../composables/useShortcut'
+import { useTraySync } from '../composables/useTraySync'
 import { useEvents } from '../composables/useEvents'
 import { useMemos } from '../composables/useMemos'
 import { useDailyStats } from '../composables/useDailyStats'
@@ -38,6 +39,7 @@ const pendingRecovery = computed(() =>
 )
 useSettings()
 useShortcut()
+useTraySync()
 function prewarmPanelData() {
   useEvents()
   useMemos()

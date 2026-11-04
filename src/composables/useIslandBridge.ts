@@ -3,6 +3,7 @@ import { emit, listen } from '@tauri-apps/api/event'
 import { useSettings } from './useSettings'
 import { useIslandState } from './useIslandState'
 import { useTimer, type NotificationType } from './useTimer'
+import { notifyTrayHidden } from './useSystemNotify'
 import type { TimerStatePayload } from './useTimerBridge'
 
 export function useIslandBridge() {
@@ -16,12 +17,14 @@ export function useIslandBridge() {
   let unlistenTimer: (() => void) | null = null
   let unlistenPanelMotion: (() => void) | null = null
   let unlistenNotification: (() => void) | null = null
+  let unlistenTrayHint: (() => void) | null = null
+  let trayHintSent = false
   let panelMotionTimer: ReturnType<typeof setTimeout> | null = null
   let countdownTimer: ReturnType<typeof setInterval> | null = null
   let countdownEndAt = 0
 
   function playNotificationSound() {
-    if (!settings.value.notificationSound) return
+    if (!settings.value.notifications.sound) return
     try {
       const ctx = new AudioContext()
       const osc = ctx.createOscillator()
@@ -143,15 +146,24 @@ export function useIslandBridge() {
       notificationType.value = payload
       if (payload) playNotificationSound()
     })
+
+    // 第一次隐藏到托盘时提醒一次，避免用户以为应用退出了
+    unlistenTrayHint = await listen('island-hidden-to-tray', () => {
+      if (trayHintSent) return
+      trayHintSent = true
+      void notifyTrayHidden()
+    })
   }
 
   function stop() {
     unlistenTimer?.()
     unlistenPanelMotion?.()
     unlistenNotification?.()
+    unlistenTrayHint?.()
     unlistenTimer = null
     unlistenPanelMotion = null
     unlistenNotification = null
+    unlistenTrayHint = null
     stopLocalCountdown()
     countdownEndAt = 0
     if (panelMotionTimer) {

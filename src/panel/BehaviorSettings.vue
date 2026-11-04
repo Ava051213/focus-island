@@ -1,130 +1,19 @@
 <script setup lang="ts">
-import { computed, ref, onMounted, onUnmounted, onActivated, onDeactivated } from 'vue'
+import { computed, ref } from 'vue'
 import { useSettings } from '../composables/useSettings'
 
 const { settings } = useSettings()
 
-const isRecording = ref(false)
 // 低频开关默认收起，常用项留在外面
 const advancedOpen = ref(false)
 
 const advancedSummary = computed(() =>
   [
-    settings.value.notificationSound ? '提示音开' : '提示音关',
+    settings.value.notifications.sound ? '提示音开' : '提示音关',
     settings.value.hideOnFullscreen ? '避让开' : '避让关',
     settings.value.autoLaunch ? '自启开' : '自启关',
   ].join(' · '),
 )
-
-function formatShortcut(key: string): string {
-  if (!key) return '无'
-  return key.replace('CommandOrControl', navigator.userAgent.includes('Mac') ? '⌘' : 'Ctrl')
-    .replace('Alt', 'Alt')
-    .replace('Shift', '⇧')
-    .replace('Control', 'Ctrl')
-}
-
-function startRecording() {
-  isRecording.value = true
-}
-
-function stopRecording() {
-  isRecording.value = false
-}
-
-let recordedKey = ''
-
-function buildCombo(e: KeyboardEvent): string {
-  const mods: string[] = []
-  if (e.ctrlKey) mods.push('Control')
-  if (e.altKey) mods.push('Alt')
-  if (e.metaKey) mods.push('CommandOrControl')
-  if (e.shiftKey) mods.push('Shift')
-
-  const code = e.code
-  let keyName: string
-  if (code.startsWith('Key')) keyName = code.slice(3)
-  else if (code.startsWith('Digit')) keyName = code.slice(5)
-  else keyName = code
-
-  return mods.join('+') + '+' + keyName
-}
-
-function onRecordKeydown(e: KeyboardEvent) {
-  if (!isRecording.value) return
-  // Skip modifier-only presses
-  if (e.key === 'Control' || e.key === 'Alt' || e.key === 'Meta' || e.key === 'Shift') return
-  // Skip if no modifier is held
-  if (!e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) return
-
-  e.preventDefault()
-  e.stopPropagation()
-  recordedKey = buildCombo(e)
-}
-
-function onRecordKeyup(e: KeyboardEvent) {
-  if (!isRecording.value) return
-
-  // Fallback: if keydown was intercepted (e.g. Option+Space on macOS),
-  // capture the combo from keyup instead
-  if (!recordedKey && (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey)) {
-    if (e.key !== 'Control' && e.key !== 'Alt' && e.key !== 'Meta' && e.key !== 'Shift') {
-      recordedKey = buildCombo(e)
-    }
-  }
-
-  // Finalize when all modifiers are released
-  if (!e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) {
-    if (recordedKey) {
-      settings.value.shortcutKey = recordedKey
-      recordedKey = ''
-      isRecording.value = false
-    } else {
-      // Released all mods without hitting a key — cancel
-      isRecording.value = false
-    }
-  }
-}
-
-function resetRecording() {
-  stopRecording()
-  recordedKey = ''
-}
-
-let recordListenersBound = false
-
-function bindRecordListeners() {
-  if (recordListenersBound) return
-  document.addEventListener('keydown', onRecordKeydown, true)
-  document.addEventListener('keyup', onRecordKeyup, true)
-  recordListenersBound = true
-}
-
-function unbindRecordListeners() {
-  if (!recordListenersBound) return
-  document.removeEventListener('keydown', onRecordKeydown, true)
-  document.removeEventListener('keyup', onRecordKeyup, true)
-  recordListenersBound = false
-}
-
-onMounted(() => {
-  bindRecordListeners()
-})
-
-onActivated(() => {
-  bindRecordListeners()
-})
-
-onDeactivated(() => {
-  resetRecording()
-  unbindRecordListeners()
-})
-
-onUnmounted(() => {
-  unbindRecordListeners()
-})
-
-defineExpose({ resetRecording })
 </script>
 
 <template>
@@ -142,7 +31,7 @@ defineExpose({ resetRecording })
         <span class="update-hint">每颗番茄结束都会叮一下呀</span>
       </div>
       <label class="switch" aria-label="结束提示音">
-        <input v-model="settings.notificationSound" type="checkbox" />
+        <input v-model="settings.notifications.sound" type="checkbox" />
         <span class="switch-track"></span>
       </label>
     </div>
@@ -192,22 +81,6 @@ defineExpose({ resetRecording })
     </div>
   </div>
 
-  <div class="settings-section">
-    <div class="section-title">顺手一点</div>
-    <div class="shortcut-row">
-      <span class="shortcut-label">叫出我</span>
-      <button
-        class="shortcut-recorder"
-        :class="{ recording: isRecording }"
-        @click="startRecording"
-        tabindex="0"
-      >
-        <span v-if="isRecording" class="recording-hint">按一个组合键嘛…</span>
-        <span v-else>{{ formatShortcut(settings.shortcutKey) }}</span>
-      </button>
-      <span class="shortcut-hint" v-if="!isRecording">推荐 Ctrl+P 或 Alt+Space，按 Esc 就把我收起来～</span>
-    </div>
-  </div>
 </template>
 
 <style scoped>
@@ -395,63 +268,5 @@ defineExpose({ resetRecording })
 .duration-unit {
   font-size: 11px;
   color: rgba(255, 255, 255, 0.4);
-}
-
-.shortcut-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 4px;
-}
-
-.shortcut-label {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.7);
-}
-
-.shortcut-recorder {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 120px;
-  height: 28px;
-  padding: 0 10px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.85);
-  font-size: 12px;
-  font-weight: 600;
-  font-family: inherit;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.shortcut-recorder:hover {
-  background: rgba(255, 255, 255, 0.10);
-  border-color: rgba(255, 255, 255, 0.25);
-}
-
-.shortcut-recorder.recording {
-  border-color: var(--focus-color);
-  background: color-mix(in srgb, var(--focus-color) 15%, transparent);
-  box-shadow: 0 0 0 1px var(--focus-color);
-  animation: recorder-pulse 1.2s ease-in-out infinite;
-}
-
-@keyframes recorder-pulse {
-  0%, 100% { box-shadow: 0 0 0 1px var(--focus-color); }
-  50% { box-shadow: 0 0 0 2px var(--focus-color), 0 0 8px color-mix(in srgb, var(--focus-color) 40%, transparent); }
-}
-
-.recording-hint {
-  color: var(--focus-color);
-  font-weight: 500;
-}
-
-.shortcut-hint {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.35);
-  white-space: nowrap;
 }
 </style>
