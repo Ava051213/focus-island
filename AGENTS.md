@@ -86,6 +86,7 @@ alert → 恢复（窗口内有鼠标/键盘活动）
 | `daily-stats.json` | `useDailyStats` | — |
 | `achievements.json` | `useAchievements` | — |
 | `ai-insights.json` | `useAiButler` | —（只在 panel 窗口写入） |
+| `daily-summaries.json` | `useDailySummaries` | —（团子每日总结，保留最近 30 天） |
 | `sessions.json` | `useSessions` | —（焦点轮次账本，只在 panel 窗口写入） |
 | `timer-snapshot.json` | `useTimerSnapshot` | —（进行中快照，0 防抖，只在 panel 窗口读写） |
 
@@ -113,17 +114,17 @@ alert → 恢复（窗口内有鼠标/键盘活动）
 - **`useDockMode.ts`**：边缘停靠模式，消费主窗口统一的指针轮询结果（`is_mouse_over_window`）决定展开或收起细条
 - **`useSessions.ts` / `useTimerSnapshot.ts`**：Session 账本与进行中快照的持久化封装，都只在 panel 窗口使用。备忘列表用 `aggregateSessionsByTask()` 按 `taskId` 聚合每条小记的累计番茄数与今日番茄数
 - **`useDailyStats.ts` / `useAchievements.ts`**：每日统计与成就，日期一律用 `src/utils/date.ts` 的本地日期。`useDailyStats` 对外提供 `effectiveDailyStats`，由旧 `daily-stats.json` 累加值与 Session 聚合合并而成
-- **`useWeeklyGoals.ts`**：本周目标（番茄 8 个、专注 3 天、完成 2 条小记），进度从 `effectiveDailyStats` 和 `memos.completedAt` 实时计算，周一自动换周，不新增持久化；首页显示紧凑条，记录页显示进度条
+- **`useWeeklyGoals.ts`**：本周目标（番茄 8 个、专注 3 天、完成 2 条小记），进度从 `effectiveDailyStats` 和 `memos.completedAt` 实时计算，周一自动换周，不新增持久化；只在记录页显示进度条，首页不再占位
 - **`useShortcut.ts`**：panel 窗口专用，调用 Rust `update_shortcuts` 注册快捷键，监听 `shortcut-command` 并复用计时动作；`shortcutError` 对外给设置页展示冲突原因
 - **`useTraySync.ts`**：panel 窗口专用，把计时状态按分钟粒度推给 Rust（托盘菜单/tooltip），监听 `tray-command`，并把 `tray.closeToTray` 同步给 Rust
-- **`useQuickAddFocus.ts`**：模块级计数器。`showWindow` 快捷键触发时，`useShortcut` 确保面板可见并递增计数，`PanelApp` 切回首页、`HomePage` 聚焦快速输入框；不新增快捷键注册
+- **`useQuickAddFocus.ts`**：已移除。快捷键 `showWindow` 现在只负责打开清单，不再切换页面或聚焦输入框。
 - **`useTimerCommands.ts`**：`toggle-timer` / `skip` 到 `useTimer` 动作的唯一映射，托盘与快捷键共用
 - **`useSystemNotify.ts`**：系统通知权限、发送与首次隐藏到托盘提示；不承载计时逻辑
 - **`useAi.ts` / `useAiButler.ts`**：见下方「AI 模块」
 
 ### Panel 页面路由
 
-`PanelApp.vue` 通过 `currentView` ref 切换 5 个视图：`tasks`（HomePage，首页）、`events`（EventsPage，日程）、`memos`（MemoPage）、`stats`（StatsPage）、`settings`（SettingsPage）。底部导航 `navItems` 的顺序与图标也定义在这里。AI 不单独占页面：首页顶部有「团子说」卡片，备忘与日程各自内嵌整理入口。
+`PanelApp.vue` 通过 `currentView` ref 切换 5 个视图：`tasks`（HomePage，首页）、`events`（EventsPage，日程）、`memos`（MemoPage）、`stats`（StatsPage）、`settings`（SettingsPage）。底部导航 `navItems` 的顺序与图标也定义在这里。AI 不单独占页面：首页顶部是「团子说」情绪卡片，下方「建议做的事」展示团子的 1-3 条安排；日程与备忘各自内嵌整理入口。首页不再展示本周目标、快速输入、上一轮记录和未来日程，这些都在对应页面。
 
 ### 专注对象
 
@@ -147,9 +148,10 @@ alert → 恢复（窗口内有鼠标/键盘活动）
   - `parseTaskList` / `parseNameList` 先按 JSON 解析，失败后退化为按行拆分，容忍模型返回代码围栏
 - **`useAiButler.ts`**：后台自动建议调度 + `ai-insights.json`。四道闸门按顺序拦：`aiAutoEnabled` → 7:00–23:00 → 距上次 ≥10 分钟 → 当日 <30 次。触发源是 upcoming 事件 / memos（含完成归档）/ 今日番茄的 `watch`，90 秒防抖；另有一个每小时一次的定时刷新，避免一整天重复同一句。失败也写 `lastAutoAt`，避免网络异常时反复重试。
   - 上下文包含当前时段、最近 5 条进行中小记（已完成番茄轮数、预计番茄数、放置天数、置顶）、未来日程及剩余分钟、今日番茄与专注分钟、今天完成的小记，以及最近 3 条旧建议
-  - `coachToday` 返回结构化 JSON（开场关心 / 1-3 条带 `when` 时段的先后安排 / 生活提醒 / 收尾）。模型只给 `memo` 序号，`useAiButler` 在本地映射成真实小记 id，首页每条安排可直接开始专注
+  - `coachToday` 返回结构化 JSON（开场关心 / 1-3 条带 `when` 时段的先后安排 / 生活提醒 / 收尾）。模型只给 `memo` 序号，`useAiButler` 在本地映射成真实小记 id。首页把 greeting 留在「团子说」卡片，plans 渲染到下方「建议做的事」，每条可直接开始专注
+  - 每日总结：当天 20:00 后完成的轮次会生成一次当日总结；白天收工、晚上没再打开的情况，次日首次启动补生成昨天的。内容为当天番茄数、专注分钟、完成的小记和明天一句，无 Key 或请求失败时使用本地规则兜底。总结存在 `daily-summaries.json`，首页团子卡片在当晚或次日展示，当天又完成新轮次时退回普通团子
   - 卡片支持互动：用户可输入一句话（如「我有点累」）、选择「先啃难的 / 先做轻松的」、或逐条换掉。偏好、最近 3 条用户发言、当天换掉的标题都存在 `ai-insights.json`，并随下一次生成传给模型；换掉的条目当天不再出现，跨日清空
-  - 结果只取最新一条 coach 建议，显示在首页「团子说」卡片；旧格式只存 `content` 时首页退回纯文本展示。旧的 insights 仍保留在 `ai-insights.json` 里，最多 50 条
+  - 结果只取最新一条 coach 建议：greeting 显示在首页「团子说」卡片，plans 显示在下方「建议做的事」；旧格式只存 `content` 时首页退回纯文本展示。旧的 insights 仍保留在 `ai-insights.json` 里，最多 50 条
 
 ### Rust 后端（src-tauri/src/lib.rs）
 
