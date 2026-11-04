@@ -418,58 +418,6 @@ function onCoachNoteEnter(event: KeyboardEvent) {
   gap: 7px;
 }
 
-/* 随手记一句的轻输入，不占额外页面 */
-.quick-capture {
-  display: flex;
-  gap: 6px;
-}
-
-.quick-input {
-  flex: 1;
-  min-width: 0;
-  height: 30px;
-  padding: 0 9px;
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.85);
-  font-size: 12px;
-  font-family: inherit;
-  outline: none;
-  transition: border-color 0.15s;
-}
-
-.quick-input::placeholder {
-  color: rgba(255, 255, 255, 0.28);
-}
-
-.quick-input:focus {
-  border-color: color-mix(in srgb, var(--focus-color) 45%, transparent);
-}
-
-.quick-save-btn {
-  flex-shrink: 0;
-  padding: 0 12px;
-  height: 30px;
-  border-radius: 7px;
-  background: color-mix(in srgb, var(--focus-color) 16%, transparent);
-  border: 1px solid color-mix(in srgb, var(--focus-color) 38%, transparent);
-  color: var(--focus-color);
-  font-size: 12px;
-  font-family: inherit;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.quick-save-btn:hover {
-  background: color-mix(in srgb, var(--focus-color) 28%, transparent);
-}
-
-.quick-save-btn:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-
 /* 小管家建议卡：一句话就够，不再单独占一页 */
 .coach-card {
   display: flex;
@@ -1085,55 +1033,6 @@ function onCoachNoteEnter(event: KeyboardEvent) {
   color: rgba(255, 255, 255, 0.25);
 }
 
-.event-list {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.event-line {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 7px 9px;
-  border-radius: 7px;
-  background: transparent;
-  border: 1px solid transparent;
-  font-family: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.event-line:hover {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(255, 255, 255, 0.07);
-}
-
-.event-day {
-  flex-shrink: 0;
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.45);
-  width: 34px;
-}
-
-.event-clock {
-  flex-shrink: 0;
-  font-size: 10px;
-  color: color-mix(in srgb, var(--focus-color) 80%, transparent);
-  font-variant-numeric: tabular-nums;
-}
-
-.event-title {
-  flex: 1;
-  min-width: 0;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.78);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .empty {
   padding: 22px 14px;
   border-radius: 8px;
@@ -1142,48 +1041,6 @@ function onCoachNoteEnter(event: KeyboardEvent) {
   line-height: 1.7;
   color: rgba(255, 255, 255, 0.3);
   text-align: center;
-}
-
-.empty.small {
-  padding: 16px;
-  font-size: 11px;
-}
-
-.repeat-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-top: 10px;
-  padding: 8px 12px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-}
-
-.repeat-title {
-  min-width: 0;
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.45);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.repeat-btn {
-  flex-shrink: 0;
-  padding: 4px 10px;
-  border: none;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--focus-color) 22%, transparent);
-  color: color-mix(in srgb, var(--focus-color) 78%, white);
-  font-size: 11px;
-  font-family: inherit;
-  cursor: pointer;
-}
-
-.repeat-btn:hover {
-  background: color-mix(in srgb, var(--focus-color) 34%, transparent);
 }
 
 .undo-toast {
