@@ -456,10 +456,15 @@ export function startAiButler() {
   setTimeout(() => {
     if (needsCoachUpgrade()) scheduleAuto(0)
     else onChange()
-    // 白天收工、晚上没再打开的情况，次日打开时补昨天的总结
-    const yesterday = new Date()
-    yesterday.setDate(yesterday.getDate() - 1)
-    void generateDailySummary(toLocalDateStr(yesterday))
+    // 先补昨天的，再看今晚要不要补今天的；串行避免总结锁互相跳过
+    void (async () => {
+      const yesterday = new Date()
+      yesterday.setDate(yesterday.getDate() - 1)
+      await generateDailySummary(toLocalDateStr(yesterday))
+      if (new Date().getHours() >= SUMMARY_HOUR) {
+        await generateDailySummary()
+      }
+    })()
   }, 30_000)
 
   // 每小时主动换一条建议，免得一整天都在复读同一句
