@@ -160,7 +160,7 @@ alert → 恢复（窗口内有鼠标/键盘活动）
 - `set_island_size(scale)` / `set_island_custom_size(width, height)` — 调整灵动岛窗口尺寸并水平居中
 - `toggle_panel` / `animate_panel_close` / `hide_panel` / `is_panel_visible` / `position_panel_under_island` / `get_panel_transition_metrics` / `emit_island_panel_motion` — panel 显示与动画。Rust 端只负责定位、显示，并发出 `panel-window-transition` 事件，动画由前端完成
 - `set_close_to_tray(enabled)` — 同步关闭窗口行为（隐藏到托盘 / 直接退出）
-- `set_autostart(enabled)` — 按本地开关同步系统启动项；Windows 下额外修正 `StartupApproved\Run` 的禁用标记，失败原因回传设置页
+- `set_autostart(enabled)` — 按本地开关同步系统启动项；Windows 下写用户启动文件夹里的隐藏脚本（注册表 Run 会被安全软件清理），失败原因回传设置页
 - `update_tray_state(state)` — 前端推送计时状态，Rust 更新托盘菜单文案、跳过是否可用、tooltip 与 macOS 菜单栏标题
 - `update_shortcuts(config)` — 重新注册全局快捷键，返回每个动作的注册错误
 
