@@ -1,14 +1,13 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import { useMemos, type Memo } from '../composables/useMemos'
 import { useTimerBridge } from '../composables/useTimerBridge'
-import { eventRelativeLabel, eventTime, eventsNow, useEvents } from '../composables/useEvents'
+import { eventTime, eventsNow, useEvents } from '../composables/useEvents'
 import { useAiButler, type CoachFeedback } from '../composables/useAiButler'
 import type { CoachPlan } from '../composables/useAi'
 import { useWeeklyGoals } from '../composables/useWeeklyGoals'
-import { quickAddRequest } from '../composables/useQuickAddFocus'
 import { useDailyStats } from '../composables/useDailyStats'
-import WeeklyGoals from './WeeklyGoals.vue'
+import { toLocalDateStr } from '../utils/date'
 
 const emit = defineEmits<{ navigateEvents: [] }>()
 
@@ -19,7 +18,6 @@ const {
   getDisplayTitle,
   completeMemo,
   restoreMemo,
-  addQuickMemo,
 } = useMemos()
 const { withinDays } = useEvents()
 const {
@@ -32,48 +30,12 @@ const {
   displayTime,
   activeTaskId,
   activeTaskTitle,
-  lastMemo,
-  repeatLastRound,
 } = useTimerBridge()
 
 /** 按用户拖好的顺序取前三条，作为「现在可以动手」的候选 */
 const recentMemos = computed(() => activeMemos.value.slice(0, 3))
 
 const upcomingEvents = computed(() => withinDays(7).slice(0, 5))
-
-/** 随手记一句：回车或点按钮保存，不选分类、不写标题 */
-const quickText = ref('')
-const quickSaved = ref(false)
-const quickInputRef = ref<HTMLInputElement | null>(null)
-let quickSavedTimer: ReturnType<typeof setTimeout> | null = null
-
-// 快捷键「快速记一条」：等首页切回来后再把焦点送进输入框
-watch(quickAddRequest, () => {
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => quickInputRef.value?.focus())
-  })
-})
-
-function saveQuickMemo() {
-  // 标题重复也允许：每条备忘是独立对象，不静默去重
-  const created = addQuickMemo(quickText.value)
-  if (!created) return
-  quickText.value = ''
-  // 点「记下」按钮会抢走焦点，这里拉回输入框，方便连续录入
-  quickInputRef.value?.focus()
-  quickSaved.value = true
-  if (quickSavedTimer) clearTimeout(quickSavedTimer)
-  quickSavedTimer = setTimeout(() => {
-    quickSaved.value = false
-  }, 1600)
-}
-
-function onQuickEnter(event: KeyboardEvent) {
-  // 中文输入法还在选词时，回车是确认候选，不是保存
-  if (event.isComposing) return
-  event.preventDefault()
-  saveQuickMemo()
-}
 
 function startMemo(memo: Memo) {
   start(memo.id, getDisplayTitle(memo))
@@ -115,7 +77,7 @@ function undoComplete() {
 }
 
 /** 团子的建议直接放在首页，不再单独占一个页面 */
-const { coachInsight, refreshCoach, configured, preference } = useAiButler()
+const { coachInsight, dailySummary, refreshCoach, configured, preference } = useAiButler()
 const coachMessage = computed(() => coachInsight.value?.coach ?? null)
 
 // 团子的表情跟着本周完成的目标数走
@@ -214,17 +176,46 @@ function startPlan(plan: CoachPlan) {
   const memo = planMemo(plan)
   if (memo) start(memo.id, getDisplayTitle(memo))
 }
+
+function planEstimate(plan: CoachPlan): number {
+  return planMemo(plan)?.estimatedPomodoros ?? 0
+}
+
+/** 建议只保留还能对应到进行中小记的条目 */
+const suggestedPlans = computed(() =>
+  (coachMessage.value?.plans ?? []).filter(plan => !!planMemo(plan)),
+)
+
+function dateOffset(offset: number): string {
+  const date = new Date()
+  date.setDate(date.getDate() + offset)
+  return toLocalDateStr(date)
+}
+
+/** 总结优先展示；当天已有总结后又开始新一轮时，说明当时不是最后一轮，退回普通团子 */
+const summaryToShow = computed(() => {
+  const summary = dailySummary.value
+  if (!summary) return null
+
+  const today = dateOffset(0)
+  const yesterday = dateOffset(-1)
+  if (summary.date === today) {
+    return todayStat.value.pomodoros > summary.pomodoros ? null : summary
+  }
+  if (summary.date === yesterday && todayStat.value.pomodoros === 0) return summary
+  return null
+})
+
+const summaryTagLabel = computed(() =>
+  summaryToShow.value?.date === dateOffset(0) ? '今日总结' : '昨日总结',
+)
+
 const coachLoading = ref(false)
 const coachError = ref('')
 const coachErrorExpanded = ref(false)
 const coachNote = ref('')
-// 默认收起，首屏优先留给计时和今天要做的事
-const coachExpanded = ref(false)
-
-// 新一轮计时开始时自动收起，用户手动展开后本轮不再反复切
-watch(activeTaskId, (next, prev) => {
-  if (next && !prev) coachExpanded.value = false
-})
+// 「我有个想法」输入默认收起，点开才显示
+const noteOpen = ref(false)
 
 async function runCoach(feedback: CoachFeedback = {}) {
   if (coachLoading.value) return
@@ -269,68 +260,25 @@ function onCoachNoteEnter(event: KeyboardEvent) {
 
 <template>
   <div class="home-page">
-    <section v-if="configured" class="coach-card">
+    <section class="coach-card">
       <div class="coach-head">
-        <span class="coach-title">团子说<span v-if="mascotFace" class="coach-face">{{ mascotFace }}</span></span>
+        <span class="coach-title">团子说<span v-if="mascotFace" class="coach-face">{{ mascotFace }}</span><span v-if="summaryToShow" class="coach-summary-tag">{{ summaryTagLabel }}</span></span>
         <div class="coach-head-actions">
-          <button class="link-btn" :disabled="coachLoading" @click="handleRefreshCoach">
-            {{ coachLoading ? '团子正在想…' : '再想想' }}
-          </button>
-          <button v-if="coachMessage" class="link-btn" @click="coachExpanded = !coachExpanded">
-            {{ coachExpanded ? '收起' : '展开' }}
+          <button v-if="configured" class="link-btn" @click="noteOpen = !noteOpen">
+            {{ noteOpen ? '收起' : '我有个想法' }}
           </button>
         </div>
       </div>
-      <template v-if="coachMessage">
-        <p v-if="coachMessage.greeting" class="coach-greeting">{{ coachMessage.greeting }}</p>
-
-        <!-- 收起时只留第一条安排和一个开始按钮 -->
-        <div v-if="!coachExpanded && coachMessage.plans.length > 0" class="coach-preview">
-          <div class="coach-preview-copy">
-            <span class="coach-preview-title">{{ coachMessage.plans[0].title }}</span>
-            <span class="coach-preview-meta">
-              <span v-if="coachMessage.plans[0].when" class="coach-preview-when">{{ coachMessage.plans[0].when }}</span>
-              {{ coachMessage.plans[0].pomodoros }} 个番茄
-            </span>
-          </div>
-          <button
-            v-if="planMemo(coachMessage.plans[0])"
-            class="coach-start-btn"
-            :disabled="coachLoading"
-            @click="startPlan(coachMessage.plans[0])"
-          >开始</button>
-        </div>
-
-        <div v-if="coachExpanded && coachMessage.plans.length > 0" class="coach-plans">
-          <div v-for="(plan, index) in coachMessage.plans" :key="index" class="coach-plan">
-            <div class="coach-plan-copy">
-              <div class="coach-plan-line">
-                <span class="coach-plan-index">{{ index + 1 }}</span>
-                <span class="coach-plan-title">{{ plan.title }}</span>
-                <span class="coach-plan-pomo">{{ plan.pomodoros }} 个番茄</span>
-              </div>
-              <p class="coach-plan-reason">
-                <span v-if="plan.when" class="coach-plan-when">{{ plan.when }}</span>{{ plan.reason }}
-              </p>
-            </div>
-            <div class="coach-plan-actions">
-              <button
-                v-if="planMemo(plan)"
-                class="coach-start-btn"
-                :disabled="coachLoading"
-                @click="startPlan(plan)"
-              >开始</button>
-              <button
-                class="coach-swap-btn"
-                :disabled="coachLoading"
-                title="换掉这条，重新安排"
-                @click="handleDismissPlan(plan)"
-              >换</button>
-            </div>
-          </div>
-        </div>
-
-        <div v-if="coachExpanded" class="coach-interact">
+      <template v-if="summaryToShow">
+        <p class="coach-greeting">{{ summaryToShow.summary }}</p>
+        <p v-if="summaryToShow.tomorrow" class="coach-care">{{ summaryToShow.tomorrow }}</p>
+      </template>
+      <template v-else-if="configured">
+        <p v-if="coachMessage?.greeting" class="coach-greeting">{{ coachMessage.greeting }}</p>
+        <p v-else-if="coachInsight" class="coach-content">{{ coachInsight.content }}</p>
+        <p v-else class="coach-empty">记点小记，团子就能陪你排啦～</p>
+        <p v-if="coachMessage?.care" class="coach-care">{{ coachMessage.care }}</p>
+        <div v-if="noteOpen" class="coach-interact">
           <div class="coach-prefs">
             <button
               class="coach-pref-btn"
@@ -361,47 +309,28 @@ function onCoachNoteEnter(event: KeyboardEvent) {
             >说</button>
           </div>
         </div>
-
-        <p v-if="coachExpanded && coachMessage.care" class="coach-care">{{ coachMessage.care }}</p>
-        <p v-if="coachExpanded && coachMessage.closing" class="coach-closing">{{ coachMessage.closing }}</p>
+        <p
+          v-if="coachError"
+          class="coach-error"
+          :class="{ expanded: coachErrorExpanded }"
+          @click="coachErrorExpanded = !coachErrorExpanded"
+        >{{ coachError }}</p>
       </template>
-      <p v-else-if="coachInsight" class="coach-content">{{ coachInsight.content }}</p>
-      <p v-else class="coach-empty">记点小记或日程，团子就能帮你排啦～</p>
-      <p
-        v-if="coachError"
-        class="coach-error"
-        :class="{ expanded: coachErrorExpanded }"
-        @click="coachErrorExpanded = !coachErrorExpanded"
-      >{{ coachError }}</p>
+      <template v-else>
+        <p class="coach-content">{{ localCoach.text }}</p>
+        <div v-if="localCoach.actionLabel && !running" class="coach-local-action">
+          <button class="coach-start-btn" @click="runLocalCoachAction">{{ localCoach.actionLabel }}</button>
+        </div>
+      </template>
     </section>
-
-    <section v-else class="coach-card">
-      <div class="coach-head">
-        <span class="coach-title">团子说<span v-if="mascotFace" class="coach-face">{{ mascotFace }}</span></span>
-      </div>
-      <p class="coach-content">{{ localCoach.text }}</p>
-      <div v-if="localCoach.actionLabel && !running" class="coach-local-action">
-        <button class="coach-start-btn" @click="runLocalCoachAction">{{ localCoach.actionLabel }}</button>
-      </div>
-    </section>
-
-    <WeeklyGoals compact />
-
-    <div class="quick-capture">
-      <input
-        ref="quickInputRef"
-        v-model="quickText"
-        class="quick-input"
-        type="text"
-        :placeholder="quickSaved ? '记下了，等你想整理再打开' : '想到什么，随手记一句'"
-        @input="quickSaved = false"
-        @keydown.enter="onQuickEnter"
-      />
-      <button class="quick-save-btn" :disabled="!quickText.trim()" @click="saveQuickMemo">记下</button>
-    </div>
 
     <section class="zone">
-      <div class="zone-title">现在陪你做</div>
+      <div class="zone-title">
+        建议做的事
+        <button v-if="configured" class="link-btn" :disabled="coachLoading" @click="handleRefreshCoach">
+          {{ coachLoading ? '团子在换…' : '换一批' }}
+        </button>
+      </div>
 
       <div v-if="activeTaskId" class="running-card">
         <div class="running-main">
@@ -414,6 +343,32 @@ function onCoachNoteEnter(event: KeyboardEvent) {
             {{ running ? '歇一下' : '继续呀' }}
           </button>
           <button class="round-btn stop" @click="abandon()">不做了</button>
+        </div>
+      </div>
+
+      <div v-else-if="suggestedPlans.length > 0" class="suggestion-list">
+        <div v-for="(plan, index) in suggestedPlans" :key="plan.title" class="suggestion-item">
+          <div class="suggestion-copy">
+            <div class="suggestion-line">
+              <span class="suggestion-rank">{{ index + 1 }}</span>
+              <span class="suggestion-title">{{ plan.title }}</span>
+              <span class="suggestion-meta">
+                <span v-if="plan.when" class="suggestion-when">{{ plan.when }}</span>
+                {{ plan.pomodoros }} 个番茄
+                <template v-if="planEstimate(plan)"> · 预计 {{ planEstimate(plan) }}</template>
+              </span>
+            </div>
+            <p v-if="plan.reason" class="suggestion-reason">{{ plan.reason }}</p>
+          </div>
+          <div class="suggestion-actions">
+            <button class="coach-start-btn" :disabled="coachLoading" @click="startPlan(plan)">开始</button>
+            <button
+              class="coach-swap-btn"
+              :disabled="coachLoading"
+              title="换掉这条，重新安排"
+              @click="handleDismissPlan(plan)"
+            >换</button>
+          </div>
         </div>
       </div>
 
@@ -433,36 +388,7 @@ function onCoachNoteEnter(event: KeyboardEvent) {
       </div>
 
       <div v-else class="empty">
-        还没有要做的事呀～在上面输入一条，回车添加；点顶部胶囊就能开始专注
-      </div>
-
-      <div v-if="!activeTaskId && lastMemo" class="repeat-row">
-        <span class="repeat-title">上次：{{ getDisplayTitle(lastMemo) }}</span>
-        <button class="repeat-btn" @click="repeatLastRound">再来一轮</button>
-      </div>
-    </section>
-
-    <section class="zone">
-      <div class="zone-title">
-        这几天要做的
-        <button class="link-btn" @click="emit('navigateEvents')">都看看 ›</button>
-      </div>
-
-      <div v-if="upcomingEvents.length > 0" class="event-list">
-        <button
-          v-for="event in upcomingEvents"
-          :key="event.id"
-          class="event-line"
-          @click="emit('navigateEvents')"
-        >
-          <span class="event-day">{{ eventRelativeLabel(event.at, eventsNow) }}</span>
-          <span v-if="eventTime(event.at)" class="event-clock">{{ eventTime(event.at) }}</span>
-          <span class="event-title">{{ event.title }}</span>
-        </button>
-      </div>
-
-      <div v-else class="empty small">
-        这七天干干净净的，正好留给想做的事呀～
+        还没有要做的事，去小记页记一条吧～
       </div>
     </section>
 
@@ -875,6 +801,96 @@ function onCoachNoteEnter(event: KeyboardEvent) {
   margin: 0;
   font-size: 11px;
   color: rgba(255, 255, 255, 0.35);
+}
+
+.coach-summary-tag {
+  margin-left: 6px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 9px;
+  color: var(--focus-color);
+  background: color-mix(in srgb, var(--focus-color) 12%, transparent);
+}
+
+/* 建议做的事：团子的安排放在这里，顶部只留情绪 */
+.suggestion-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.suggestion-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 11px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.suggestion-item:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: color-mix(in srgb, var(--focus-color) 22%, rgba(255, 255, 255, 0.08));
+}
+
+.suggestion-copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.suggestion-line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.suggestion-rank {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: color-mix(in srgb, var(--focus-color) 75%, transparent);
+}
+
+.suggestion-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.86);
+}
+
+.suggestion-meta {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.38);
+  white-space: nowrap;
+}
+
+.suggestion-when {
+  margin-right: 4px;
+  color: color-mix(in srgb, var(--focus-color) 65%, transparent);
+}
+
+.suggestion-reason {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.suggestion-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 .coach-error {

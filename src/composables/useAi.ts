@@ -89,6 +89,24 @@ export interface CoachMessage {
   closing: string
 }
 
+export interface DailySummaryInput {
+  /** 总结对应的日期，YYYY-MM-DD */
+  date: string
+  pomodoros: number
+  focusMinutes: number
+  /** 当天完成归档的小记标题 */
+  completedMemos: string[]
+  /** 当天打过卡的小记，pomodoros 是当天完成的轮数 */
+  workedMemos: Array<{ title: string; pomodoros: number; estimatedPomodoros: number }>
+}
+
+export interface DailySummaryResult {
+  /** 对今天的总结 */
+  summary: string
+  /** 明天一句建议 */
+  tomorrow: string
+}
+
 export interface PlanArtifacts {
   tasks: string[]
   memoTitle: string
@@ -358,15 +376,16 @@ export function useAi() {
 {"greeting":"先回应 userNotes 的最后一句，再带一个今天的具体数字，25-40 字","plans":[{"when":"现在起","memo":小记序号,"title":"小记标题","pomodoros":1,"reason":"为什么现在做，15-25 字"}],"care":"生活提醒，15-30 字","closing":"收尾一句，10-20 字"}
 
 规则：
-1. plans 给 1-3 条，顺序就是先做什么、再做什么、最后做什么。when 写建议时间窗：第一条用「现在起」或具体时刻，后面可以写「约 21:10」「今天收尾」。when 不能早于 now 里的当前时刻。
-2. 每条 reason 必须引用数据里的事实：放了几天没动、跑过几个番茄、离下一条日程还有多久、今天已专注多久。几条安排的理由要引用不同的事实，别每条都写“今天已专注多久”。禁止“提高效率”“加油”“合理安排时间”这类空话。
-3. userNotes 是用户跟你要说的话。非空时，greeting 必须先自然回应最后一句，比如他说累就先让他松口气，不要装没听见。
-4. preference 为 hard-first 时先排费脑或重要的小记，easy-first 时先排轻松、能快速完成的。
-5. dismissed 里的小记不要再推荐。没有合适的小记时，plans 可以只给 1 条，或推荐处理最近的日程。
-6. care 按当前时段说人话，不要编造天气、位置、心情或数据里没有的事。
-7. recentCoaches 只是告诉你最近推荐过哪些小记，用来换角度；里面不含时间，也不要照抄任何旧的时刻。现在几点只看 now。
-8. closing 要贴合当前时段，晚上还早的时候不要随口说晚安。
-9. 一个番茄是 ${ctx.focusMinutes} 分钟。memos 里的 estimatedPomodoros 是用户自己估的番茄数，pomodoros 是已经完成的；plan 的 pomodoros 参考剩余量（estimatedPomodoros 减 pomodoros），没估过就按 1-3 个给，不要一次把剩余量全排进一条。不要 Markdown、不要编号前缀，不要复述原始数据。`,
+1. plans 优先给 2-3 条（小记足够时），顺序就是先做什么、再做什么、最后做什么。when 写建议时间窗：第一条用「现在起」或具体时刻，后面可以写「约 21:10」「今天收尾」。when 不能早于 now 里的当前时刻。
+2. greeting 只负责情绪：结合今天已经完成多少番茄、完成或推进了哪条小记、当前时段说一句贴心的话，不要把 plans 里的安排再复述一遍。
+3. 每条 reason 必须引用数据里的事实：放了几天没动、跑过几个番茄、离下一条日程还有多久、今天已专注多久。几条安排的理由要引用不同的事实，别每条都写“今天已专注多久”。禁止“提高效率”“加油”“合理安排时间”这类空话。
+4. userNotes 是用户跟你要说的话。非空时，greeting 必须先自然回应最后一句，比如他说累就先让他松口气，不要装没听见。
+5. preference 为 hard-first 时先排费脑或重要的小记，easy-first 时先排轻松、能快速完成的。
+6. dismissed 里的小记不要再推荐。没有合适的小记时，plans 可以只给 1 条，或推荐处理最近的日程。
+7. care 按当前时段说人话，不要编造天气、位置、心情或数据里没有的事。
+8. recentCoaches 只是告诉你最近推荐过哪些小记，用来换角度；里面不含时间，也不要照抄任何旧的时刻。现在几点只看 now。
+9. closing 要贴合当前时段，晚上还早的时候不要随口说晚安。
+10. 一个番茄是 ${ctx.focusMinutes} 分钟。memos 里的 estimatedPomodoros 是用户自己估的番茄数，pomodoros 是已经完成的；plan 的 pomodoros 参考剩余量（estimatedPomodoros 减 pomodoros），没估过就按 1-3 个给，不要一次把剩余量全排进一条。不要 Markdown、不要编号前缀，不要复述原始数据。`,
       JSON.stringify(ctx),
       0.8,
     )
@@ -399,6 +418,30 @@ export function useAi() {
       // JSON 解析失败时整段兜底
     }
     return { greeting: raw.slice(0, 240), plans: [], care: '', closing: '' }
+  }
+
+  async function summarizeDay(ctx: DailySummaryInput): Promise<DailySummaryResult> {
+    const text = await chat(
+      `你是团子，住在用户屏幕顶部的专注岛里。晚上要给他一句当天的小结，语气软、具体，不要空泛的鼓励。
+只输出 JSON：{"summary":"今天做完的事，40-70 字，可以带数字，也可以说一句辛苦了","tomorrow":"明天一句轻一点的建议，20-40 字"}
+规则：
+1. summary 必须基于数据：完成了几个番茄、专注多久、完成或推进了哪些小记。数字要准确，不要编造没发生过的事。
+2. 今天番茄很少时不要硬夸，轻轻接住就好；完成得多时可以真诚地夸一句。
+3. tomorrow 只给一件具体的小事或一个轻提醒，不要列清单，不要说「继续加油」。
+4. 不要 Markdown、不要编号、不要复述原始数据。`,
+      JSON.stringify(ctx),
+      0.7,
+    )
+    const raw = stripCodeFence(text)
+    try {
+      const data = JSON.parse(raw) as Record<string, unknown>
+      const summary = String(data?.summary ?? '').trim()
+      const tomorrow = String(data?.tomorrow ?? '').trim()
+      if (summary) return { summary, tomorrow }
+    } catch {
+      // 解析失败时整段兜底
+    }
+    return { summary: raw.slice(0, 200), tomorrow: '' }
   }
 
   async function evaluatePlan(plan: string, extra: string, tasks: PlanTaskInput[]): Promise<string> {
@@ -483,6 +526,7 @@ export function useAi() {
     suggestToday,
     polishMemo,
     coachToday,
+    summarizeDay,
     evaluatePlan,
     suggestTaskNames,
     generatePlan,
