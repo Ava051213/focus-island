@@ -14,7 +14,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  update: [patch: Partial<Pick<Memo, 'title' | 'content' | 'categoryId' | 'isPinned'>>]
+  update: [patch: Partial<Pick<Memo, 'title' | 'content' | 'categoryId' | 'isPinned' | 'estimatedPomodoros'>>]
   delete: []
   back: [isEmpty: boolean]
 }>()
@@ -24,6 +24,7 @@ const localTitle = ref(props.memo.title)
 const localContent = ref(props.memo.content)
 const localCategoryId = ref(props.memo.categoryId)
 const localIsPinned = ref(props.memo.isPinned)
+const localEstimatedPomodoros = ref(props.memo.estimatedPomodoros ?? 0)
 const saveStatus = ref<'saved' | 'saving' | 'unsaved'>('saved')
 const rewriting = ref(false)
 const rewriteError = ref('')
@@ -111,6 +112,7 @@ watch(() => props.memo, (newMemo) => {
   localContent.value = newMemo.content
   localCategoryId.value = newMemo.categoryId
   localIsPinned.value = newMemo.isPinned
+  localEstimatedPomodoros.value = newMemo.estimatedPomodoros ?? 0
 }, { deep: true })
 
 // Auto-save on changes - 10s debounce to reduce flickering
@@ -145,6 +147,7 @@ function doSave() {
     content: localContent.value,
     categoryId: localCategoryId.value,
     isPinned: localIsPinned.value,
+    estimatedPomodoros: localEstimatedPomodoros.value,
   })
   // Simulate brief saving state then show saved
   setTimeout(() => {
@@ -154,6 +157,12 @@ function doSave() {
 
 // Category change
 function onCategoryChange() {
+  scheduleSave()
+}
+
+/** 预计番茄：0 表示还没估，上下调整后自动保存 */
+function adjustEstimate(delta: number) {
+  localEstimatedPomodoros.value = Math.min(99, Math.max(0, localEstimatedPomodoros.value + delta))
   scheduleSave()
 }
 
@@ -728,6 +737,12 @@ function formatUpdateTime(timestamp: number): string {
         :showNewButton="false"
         @change="onCategoryChange"
       />
+      <div class="estimate-stepper" title="预计这条要用几个番茄，团子会参考它安排今天">
+        <button class="estimate-btn" @click="adjustEstimate(-1)">−</button>
+        <span class="estimate-value">{{ localEstimatedPomodoros }}</span>
+        <button class="estimate-btn" @click="adjustEstimate(1)">+</button>
+        <span class="estimate-label">番茄</span>
+      </div>
     </div>
 
     <!-- Rich Text Toolbar -->
@@ -883,9 +898,47 @@ function formatUpdateTime(timestamp: number): string {
 .editor-title-area {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
   padding: 8px 16px 4px;
   flex-shrink: 0;
+}
+
+.estimate-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.estimate-btn {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border-radius: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.estimate-btn:hover {
+  color: var(--focus-color);
+  border-color: color-mix(in srgb, var(--focus-color) 40%, transparent);
+}
+
+.estimate-value {
+  min-width: 14px;
+  text-align: center;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.estimate-label {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.35);
 }
 
 /* 底部操作条 */

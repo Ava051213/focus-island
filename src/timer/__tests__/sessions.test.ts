@@ -4,7 +4,6 @@ import {
   aggregateSessionsByTask,
   appendSession,
   buildSession,
-  formatFocusDuration,
   mergeDailyStats,
   sessionLocalDate,
   type Session,
@@ -123,29 +122,24 @@ describe('session records', () => {
   })
 
   it('按小记聚合时只统计完成的轮次，跳过和中断不计入', () => {
+    const today = new Date(2026, 10, 4, 12, 0, 0).getTime()
+    const yesterday = new Date(2026, 10, 3, 12, 0, 0).getTime()
+
     const sessions: Session[] = [
-      makeSession({ id: 'a', taskId: 'memo-1' }),
-      makeSession({ id: 'b', taskId: 'memo-1', actualDuration: 600 }),
-      makeSession({ id: 'c', taskId: 'memo-1', status: 'skipped', actualDuration: 300 }),
-      makeSession({ id: 'd', taskId: 'memo-1', status: 'interrupted', actualDuration: 120 }),
-      makeSession({ id: 'e', taskId: 'memo-2', actualDuration: 1800 }),
-      makeSession({ id: 'f', taskId: null }),
+      makeSession({ id: 'a', taskId: 'memo-1', endAt: today }),
+      makeSession({ id: 'b', taskId: 'memo-1', endAt: yesterday }),
+      makeSession({ id: 'c', taskId: 'memo-1', status: 'skipped', endAt: today }),
+      makeSession({ id: 'd', taskId: 'memo-1', status: 'interrupted', endAt: today }),
+      makeSession({ id: 'e', taskId: 'memo-2', endAt: today }),
+      makeSession({ id: 'f', taskId: null, endAt: today }),
     ]
 
-    const stats = aggregateSessionsByTask(sessions)
+    const stats = aggregateSessionsByTask(sessions, '2026-11-04')
 
-    expect(stats.get('memo-1')).toEqual({ pomodoros: 2, focusSeconds: 2100 })
-    expect(stats.get('memo-2')).toEqual({ pomodoros: 1, focusSeconds: 1800 })
+    expect(stats.get('memo-1')).toEqual({ pomodoros: 2, todayPomodoros: 1 })
+    expect(stats.get('memo-2')).toEqual({ pomodoros: 1, todayPomodoros: 1 })
     expect(stats.has('')).toBe(false)
     expect(stats.size).toBe(2)
-  })
-
-  it('格式化专注时长', () => {
-    expect(formatFocusDuration(0)).toBe('不到 1 分钟')
-    expect(formatFocusDuration(30)).toBe('不到 1 分钟')
-    expect(formatFocusDuration(1500)).toBe('25 分钟')
-    expect(formatFocusDuration(3600)).toBe('1 小时')
-    expect(formatFocusDuration(5100)).toBe('1 小时 25 分')
   })
 
   it('旧累加统计与 Session 合并不重复计数，跳过/中断不进番茄数', () => {

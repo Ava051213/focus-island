@@ -47,7 +47,10 @@ export interface CoachContext {
     id: string
     title: string
     content: string
+    /** 已经完成的番茄数 */
     pomodoros: number
+    /** 用户预计要用的番茄数，0 表示没估 */
+    estimatedPomodoros: number
     daysSinceUpdate: number
     pinned: boolean
   }>
@@ -363,7 +366,7 @@ export function useAi() {
 6. care 按当前时段说人话，不要编造天气、位置、心情或数据里没有的事。
 7. recentCoaches 只是告诉你最近推荐过哪些小记，用来换角度；里面不含时间，也不要照抄任何旧的时刻。现在几点只看 now。
 8. closing 要贴合当前时段，晚上还早的时候不要随口说晚安。
-9. 一个番茄是 ${ctx.focusMinutes} 分钟。不要 Markdown、不要编号前缀，不要复述原始数据。`,
+9. 一个番茄是 ${ctx.focusMinutes} 分钟。memos 里的 estimatedPomodoros 是用户自己估的番茄数，pomodoros 是已经完成的；plan 的 pomodoros 参考剩余量（estimatedPomodoros 减 pomodoros），没估过就按 1-3 个给，不要一次把剩余量全排进一条。不要 Markdown、不要编号前缀，不要复述原始数据。`,
       JSON.stringify(ctx),
       0.8,
     )

@@ -208,6 +208,7 @@ function buildContext(): CoachContext {
       title: memo.title || '未命名',
       content: stripHtml(memo.content).slice(0, 200),
       pomodoros: memo.pomodoroCount,
+      estimatedPomodoros: memo.estimatedPomodoros ?? 0,
       daysSinceUpdate: Math.floor((now.getTime() - memo.updatedAt) / 86400000),
       pinned: memo.isPinned,
     })),

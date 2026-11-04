@@ -9,6 +9,8 @@ export interface Memo {
   isPinned: boolean
   /** 这条备忘上累计完成的专注轮数 */
   pomodoroCount: number
+  /** 用户给这条小记估的番茄数，0 表示还没估 */
+  estimatedPomodoros: number
   /** 手动排序序号，越小越靠前；旧数据在读取时补齐 */
   order?: number
   /** 完成归档时间，null 表示还在进行中 */
@@ -80,6 +82,7 @@ const memoStore = createPersistedStore({
       .map(raw => ({
         ...raw,
         pomodoroCount: Number(raw.pomodoroCount) || 0,
+        estimatedPomodoros: Math.max(0, Math.floor(Number(raw.estimatedPomodoros) || 0)),
         completedAt: Number(raw.completedAt) > 0 ? Number(raw.completedAt) : null,
       })) as Memo[]
     if (list.some(memo => typeof memo.order !== 'number')) {
@@ -144,6 +147,7 @@ export function useMemos() {
       categoryId: actualCategoryId,
       isPinned: false,
       pomodoroCount: 0,
+      estimatedPomodoros: 0,
       order: minOrder - 1,
       completedAt: null,
       createdAt: now,
@@ -164,7 +168,7 @@ export function useMemos() {
     return memo
   }
 
-  function updateMemo(id: string, patch: Partial<Pick<Memo, 'title' | 'content' | 'categoryId' | 'isPinned'>>) {
+  function updateMemo(id: string, patch: Partial<Pick<Memo, 'title' | 'content' | 'categoryId' | 'isPinned' | 'estimatedPomodoros'>>) {
     const memo = memos.value.find(m => m.id === id)
     if (!memo) return
     Object.assign(memo, patch)

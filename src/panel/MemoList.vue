@@ -3,7 +3,7 @@ import { computed, ref } from 'vue'
 import { useMemos, type Memo } from '../composables/useMemos'
 import { useSessions } from '../composables/useSessions'
 import { useTimerBridge } from '../composables/useTimerBridge'
-import { aggregateSessionsByTask, formatFocusDuration } from '../timer/sessions'
+import { aggregateSessionsByTask } from '../timer/sessions'
 import MemoCategoryTag from './MemoCategoryTag.vue'
 
 const props = defineProps<{
@@ -28,7 +28,7 @@ const {
 const { start } = useTimerBridge()
 const { sessions } = useSessions()
 
-/** 每条小记的番茄数与累计专注时长，没有记录就不显示 */
+/** 每条小记的累计番茄、今日番茄与预计番茄 */
 const memoStatsLabels = computed(() => {
   const byTask = aggregateSessionsByTask(sessions.value)
   const labels: Record<string, string> = {}
@@ -36,10 +36,12 @@ const memoStatsLabels = computed(() => {
   for (const memo of [...props.memos, ...completedMemos.value]) {
     const stat = byTask.get(memo.id)
     const pomodoros = Math.max(stat?.pomodoros ?? 0, memo.pomodoroCount ?? 0)
-    if (pomodoros <= 0) continue
+    const todayPomodoros = stat?.todayPomodoros ?? 0
+    const estimated = memo.estimatedPomodoros ?? 0
 
-    const duration = stat && stat.focusSeconds > 0 ? formatFocusDuration(stat.focusSeconds) : ''
-    labels[memo.id] = duration ? `${pomodoros} 个番茄 · ${duration}` : `${pomodoros} 个番茄`
+    const parts = [`${pomodoros} 番茄`, `今日 ${todayPomodoros}`]
+    if (estimated > 0) parts.push(`预计 ${estimated}`)
+    labels[memo.id] = parts.join(' · ')
   }
 
   return labels
@@ -306,7 +308,7 @@ function handleItemClick(memo: Memo) {
       </div>
       <div class="memo-item-meta">
         <MemoCategoryTag :category-id="memo.categoryId" />
-        <span v-if="memoStatsLabels[memo.id]" class="memo-item-stats">{{ memoStatsLabels[memo.id] }}</span>
+        <span class="memo-item-stats">{{ memoStatsLabels[memo.id] }}</span>
         <span class="memo-item-time">{{ formatTime(memo.updatedAt) }}</span>
       </div>
       <div class="memo-item-preview">{{ getContentPreview(memo.content) }}</div>
