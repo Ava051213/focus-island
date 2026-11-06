@@ -1,47 +1,154 @@
 import { describe, expect, it } from 'vitest'
 import {
-  buildFallbackPlan,
+  applyPlanRefinement,
+  buildRulesPlan,
   normalizeDayPlan,
   orderForDisplay,
+  rulesGreeting,
   type DayPlan,
   type PlanEntry,
+  type RulesMemoInput,
 } from '../dayPlan'
 
-describe('buildFallbackPlan', () => {
-  const memos = [
-    { id: 'm1', title: '高数作业', estimatedPomodoros: 4, pomodoroCount: 1 },
-    { id: 'm2', title: '背单词', estimatedPomodoros: 0, pomodoroCount: 0 },
-    { id: 'm3', title: '读论文', estimatedPomodoros: 10, pomodoroCount: 0 },
-  ]
-  const todos = [
-    { id: 't1', title: '交实验报告', course: '物理实验' },
-    { id: 't2', title: '作业三', course: '线性代数' },
-    { id: 't3', title: '排不下的', course: '第三门课' },
-  ]
+const NOW = new Date(2026, 10, 6, 12, 0, 0)
 
-  it('待办在前最多 2 条，小记按手动顺序补足，合计不超过 8 条', () => {
-    const entries = buildFallbackPlan(memos, todos)
-    expect(entries).toHaveLength(5)
-    expect(entries[0]).toMatchObject({ source: 'todo', refId: 't1', pomodoros: 1 })
-    expect(entries[1]).toMatchObject({ source: 'todo', refId: 't2' })
-    expect(entries[2]).toMatchObject({ source: 'memo', refId: 'm1' })
-    expect(entries[4]).toMatchObject({ source: 'memo', refId: 'm3' })
+function memo(over: Partial<RulesMemoInput> & { id: string }): RulesMemoInput {
+  return {
+    title: `小记 ${over.id}`,
+    isPinned: false,
+    pomodoroCount: 0,
+    estimatedPomodoros: 0,
+    updatedAt: NOW.getTime() - 86400000, // 默认放了 1 天
+    ...over,
+  }
+}
+
+describe('buildRulesPlan', () => {
+  it('临近截止的待办在前（最多 3 条），截止文案进 note', () => {
+    const todos = [
+      { id: 't1', title: '交实验报告', course: '物理实验', dueLabel: '剩 3.5 小时' },
+      { id: 't2', title: '作业三', course: '线性代数', dueLabel: '已过期 1 天' },
+      { id: 't3', title: '测验', course: '高数', dueLabel: '剩 2 天' },
+      { id: 't4', title: '排不下的', course: '第四门课', dueLabel: '剩 5 天' },
+    ]
+    const entries = buildRulesPlan([], todos, NOW)
+    expect(entries).toHaveLength(3)
+    expect(entries.map(entry => entry.refId)).toEqual(['t1', 't2', 't3'])
+    expect(entries[0]).toMatchObject({ source: 'todo', pomodoros: 1, note: '剩 3.5 小时', course: '物理实验' })
   })
 
-  it('番茄数取剩余量并钳制在 1-3，没估过给 1', () => {
-    const entries = buildFallbackPlan(memos, [])
-    // m1：估 4 完成 1 → 剩 3；m2：没估 → 1；m3：估 10 → 钳到 3
-    expect(entries.map(entry => entry.pomodoros)).toEqual([3, 1, 3])
+  it('小记打分：置顶 > 放置天数 > 已跑轮数 > 手动顺序', () => {
+    const entries = buildRulesPlan([
+      memo({ id: 'plain' }),                                   // 2 分
+      memo({ id: 'started', pomodoroCount: 2 }),               // 2 + 6 = 8 分
+      memo({ id: 'stale', updatedAt: NOW.getTime() - 5 * 86400000 }), // 2 + 10 = 12 分
+      memo({ id: 'pinned', isPinned: true, pomodoroCount: 3 }), // 30 + 2 + 9 = 41 分
+    ], [], NOW)
+    expect(entries.map(entry => entry.refId)).toEqual(['pinned', 'stale', 'started', 'plain'])
   })
 
-  it('兜底条目没有时间提示，每条都有 id 且未勾选', () => {
-    const entries = buildFallbackPlan(memos, todos)
-    for (const entry of entries) {
-      expect(entry.id).toBeTruthy()
-      expect(entry.when).toBeUndefined()
-      expect(entry.done).toBe(false)
-      expect(entry.doneAt).toBeNull()
+  it('同分保持手动顺序，上限 8 条', () => {
+    const memos = Array.from({ length: 10 }, (_, i) => memo({ id: `m${i}` }))
+    const entries = buildRulesPlan(memos, [], NOW)
+    expect(entries).toHaveLength(8)
+    expect(entries.map(entry => entry.refId)).toEqual(['m0', 'm1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7'])
+  })
+
+  it('番茄数取剩余量并钳制 1-3，没估过给 1', () => {
+    const entries = buildRulesPlan([
+      memo({ id: 'a', estimatedPomodoros: 10 }),                    // 剩 10 → 3
+      memo({ id: 'b', estimatedPomodoros: 4, pomodoroCount: 1 }),   // 剩 3 → 3
+      memo({ id: 'c' }),                                            // 没估 → 1
+    ], [], NOW)
+    expect(entries.map(entry => entry.pomodoros)).toEqual([3, 3, 1])
+  })
+
+  it('note 最多两条事实：置顶、放置天数、跑过的轮数、就差最后 1 个', () => {
+    const entries = buildRulesPlan([
+      memo({ id: 'pinned-stale', isPinned: true, updatedAt: NOW.getTime() - 5 * 86400000 }),
+      memo({ id: 'almost', estimatedPomodoros: 4, pomodoroCount: 3 }),
+      memo({ id: 'started', pomodoroCount: 2 }),
+      memo({ id: 'plain' }),
+    ], [], NOW)
+    const noteOf = (id: string) => entries.find(entry => entry.refId === id)?.note
+    expect(noteOf('pinned-stale')).toBe('置顶的事 · 放了 5 天没动了')
+    expect(noteOf('almost')).toBe('已经跑了 3 轮 · 就差最后 1 个番茄')
+    expect(noteOf('started')).toBe('已经跑了 2 轮')
+    expect(noteOf('plain')).toBeUndefined()
+  })
+})
+
+describe('rulesGreeting', () => {
+  const entry: PlanEntry = {
+    id: 'e1', source: 'memo', refId: 'm1', title: '高数作业', pomodoros: 2, done: false, doneAt: null,
+  }
+
+  it('报个数并指向第一条；空列表不说话', () => {
+    expect(rulesGreeting([entry], NOW)).toContain('1 件事')
+    expect(rulesGreeting([entry], NOW)).toContain('「高数作业」')
+    expect(rulesGreeting([], NOW)).toBeUndefined()
+  })
+
+  it('按当前时段打招呼', () => {
+    expect(rulesGreeting([entry], new Date(2026, 10, 6, 9, 0))).toMatch(/^早上好/)
+    expect(rulesGreeting([entry], new Date(2026, 10, 6, 20, 0))).toMatch(/^晚上好/)
+  })
+})
+
+describe('applyPlanRefinement', () => {
+  const entry = (id: string): PlanEntry => ({
+    id, source: 'memo', refId: id, title: `标题 ${id}`, pomodoros: 1, done: false, doneAt: null,
+  })
+
+  it('items 先按骨架序号套注解，order 再重排', () => {
+    const result = applyPlanRefinement([entry('a'), entry('b')], {
+      greeting: '润色过的开场',
+      care: '多喝水',
+      order: [2, 1],
+      items: [{ index: 1, when: '现在起', note: '模型理由' }],
+    })
+    expect(result.entries.map(item => item.refId)).toEqual(['b', 'a'])
+    // index 1 是骨架里的 a，重排后落在第二位
+    expect(result.entries[1]).toMatchObject({ refId: 'a', when: '现在起', note: '模型理由' })
+    expect(result.greeting).toBe('润色过的开场')
+    expect(result.care).toBe('多喝水')
+  })
+
+  it('order 不是完整排列时保持规则顺序，注解照常生效', () => {
+    const result = applyPlanRefinement([entry('a'), entry('b'), entry('c')], {
+      greeting: '',
+      care: '',
+      order: [3, 1],          // 缺 2
+      items: [{ index: 2, note: '第二条的理由' }],
+    })
+    expect(result.entries.map(item => item.refId)).toEqual(['a', 'b', 'c'])
+    expect(result.entries[1].note).toBe('第二条的理由')
+  })
+
+  it('重复序号、越界序号、非数组都视为非法', () => {
+    for (const bad of [[1, 1], [1, 2, 9], [2], 'not-array']) {
+      const result = applyPlanRefinement([entry('a'), entry('b')], { order: bad })
+      expect(result.entries.map(item => item.refId)).toEqual(['a', 'b'])
     }
+  })
+
+  it('when/note 截断，空值不覆盖，greeting 为空保留规则版', () => {
+    const skeleton = [{ ...entry('a'), when: '规则时间', note: '规则理由' }]
+    const result = applyPlanRefinement(skeleton, {
+      greeting: '',
+      care: '',
+      order: [],
+      items: [{ index: 1, when: '一段特别特别长的时间提示', note: '' }],
+    })
+    expect(result.entries[0].when).toHaveLength(12)
+    expect(result.entries[0].note).toBe('规则理由')
+    expect(result.greeting).toBeUndefined()
+    expect(result.care).toBeUndefined()
+  })
+
+  it('refinement 不是对象时原样返回', () => {
+    const skeleton = [entry('a')]
+    expect(applyPlanRefinement(skeleton, null)).toEqual({ entries: skeleton })
   })
 })
 

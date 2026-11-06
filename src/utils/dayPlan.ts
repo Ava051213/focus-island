@@ -39,41 +39,82 @@ export interface DayPlan {
   updatedAt: number
 }
 
-export interface FallbackMemoInput {
+export interface RulesMemoInput {
   id: string
   title: string
-  estimatedPomodoros: number
+  isPinned: boolean
   pomodoroCount: number
+  estimatedPomodoros: number
+  updatedAt: number
 }
 
-export interface FallbackTodoInput {
+export interface RulesTodoInput {
   id: string
   title: string
   course: string
+  /** 预先用 todoRemainingLabel 算好的截止文案（「剩 3.5 小时」「已过期 2 天」） */
+  dueLabel: string
+}
+
+const PLAN_CAP = 8
+const MEMO_SCORE_PINNED = 30
+const MEMO_SCORE_IDLE_FACTOR = 2
+const MEMO_SCORE_IDLE_CAP = 14
+const MEMO_SCORE_DONE_FACTOR = 3
+const MEMO_SCORE_DONE_CAP = 10
+
+function daysIdleOf(memo: RulesMemoInput, now: Date): number {
+  return Math.max(0, Math.floor((now.getTime() - memo.updatedAt) / 86400000))
+}
+
+/** 放置越久、越接近完成、越是置顶，越该今天动 */
+function memoScore(memo: RulesMemoInput, now: Date): number {
+  return (memo.isPinned ? MEMO_SCORE_PINNED : 0)
+    + Math.min(MEMO_SCORE_IDLE_CAP, daysIdleOf(memo, now)) * MEMO_SCORE_IDLE_FACTOR
+    + Math.min(MEMO_SCORE_DONE_CAP, memo.pomodoroCount) * MEMO_SCORE_DONE_FACTOR
+}
+
+/** 朴素但有事实的文案：最多取两条事实 */
+function memoNote(memo: RulesMemoInput, now: Date): string | undefined {
+  const facts: string[] = []
+  if (memo.isPinned) facts.push('置顶的事')
+  const idle = daysIdleOf(memo, now)
+  if (idle >= 3) facts.push(`放了 ${idle} 天没动了`)
+  if (memo.pomodoroCount > 0) facts.push(`已经跑了 ${memo.pomodoroCount} 轮`)
+  if (memo.estimatedPomodoros > 0 && memo.estimatedPomodoros - memo.pomodoroCount <= 1) {
+    facts.push('就差最后 1 个番茄')
+  }
+  return facts.slice(0, 2).join(' · ') || undefined
 }
 
 /**
- * 无 Key / 请求失败时的本地排程：紧急课程待办（已按截止升序）在前，
- * 进行中小记按用户手动顺序在后，合计不超过 8 条；顺序就是建议的先后。
+ * 本地规则排程，永远先排完整骨架：
+ * 临近截止的课程待办（已按截止升序传入）在前，小记按打分在后，合计不超过 8 条。
  */
-export function buildFallbackPlan(
-  memos: FallbackMemoInput[],
-  todos: FallbackTodoInput[],
+export function buildRulesPlan(
+  memos: RulesMemoInput[],
+  todos: RulesTodoInput[],
+  now: Date,
 ): PlanEntry[] {
-  const cap = 8
-
   const candidates: Array<Omit<PlanEntry, 'id' | 'done' | 'doneAt'>> = []
-  for (const todo of todos.slice(0, 2)) {
+  for (const todo of todos.slice(0, 3)) {
     candidates.push({
       source: 'todo',
       refId: todo.id,
       title: todo.title,
       course: todo.course || undefined,
+      when: undefined,
       pomodoros: 1,
+      note: todo.dueLabel || undefined,
     })
   }
-  for (const memo of memos) {
-    if (candidates.length >= cap) break
+
+  // 稳定排序：同分保持用户手动顺序
+  const ranked = memos
+    .map((memo, index) => ({ memo, index, score: memoScore(memo, now) }))
+    .sort((a, b) => b.score - a.score)
+  for (const { memo } of ranked) {
+    if (candidates.length >= PLAN_CAP) break
     // 剩余量 = 估的减去已完成的；没估过就先给 1 个
     const remaining = memo.estimatedPomodoros > 0
       ? memo.estimatedPomodoros - memo.pomodoroCount
@@ -82,7 +123,9 @@ export function buildFallbackPlan(
       source: 'memo',
       refId: memo.id,
       title: memo.title || '未命名',
+      when: undefined,
       pomodoros: Math.min(3, Math.max(1, remaining)),
+      note: memoNote(memo, now),
     })
   }
 
@@ -92,6 +135,66 @@ export function buildFallbackPlan(
     done: false,
     doneAt: null,
   }))
+}
+
+/** 无模型时的开场白：报个数、指个开头；没有条目就不说 */
+export function rulesGreeting(entries: PlanEntry[], now: Date): string | undefined {
+  if (entries.length === 0) return undefined
+  const hour = now.getHours()
+  const timeWord = hour < 6 ? '夜深了' : hour < 11 ? '早上好' : hour < 14 ? '中午好' : hour < 18 ? '下午好' : '晚上好'
+  return `${timeWord}，排好了今天要做的 ${entries.length} 件事，先从「${entries[0].title}」动手吧。`
+}
+
+export interface PlanRefinementApplied {
+  entries: PlanEntry[]
+  greeting?: string
+  care?: string
+}
+
+/**
+ * 把模型的润色结果套到规则骨架上，纯函数。
+ * items 的 index 按骨架原序号（先套注解），order 再重排；
+ * order 必须是 1..n 的完整排列才采纳；when/note 空值不覆盖，超长截断；greeting 为空保留规则版。
+ */
+export function applyPlanRefinement(entries: PlanEntry[], refinement: unknown): PlanRefinementApplied {
+  const applied: PlanRefinementApplied = { entries: [...entries] }
+  if (!refinement || typeof refinement !== 'object') return applied
+  const raw = refinement as Record<string, unknown>
+
+  if (Array.isArray(raw.items)) {
+    for (const item of raw.items) {
+      if (!item || typeof item !== 'object') continue
+      const record = item as Record<string, unknown>
+      const index = Number(record.index)
+      if (!Number.isInteger(index) || index < 1 || index > applied.entries.length) continue
+      const entry = applied.entries[index - 1]
+      const when = typeof record.when === 'string' ? record.when.trim().slice(0, 12) : ''
+      const note = typeof record.note === 'string' ? record.note.trim().slice(0, 80) : ''
+      if (when) entry.when = when
+      if (note) entry.note = note
+    }
+  }
+
+  const total = entries.length
+  if (Array.isArray(raw.order) && total > 0) {
+    const order = raw.order.map(value => Number(value))
+    const seen = new Set<number>()
+    let valid = order.length === total
+    for (const value of order) {
+      if (!Number.isInteger(value) || value < 1 || value > total || seen.has(value)) {
+        valid = false
+        break
+      }
+      seen.add(value)
+    }
+    if (valid) applied.entries = order.map(value => applied.entries[value - 1])
+  }
+
+  const greeting = typeof raw.greeting === 'string' ? raw.greeting.trim().slice(0, 100) : ''
+  if (greeting) applied.greeting = greeting
+  const care = typeof raw.care === 'string' ? raw.care.trim().slice(0, 60) : ''
+  if (care) applied.care = care
+  return applied
 }
 
 function normalizeEntry(raw: unknown): PlanEntry | null {

@@ -120,6 +120,45 @@ export interface DailySummaryResult {
   tomorrow: string
 }
 
+/** 规则骨架里的一条，给模型润色用的最小事实集 */
+export interface PlanRefineEntryInput {
+  /** 1 起始序号 */
+  index: number
+  title: string
+  source: 'memo' | 'todo'
+  course?: string
+  pomodoros: number
+  /** 规则给的文案，模型可以改写得更像人话 */
+  note: string
+  /** 待办的截止剩余文案 */
+  dueLabel?: string
+  /** 小记放置天数 */
+  daysIdle?: number
+  /** 小记已完成番茄数 */
+  pomodorosDone?: number
+}
+
+export interface PlanRefineInput {
+  /** `YYYY-MM-DD HH:mm 周X`，与 CoachContext.now 同格式 */
+  now: string
+  timeOfDay: string
+  focusMinutes: number
+  preference: 'hard-first' | 'easy-first' | ''
+  userNotes: string[]
+  todayPomodoros: number
+  minutesToNextEvent: number | null
+  nextEventTitle: string | null
+  entries: PlanRefineEntryInput[]
+}
+
+export interface PlanRefinement {
+  greeting: string
+  care: string
+  /** 1 起始序号的完整排列；空数组 = 保持规则顺序 */
+  order: number[]
+  items: Array<{ index: number; when: string; note: string }>
+}
+
 export interface PlanArtifacts {
   tasks: string[]
   memoTitle: string
@@ -461,6 +500,47 @@ export function useAi() {
     return { summary: raw.slice(0, 200), tomorrow: '' }
   }
 
+  async function refinePlan(input: PlanRefineInput): Promise<PlanRefinement> {
+    const text = await chat(
+      `你是团子，住在用户屏幕顶部的专注岛里。今天的安排清单已经由本地规则排好，你只负责润色：调整先后、补时间提示、把理由说成人话。不能增删条目。
+只输出 JSON：
+{"greeting":"开场一句，25-40 字","care":"生活提醒，15-30 字，没有就空串","order":[按先后的序号数组，必须包含每一个 index，一个不落],"items":[{"index":1,"when":"现在起","note":"为什么排这里，15-25 字"}]}
+规则：
+1. entries 是已经选好的事，你不能增删，只能调顺序。order 必须是 entries 所有 index 的一个排列，一个不落、一个不重。items 里的 index 按 entries 里的原序号。
+2. when 写建议时间窗：第一条用「现在起」或具体时刻，后面可以写「约 21:10」「今天收尾」。不能早于 now 里的当前时刻。
+3. note 必须引用条目自带的事实：dueLabel 是截止剩余、daysIdle 是放了多少天、pomodorosDone 是已经跑过的番茄、minutesToNextEvent 是离下条日程多久。几条的 note 引用不同事实，禁止「提高效率」「加油」这类空话。
+4. preference 为 hard-first 时先排费脑的，easy-first 时先排轻松、能快速完成的。
+5. userNotes 非空时，greeting 必须先自然回应最后一句，不要装没听见。
+6. care 按当前时段说人话，不编造数据里没有的事。今天已经完成的番茄数可以进 greeting。
+7. 不要 Markdown、不要编号前缀、不要复述原始数据。`,
+      JSON.stringify(input),
+      0.7,
+    )
+    const raw = stripCodeFence(text)
+    try {
+      const data = JSON.parse(raw) as Record<string, unknown>
+      const order = Array.isArray(data?.order)
+        ? data.order.map(value => Number(value)).filter(value => Number.isInteger(value) && value > 0)
+        : []
+      const items = (Array.isArray(data?.items) ? data.items : [])
+        .filter((item): item is Record<string, unknown> => !!item && typeof item === 'object')
+        .map((item) => ({
+          index: Number(item.index),
+          when: String(item.when ?? '').trim().slice(0, 12),
+          note: String(item.note ?? '').trim().slice(0, 80),
+        }))
+        .filter(item => Number.isInteger(item.index) && item.index > 0)
+      const greeting = String(data?.greeting ?? '').trim()
+      const care = String(data?.care ?? '').trim()
+      if (greeting || order.length > 0 || items.length > 0) {
+        return { greeting, care, order, items }
+      }
+    } catch {
+      // 解析失败时整段兜底，调用方保持规则结果
+    }
+    return { greeting: '', care: '', order: [], items: [] }
+  }
+
   async function evaluatePlan(plan: string, extra: string, tasks: PlanTaskInput[]): Promise<string> {
     return chat(
       '你是计划评估助手。先指出计划里最明显的风险或遗漏（2-3 条），再给出一份按天或按时段的粗略安排。输出分两段：「评估」和「安排」，总字数不超过 400，不要输出多余内容。',
@@ -544,6 +624,7 @@ export function useAi() {
     polishMemo,
     coachToday,
     summarizeDay,
+    refinePlan,
     evaluatePlan,
     suggestTaskNames,
     generatePlan,

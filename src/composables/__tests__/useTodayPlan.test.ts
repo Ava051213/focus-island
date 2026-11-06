@@ -1,11 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { CoachMessage } from '../useAi'
 
 const h = vi.hoisted(() => ({
   files: new Map<string, string>(),
   tronTodos: [] as Array<Record<string, unknown>>,
   configured: { value: false },
-  coachToday: vi.fn(),
+  refinePlan: vi.fn(),
 }))
 
 vi.mock('@tauri-apps/plugin-fs', () => ({
@@ -49,7 +48,7 @@ vi.mock('../../utils/tronApi', () => ({
 }))
 
 vi.mock('../useAi', () => ({
-  useAi: () => ({ configured: h.configured, coachToday: h.coachToday }),
+  useAi: () => ({ configured: h.configured, refinePlan: h.refinePlan }),
 }))
 
 function seedMemo(id: string, title: string, estimatedPomodoros = 0): Record<string, unknown> {
@@ -77,20 +76,6 @@ function makeTodo(id: string, dueTs = ''): Record<string, unknown> {
     dueTs,
     hoursLeft: null,
     overdue: false,
-  }
-}
-
-function coachPlan(over: Partial<CoachMessage['plans'][number]>): CoachMessage['plans'][number] {
-  return {
-    title: '未命名',
-    when: '现在起',
-    memoIndex: null,
-    memoId: null,
-    todoIndex: null,
-    todo: null,
-    pomodoros: 1,
-    reason: '',
-    ...over,
   }
 }
 
@@ -134,7 +119,7 @@ describe('useTodayPlan', () => {
     h.files.clear()
     h.tronTodos = []
     h.configured.value = false
-    h.coachToday.mockReset()
+    h.refinePlan.mockReset()
     vi.useFakeTimers()
     vi.setSystemTime(new Date(2026, 10, 6, 12, 0, 0))
   })
@@ -165,35 +150,26 @@ describe('useTodayPlan', () => {
   it('当天已有安排时 ensure 不重排，保持稳定不漂移', async () => {
     h.files.set('focus-island/memos.json', JSON.stringify([seedMemo('m1', '高数作业')]))
     h.configured.value = true
-    h.coachToday.mockResolvedValue({
-      greeting: '早上好呀',
-      care: '记得喝水',
-      closing: '',
-      plans: [coachPlan({ title: '高数作业', when: '约 9:00', memoIndex: 1, pomodoros: 2, reason: '先攻高数' })],
-    })
+    h.refinePlan.mockResolvedValue({ greeting: '润色过的开场', care: '', order: [], items: [] })
     const { api } = await fresh()
 
     await api.ensureTodayPlan()
     const first = api.plan.value!
-    expect(h.coachToday).toHaveBeenCalledTimes(1)
+    expect(h.refinePlan).toHaveBeenCalledTimes(1)
 
     await api.ensureTodayPlan()
-    expect(h.coachToday).toHaveBeenCalledTimes(1)
+    expect(h.refinePlan).toHaveBeenCalledTimes(1)
     expect(api.plan.value).toBe(first)
   })
 
-  it('模型路径：序号映射回真实小记，when 归段，映射不到的丢弃', async () => {
+  it('模型润色：重排与注解套到规则骨架上，开场白与提醒被采纳', async () => {
     h.files.set('focus-island/memos.json', JSON.stringify([seedMemo('m1', '高数作业'), seedMemo('m2', '背单词')]))
     h.configured.value = true
-    h.coachToday.mockResolvedValue({
-      greeting: '早上好呀',
+    h.refinePlan.mockResolvedValue({
+      greeting: '润色过的开场',
       care: '记得喝水',
-      closing: '',
-      plans: [
-        coachPlan({ title: '高数作业', when: '约 9:00', memoIndex: 1, pomodoros: 2, reason: '先攻高数' }),
-        coachPlan({ title: '背单词', when: '晚上9点', memoIndex: 2, pomodoros: 1, reason: '睡前过一遍' }),
-        coachPlan({ title: '编造的事', when: '现在起', memoIndex: 99, pomodoros: 1, reason: 'r' }),
-      ],
+      order: [2, 1],
+      items: [{ index: 1, when: '现在起', note: '模型理由' }],
     })
     const { api } = await fresh()
 
@@ -201,23 +177,24 @@ describe('useTodayPlan', () => {
 
     const plan = api.plan.value!
     expect(plan.origin).toBe('model')
-    expect(plan.greeting).toBe('早上好呀')
+    expect(plan.greeting).toBe('润色过的开场')
     expect(plan.care).toBe('记得喝水')
     expect(plan.entries).toHaveLength(2)
-    expect(plan.entries[0]).toMatchObject({ source: 'memo', refId: 'm1', when: '约 9:00', pomodoros: 2 })
-    expect(plan.entries[1]).toMatchObject({ source: 'memo', refId: 'm2', when: '晚上9点' })
+    // 骨架顺序 [m1, m2]，order [2,1] 换位；index 1 是骨架里的 m1，重排后在第二位
+    expect(plan.entries[0]).toMatchObject({ source: 'memo', refId: 'm2' })
+    expect(plan.entries[1]).toMatchObject({ refId: 'm1', when: '现在起', note: '模型理由' })
   })
 
-  it('模型请求失败时退回本地兜底，不抛错', async () => {
-    h.files.set('focus-island/memos.json', JSON.stringify([seedMemo('m1', '高数作业')]))
+  it('模型请求失败时保持规则结果，不抛错', async () => {
+    h.files.set('focus-island/memos.json', JSON.stringify([seedMemo('m1', '高数作业'), seedMemo('m2', '背单词')]))
     h.configured.value = true
-    h.coachToday.mockRejectedValue(new Error('网络炸了'))
+    h.refinePlan.mockRejectedValue(new Error('网络炸了'))
     const { api } = await fresh()
 
     await api.ensureTodayPlan()
 
     expect(api.plan.value!.origin).toBe('fallback')
-    expect(api.plan.value!.entries.map(entry => entry.refId)).toEqual(['m1'])
+    expect(api.plan.value!.entries.map(entry => entry.refId)).toEqual(['m1', 'm2'])
   })
 
   it('勾选与移除都落盘', async () => {

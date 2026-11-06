@@ -1,29 +1,25 @@
 import { computed, ref, watch } from 'vue'
 import { createPersistedStore } from './persistence'
-import { useAi, type CoachPlan } from './useAi'
+import { useAi } from './useAi'
 import { eventsNow, useEvents } from './useEvents'
 import { useMemos } from './useMemos'
-import { useTronTodos } from './useTronTodos'
+import { useTronTodos, todoRemainingLabel } from './useTronTodos'
 import { useSettings } from './useSettings'
 import { useDailyStats } from './useDailyStats'
-import {
-  buildCoachContext,
-  mapCoachPlans,
-  recordCoachFeedback,
-  selectUrgentTodos,
-  type CoachFeedback,
-} from './useAiButler'
+import { buildCoachContext, recordCoachFeedback, selectUrgentTodos, type CoachFeedback } from './useAiButler'
 import { toLocalDateStr } from '../utils/date'
 import {
-  buildFallbackPlan,
+  applyPlanRefinement,
+  buildRulesPlan,
   normalizeDayPlan,
+  rulesGreeting,
   type DayPlan,
-  type PlanEntry,
 } from '../utils/dayPlan'
 
 /**
  * 今日安排：当天稳定存在的一份执行计划，做完勾掉，不随后台刷新漂移。
- * 只在 panel 窗口读写；模型只负责生成，没 Key 或失败时本地规则兜底。
+ * 只在 panel 窗口读写；规则引擎永远先排完整骨架，模型只做可选的润色
+ * （重排、补时间提示与理由、开场白），没 Key 或失败时保持规则结果。
  */
 const plan = ref<DayPlan | null>(null)
 const generating = ref(false)
@@ -37,30 +33,7 @@ const store = createPersistedStore({
   },
 })
 
-/** 模型建议里能落地的条目转成安排条目；映射不到小记/待办的丢弃 */
-function entryFromCoachPlan(coachPlan: CoachPlan): PlanEntry | null {
-  const base = {
-    id: crypto.randomUUID(),
-    title: coachPlan.title,
-    when: coachPlan.when || undefined,
-    pomodoros: coachPlan.pomodoros,
-    note: coachPlan.reason || undefined,
-    done: false,
-    doneAt: null,
-  }
-  if (coachPlan.todo) {
-    return {
-      ...base,
-      source: 'todo',
-      refId: coachPlan.todo.id,
-      course: coachPlan.todo.course || undefined,
-    }
-  }
-  if (!coachPlan.memoId) return null
-  return { ...base, source: 'memo', refId: coachPlan.memoId }
-}
-
-/** 重新生成今天的安排：有 Key 走模型，没 Key 或失败走本地兜底，两条路都必有结果 */
+/** 生成今天的安排：规则排骨架，有 Key 再让模型润色；两条路都必有完整结果 */
 async function regeneratePlan(feedback: CoachFeedback = {}): Promise<void> {
   if (generating.value) return
   generating.value = true
@@ -68,7 +41,7 @@ async function regeneratePlan(feedback: CoachFeedback = {}): Promise<void> {
     recordCoachFeedback(feedback)
 
     // 启动瞬间文件可能还没读完：不等到位会把空列表排成一份空安排钉一整天
-    const { ensureLoaded: ensureMemosLoaded } = useMemos()
+    const { activeMemos, ensureLoaded: ensureMemosLoaded } = useMemos()
     const { ensureLoaded: ensureSettingsLoaded } = useSettings()
     const { ensureLoaded: ensureEventsLoaded } = useEvents()
     const { ensureLoaded: ensureStatsLoaded } = useDailyStats()
@@ -76,46 +49,75 @@ async function regeneratePlan(feedback: CoachFeedback = {}): Promise<void> {
 
     const now = new Date()
     const date = toLocalDateStr(now)
+    const { sortedTodos } = useTronTodos()
 
-    let origin: DayPlan['origin'] = 'fallback'
-    let greeting: string | undefined
+    // 1. 规则引擎排完整骨架：临近截止的待办在前，小记按 置顶/放置天数/动量 打分
+    const urgentTodos = selectUrgentTodos(sortedTodos.value, now.getTime(), 3)
+    let entries = buildRulesPlan(
+      activeMemos.value.map(memo => ({
+        id: memo.id,
+        title: memo.title,
+        isPinned: memo.isPinned,
+        pomodoroCount: memo.pomodoroCount,
+        estimatedPomodoros: memo.estimatedPomodoros,
+        updatedAt: memo.updatedAt,
+      })),
+      urgentTodos.map(todo => ({
+        id: todo.id,
+        title: todo.title,
+        course: todo.course,
+        dueLabel: todoRemainingLabel(todo, now.getTime()),
+      })),
+      now,
+    )
+    let greeting = rulesGreeting(entries, now)
     let care: string | undefined
-    let entries: PlanEntry[] = []
+    let origin: DayPlan['origin'] = 'fallback'
 
-    const { configured, coachToday } = useAi()
-    if (configured.value) {
+    // 2. 有 Key 时让模型润色；失败就保持规则结果，不影响可用性
+    const { configured, refinePlan } = useAi()
+    if (configured.value && entries.length > 0) {
       try {
         const ctx = buildCoachContext()
-        const message = mapCoachPlans(await coachToday(ctx), ctx, ctx.dismissed)
-        entries = message.plans
-          .map(entryFromCoachPlan)
-          .filter((entry): entry is PlanEntry => entry !== null)
-          .slice(0, 8)
-        greeting = message.greeting || undefined
-        care = message.care || undefined
+        const refinement = await refinePlan({
+          now: ctx.now,
+          timeOfDay: ctx.timeOfDay,
+          focusMinutes: ctx.focusMinutes,
+          preference: ctx.preference,
+          userNotes: ctx.userNotes,
+          todayPomodoros: ctx.todayPomodoros,
+          minutesToNextEvent: ctx.minutesToNextEvent,
+          nextEventTitle: ctx.nextEventTitle,
+          entries: entries.map((entry, position) => {
+            const memo = entry.source === 'memo'
+              ? activeMemos.value.find(item => item.id === entry.refId)
+              : undefined
+            const todo = entry.source === 'todo'
+              ? urgentTodos.find(item => item.id === entry.refId)
+              : undefined
+            return {
+              index: position + 1,
+              title: entry.title,
+              source: entry.source,
+              course: entry.course,
+              pomodoros: entry.pomodoros,
+              note: entry.note ?? '',
+              dueLabel: todo ? todoRemainingLabel(todo, now.getTime()) : undefined,
+              daysIdle: memo
+                ? Math.max(0, Math.floor((now.getTime() - memo.updatedAt) / 86400000))
+                : undefined,
+              pomodorosDone: memo ? memo.pomodoroCount : undefined,
+            }
+          }),
+        })
+        const applied = applyPlanRefinement(entries, refinement)
+        entries = applied.entries
+        greeting = applied.greeting ?? greeting
+        care = applied.care
         origin = 'model'
       } catch (e) {
-        console.error('[today-plan] model generation failed, falling back', e)
+        console.error('[today-plan] model refinement failed, keeping rule plan', e)
       }
-    }
-
-    if (entries.length === 0) {
-      const { activeMemos } = useMemos()
-      const { sortedTodos } = useTronTodos()
-      entries = buildFallbackPlan(
-        activeMemos.value.map(memo => ({
-          id: memo.id,
-          title: memo.title,
-          estimatedPomodoros: memo.estimatedPomodoros,
-          pomodoroCount: memo.pomodoroCount,
-        })),
-        selectUrgentTodos(sortedTodos.value, now.getTime(), 2).map(todo => ({
-          id: todo.id,
-          title: todo.title,
-          course: todo.course,
-        })),
-      )
-      origin = 'fallback'
     }
 
     const prev = plan.value
