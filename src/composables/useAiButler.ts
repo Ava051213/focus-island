@@ -225,7 +225,8 @@ export function mapCoachPlans(message: CoachMessage, ctx: CoachContext, dismisse
   return { ...message, plans }
 }
 
-function buildContext(): CoachContext {
+/** 组装一次建议生成需要的完整上下文；今日安排的生成也复用这一份 */
+export function buildCoachContext(): CoachContext {
   const { upcoming, overdue } = useEvents()
   const { memos, activeMemos } = useMemos()
   const { todayStat } = useDailyStats()
@@ -351,7 +352,7 @@ async function generateCoach(): Promise<CoachMessage> {
     state.value.dismissedDate = today
   }
   const { coachToday } = useAi()
-  const ctx = buildContext()
+  const ctx = buildCoachContext()
   const message = await coachToday(ctx)
   // 序号映射 + dismissed 兜底都抽在纯函数里，见 mapCoachPlans
   const enriched = mapCoachPlans(message, ctx, state.value.dismissed)
@@ -511,6 +512,27 @@ export function startAiButler() {
   setInterval(() => scheduleAuto(0), 60 * 60 * 1000)
 }
 
+/** 记下用户的反馈（偏好/一句话/换掉），下次生成建议与安排都会带上 */
+export function recordCoachFeedback(feedback: CoachFeedback): void {
+  if (feedback.preference) {
+    state.value.preference = feedback.preference
+  }
+  if (feedback.userNote) {
+    const text = feedback.userNote.trim().slice(0, 120)
+    if (text) {
+      state.value.userNotes.push({ text, at: Date.now() })
+      if (state.value.userNotes.length > 3) state.value.userNotes.shift()
+    }
+  }
+  if (feedback.dismissTitle) {
+    const title = feedback.dismissTitle.trim()
+    if (title && !state.value.dismissed.includes(title)) {
+      state.value.dismissed.push(title)
+      if (state.value.dismissed.length > 5) state.value.dismissed.shift()
+    }
+  }
+}
+
 export function useAiButler() {
   void store.ensureLoaded()
   const { configured } = useAi()
@@ -522,23 +544,7 @@ export function useAiButler() {
   )
 
   async function refreshCoach(feedback: CoachFeedback = {}): Promise<void> {
-    if (feedback.preference) {
-      state.value.preference = feedback.preference
-    }
-    if (feedback.userNote) {
-      const text = feedback.userNote.trim().slice(0, 120)
-      if (text) {
-        state.value.userNotes.push({ text, at: Date.now() })
-        if (state.value.userNotes.length > 3) state.value.userNotes.shift()
-      }
-    }
-    if (feedback.dismissTitle) {
-      const title = feedback.dismissTitle.trim()
-      if (title && !state.value.dismissed.includes(title)) {
-        state.value.dismissed.push(title)
-        if (state.value.dismissed.length > 5) state.value.dismissed.shift()
-      }
-    }
+    recordCoachFeedback(feedback)
     await generateCoach()
     state.value.lastAutoAt = Date.now()
     const today = toLocalDateStr(new Date())

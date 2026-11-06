@@ -1,26 +1,24 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onActivated, onMounted, ref } from 'vue'
 import { useMemos, type Memo } from '../composables/useMemos'
 import { useTimerBridge } from '../composables/useTimerBridge'
 import { eventTime, eventsNow, useEvents } from '../composables/useEvents'
 import { useAiButler, selectUrgentTodos, type CoachFeedback } from '../composables/useAiButler'
-import type { CoachPlan } from '../composables/useAi'
+import { useTodayPlan } from '../composables/useTodayPlan'
 import { useTronTodos, todoRemainingLabel } from '../composables/useTronTodos'
 import { useTronMemo } from '../composables/useTronMemo'
 import type { TronTodo } from '../utils/tronApi'
 import { useWeeklyGoals } from '../composables/useWeeklyGoals'
 import { useDailyStats } from '../composables/useDailyStats'
 import { toLocalDateStr } from '../utils/date'
+import { groupBySegment, type PlanEntry } from '../utils/dayPlan'
 
 const emit = defineEmits<{ navigateEvents: [] }>()
 
 const {
   memos,
   activeMemos,
-  completedMemos,
   getDisplayTitle,
-  completeMemo,
-  restoreMemo,
 } = useMemos()
 const { withinDays } = useEvents()
 const {
@@ -44,44 +42,35 @@ function startMemo(memo: Memo) {
   start(memo.id, getDisplayTitle(memo))
 }
 
-const undoState = ref<{ id: string; title: string; count: number } | null>(null)
-let undoTimer: ReturnType<typeof setTimeout> | null = null
-
-function todayCompletedCount(): number {
-  const now = new Date()
-  return completedMemos.value.filter((memo) => {
-    if (!memo.completedAt) return false
-    const done = new Date(memo.completedAt)
-    return done.getFullYear() === now.getFullYear()
-      && done.getMonth() === now.getMonth()
-      && done.getDate() === now.getDate()
-  }).length
-}
-
-function completeHomeMemo(memo: Memo, event: Event) {
-  event.stopPropagation()
-  undoState.value = {
-    id: memo.id,
-    title: getDisplayTitle(memo),
-    count: todayCompletedCount() + 1,
-  }
-  completeMemo(memo.id)
-  if (undoTimer) clearTimeout(undoTimer)
-  undoTimer = setTimeout(() => {
-    undoState.value = null
-  }, 5000)
-}
-
-function undoComplete() {
-  if (!undoState.value) return
-  restoreMemo(undoState.value.id)
-  undoState.value = null
-  if (undoTimer) clearTimeout(undoTimer)
-}
-
-/** 团子的建议直接放在首页，不再单独占一个页面 */
-const { coachInsight, dailySummary, refreshCoach, configured, preference } = useAiButler()
+/** 团子的开场白与生活提醒直接放在首页，不再单独占一个页面 */
+const { coachInsight, dailySummary, configured, preference } = useAiButler()
 const coachMessage = computed(() => coachInsight.value?.coach ?? null)
+
+/** 当天安排带回来的开场白优先，后台自动刷新的旧建议作兜底 */
+const planIsToday = computed(() => todayPlan.value?.date === dateOffset(0))
+const coachGreeting = computed(() =>
+  (planIsToday.value ? todayPlan.value?.greeting : null) ?? coachMessage.value?.greeting ?? '')
+const coachCare = computed(() =>
+  (planIsToday.value ? todayPlan.value?.care : null) ?? coachMessage.value?.care ?? '')
+
+/** 今日安排：当天稳定的一份计划，做完勾掉，不随后台刷新漂移 */
+const {
+  plan: todayPlan,
+  generating,
+  ensureTodayPlan,
+  regeneratePlan,
+  toggleEntryDone,
+  removeEntry,
+} = useTodayPlan()
+
+onMounted(() => {
+  void ensureTodayPlan()
+})
+
+// KeepAlive 缓存的页面重新激活时也补一次：跨日打开或上次生成失败能兜住
+onActivated(() => {
+  void ensureTodayPlan()
+})
 
 // 畅课待办：建议条目可以直接来自课程作业，无 Key 时本地提示也会用
 const { sortedTodos: tronSortedTodos } = useTronTodos()
@@ -184,20 +173,6 @@ function runLocalCoachAction() {
   if (memo) startMemo(memo)
 }
 
-function planMemo(plan: CoachPlan): Memo | null {
-  if (plan.memoId) {
-    const matched = memos.value.find(memo => memo.id === plan.memoId && !memo.completedAt)
-    if (matched) return matched
-  }
-  return memos.value.find(memo => !memo.completedAt && getDisplayTitle(memo) === plan.title) ?? null
-}
-
-/** 建议条目对应的课程待办：按回填的 id 在最新列表里找 */
-function planTodo(plan: CoachPlan): TronTodo | null {
-  if (!plan.todo) return null
-  return tronSortedTodos.value.find(todo => todo.id === plan.todo?.id) ?? null
-}
-
 /** 把课程待办落成小记再开始；转换与去重都在 useTronMemo 里，转过就直接开始那条小记 */
 function startTodo(todo: TronTodo) {
   const { convert } = useTronMemo()
@@ -205,24 +180,39 @@ function startTodo(todo: TronTodo) {
   start(memo.id, getDisplayTitle(memo))
 }
 
-function startPlan(plan: CoachPlan) {
-  const todo = planTodo(plan)
-  if (todo) {
-    startTodo(todo)
+/** 安排条目的实时标题：来源还在就显示实时标题，不在了退回生成时的快照 */
+function entryTitle(entry: PlanEntry): string {
+  if (entry.source === 'memo') {
+    const memo = memos.value.find(item => item.id === entry.refId)
+    if (memo) return getDisplayTitle(memo)
+  } else {
+    const todo = tronSortedTodos.value.find(item => item.id === entry.refId)
+    if (todo) return todo.title
+  }
+  return entry.title
+}
+
+function entryCourse(entry: PlanEntry): string {
+  if (entry.source === 'todo') {
+    const todo = tronSortedTodos.value.find(item => item.id === entry.refId)
+    if (todo) return todo.course
+  }
+  return entry.course ?? ''
+}
+
+/** 开始一条安排：课程待办先落成小记，小记直接开跑 */
+function startEntry(entry: PlanEntry) {
+  if (entry.source === 'todo') {
+    const todo = tronSortedTodos.value.find(item => item.id === entry.refId)
+    if (todo) startTodo(todo)
     return
   }
-  const memo = planMemo(plan)
+  const memo = memos.value.find(item => item.id === entry.refId && !item.completedAt)
   if (memo) start(memo.id, getDisplayTitle(memo))
 }
 
-function planEstimate(plan: CoachPlan): number {
-  return planMemo(plan)?.estimatedPomodoros ?? 0
-}
-
-/** 建议只保留还能对应到进行中小记或课程待办的条目 */
-const suggestedPlans = computed(() =>
-  (coachMessage.value?.plans ?? []).filter(plan => !!planMemo(plan) || !!planTodo(plan)),
-)
+/** 上午/下午/晚上分组，做完的沉底 */
+const planGroups = computed(() => groupBySegment(todayPlan.value?.entries ?? []))
 
 function dateOffset(offset: number): string {
   const date = new Date()
@@ -248,44 +238,32 @@ const summaryTagLabel = computed(() =>
   summaryToShow.value?.date === dateOffset(0) ? '今日总结' : '昨日总结',
 )
 
-const coachLoading = ref(false)
-const coachError = ref('')
+const planError = ref('')
 const coachErrorExpanded = ref(false)
 const coachNote = ref('')
 // 「我有个想法」输入默认收起，点开才显示
 const noteOpen = ref(false)
 
-async function runCoach(feedback: CoachFeedback = {}) {
-  if (coachLoading.value) return
-  coachLoading.value = true
-  coachError.value = ''
+async function runPlan(feedback: CoachFeedback = {}) {
+  if (generating.value) return
+  planError.value = ''
   coachErrorExpanded.value = false
   try {
-    await refreshCoach(feedback)
+    await regeneratePlan(feedback)
   } catch (e) {
-    coachError.value = e instanceof Error ? e.message : String(e)
-  } finally {
-    coachLoading.value = false
+    planError.value = e instanceof Error ? e.message : String(e)
   }
 }
 
-function handleRefreshCoach() {
-  void runCoach()
-}
-
 function handlePreference(next: 'hard-first' | 'easy-first') {
-  void runCoach({ preference: next })
-}
-
-function handleDismissPlan(plan: CoachPlan) {
-  void runCoach({ dismissTitle: plan.title })
+  void runPlan({ preference: next })
 }
 
 function sendCoachNote() {
   const text = coachNote.value.trim()
-  if (!text || coachLoading.value) return
+  if (!text || generating.value) return
   coachNote.value = ''
-  void runCoach({ userNote: text })
+  void runPlan({ userNote: text })
 }
 
 function onCoachNoteEnter(event: KeyboardEvent) {
@@ -312,22 +290,22 @@ function onCoachNoteEnter(event: KeyboardEvent) {
         <p v-if="summaryToShow.tomorrow" class="coach-care">{{ summaryToShow.tomorrow }}</p>
       </template>
       <template v-else-if="configured">
-        <p v-if="coachMessage?.greeting" class="coach-greeting">{{ coachMessage.greeting }}</p>
+        <p v-if="coachGreeting" class="coach-greeting">{{ coachGreeting }}</p>
         <p v-else-if="coachInsight" class="coach-content">{{ coachInsight.content }}</p>
         <p v-else class="coach-empty">记点小记，团子就能陪你排啦～</p>
-        <p v-if="coachMessage?.care" class="coach-care">{{ coachMessage.care }}</p>
+        <p v-if="coachCare" class="coach-care">{{ coachCare }}</p>
         <div v-if="noteOpen" class="coach-interact">
           <div class="coach-prefs">
             <button
               class="coach-pref-btn"
               :class="{ active: preference === 'hard-first' }"
-              :disabled="coachLoading"
+              :disabled="generating"
               @click="handlePreference('hard-first')"
             >先啃难的</button>
             <button
               class="coach-pref-btn"
               :class="{ active: preference === 'easy-first' }"
-              :disabled="coachLoading"
+              :disabled="generating"
               @click="handlePreference('easy-first')"
             >先做轻松的</button>
           </div>
@@ -337,22 +315,22 @@ function onCoachNoteEnter(event: KeyboardEvent) {
               class="coach-note-input"
               type="text"
               placeholder="跟团子说一句，比如「我有点累」"
-              :disabled="coachLoading"
+              :disabled="generating"
               @keydown.enter="onCoachNoteEnter"
             />
             <button
               class="coach-send-btn"
-              :disabled="coachLoading || !coachNote.trim()"
+              :disabled="generating || !coachNote.trim()"
               @click="sendCoachNote"
             >说</button>
           </div>
         </div>
         <p
-          v-if="coachError"
+          v-if="planError"
           class="coach-error"
           :class="{ expanded: coachErrorExpanded }"
           @click="coachErrorExpanded = !coachErrorExpanded"
-        >{{ coachError }}</p>
+        >{{ planError }}</p>
       </template>
       <template v-else>
         <p class="coach-content">{{ localCoach.text }}</p>
@@ -364,9 +342,9 @@ function onCoachNoteEnter(event: KeyboardEvent) {
 
     <section class="zone">
       <div class="zone-title">
-        建议做的事
-        <button v-if="configured" class="link-btn" :disabled="coachLoading" @click="handleRefreshCoach">
-          {{ coachLoading ? '团子在换…' : '换一批' }}
+        今日安排
+        <button class="link-btn" :disabled="generating" @click="runPlan()">
+          {{ generating ? '在排…' : '重新安排' }}
         </button>
       </div>
 
@@ -384,57 +362,45 @@ function onCoachNoteEnter(event: KeyboardEvent) {
         </div>
       </div>
 
-      <div v-else-if="suggestedPlans.length > 0" class="suggestion-list">
-        <div v-for="(plan, index) in suggestedPlans" :key="plan.title" class="suggestion-item">
-          <div class="suggestion-copy">
-            <div class="suggestion-line">
-              <span class="suggestion-rank">{{ index + 1 }}</span>
-              <span v-if="plan.todo?.course" class="coach-plan-course">{{ plan.todo.course }}</span>
-              <span class="suggestion-title">{{ plan.title }}</span>
-              <span class="suggestion-meta">
-                <span v-if="plan.when" class="suggestion-when">{{ plan.when }}</span>
-                {{ plan.pomodoros }} 个番茄
-                <template v-if="!plan.todo && planEstimate(plan)"> · 预计 {{ planEstimate(plan) }}</template>
-              </span>
-            </div>
-            <p v-if="plan.reason" class="suggestion-reason">{{ plan.reason }}</p>
-          </div>
-          <div class="suggestion-actions">
-            <button class="coach-start-btn" :disabled="coachLoading" @click="startPlan(plan)">开始</button>
+      <template v-else>
+        <div v-for="group in planGroups" :key="group.segment" class="plan-group">
+          <div class="plan-group-label">{{ group.label }}</div>
+          <div
+            v-for="entry in group.entries"
+            :key="entry.id"
+            class="suggestion-item plan-entry"
+            :class="{ 'plan-done': entry.done }"
+          >
             <button
-              class="coach-swap-btn"
-              :disabled="coachLoading"
-              title="换掉这条，重新安排"
-              @click="handleDismissPlan(plan)"
-            >换</button>
+              class="home-check-btn"
+              :class="{ checked: entry.done }"
+              :title="entry.done ? '还没做完，取消勾选' : '这条做完啦'"
+              @click="toggleEntryDone(entry.id)"
+            >
+              <svg v-if="entry.done" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4">
+                <polyline points="4 12 9 17 20 6"/>
+              </svg>
+            </button>
+            <div class="suggestion-copy">
+              <div class="suggestion-line">
+                <span v-if="entryCourse(entry)" class="coach-plan-course">{{ entryCourse(entry) }}</span>
+                <span class="suggestion-title">{{ entryTitle(entry) }}</span>
+                <span class="suggestion-meta">{{ entry.pomodoros }} 个番茄</span>
+              </div>
+              <p v-if="entry.note" class="suggestion-reason">{{ entry.note }}</p>
+            </div>
+            <div class="suggestion-actions">
+              <button v-if="!entry.done" class="coach-start-btn" :disabled="generating" @click="startEntry(entry)">开始</button>
+              <button class="coach-swap-btn" :disabled="generating" title="这条今天先不算了" @click="removeEntry(entry.id)">✕</button>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div v-else-if="recentMemos.length > 0" class="memo-list">
-        <div v-for="memo in recentMemos" :key="memo.id" class="memo-row">
-          <button class="home-check-btn" @click="(e) => completeHomeMemo(memo, e)" title="做完了，收起来">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4">
-              <polyline points="4 12 9 17 20 6"/>
-            </svg>
-          </button>
-          <span class="memo-title">{{ getDisplayTitle(memo) }}</span>
-          <button class="play-btn" @click="startMemo(memo)" title="陪我专注一会儿呀">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg>
-          </button>
+        <div v-if="planGroups.length === 0 && !generating" class="empty">
+          还没有要做的事，去小记页记一条吧～
         </div>
-        <p class="memo-hint">戳右边的 ▶，我们就安静 25 分钟好不好～</p>
-      </div>
-
-      <div v-else class="empty">
-        还没有要做的事，去小记页记一条吧～
-      </div>
+      </template>
     </section>
-
-    <div v-if="undoState" class="undo-toast">
-      <span class="undo-text">团子收下「{{ undoState.title }}」啦，今天第 {{ undoState.count }} 条</span>
-      <button class="undo-btn" @click="undoComplete">撤销</button>
-    </div>
   </div>
 </template>
 
@@ -799,7 +765,30 @@ function onCoachNoteEnter(event: KeyboardEvent) {
   background: color-mix(in srgb, var(--focus-color) 12%, transparent);
 }
 
-/* 建议做的事：团子的安排放在这里，顶部只留情绪 */
+/* 今日安排：按上午/下午/晚上分组，做完的沉底划掉 */
+.plan-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.plan-group-label {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: rgba(255, 255, 255, 0.32);
+  padding: 0 2px;
+}
+
+.plan-entry.plan-done {
+  opacity: 0.5;
+}
+
+.plan-entry.plan-done .suggestion-title {
+  text-decoration: line-through;
+  color: rgba(255, 255, 255, 0.4);
+}
+
 .suggestion-list {
   display: flex;
   flex-direction: column;
@@ -1009,27 +998,6 @@ function onCoachNoteEnter(event: KeyboardEvent) {
   border-color: rgba(248, 113, 113, 0.35);
 }
 
-.memo-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.memo-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.035);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  transition: background 0.15s;
-}
-
-.memo-row:hover {
-  background: rgba(255, 255, 255, 0.07);
-}
-
 .home-check-btn {
   flex-shrink: 0;
   width: 18px;
@@ -1051,39 +1019,10 @@ function onCoachNoteEnter(event: KeyboardEvent) {
   color: color-mix(in srgb, var(--focus-color) 80%, transparent);
 }
 
-.memo-title {
-  flex: 1;
-  min-width: 0;
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.88);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.play-btn {
-  flex-shrink: 0;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--focus-color) 18%, transparent);
-  border: 1px solid color-mix(in srgb, var(--focus-color) 40%, transparent);
+.home-check-btn.checked {
+  border-color: color-mix(in srgb, var(--focus-color) 55%, transparent);
+  background: color-mix(in srgb, var(--focus-color) 30%, transparent);
   color: var(--focus-color);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.play-btn:hover {
-  background: color-mix(in srgb, var(--focus-color) 35%, transparent);
-}
-
-.memo-hint {
-  margin: 2px 0 0;
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.25);
 }
 
 .empty {
@@ -1094,41 +1033,5 @@ function onCoachNoteEnter(event: KeyboardEvent) {
   line-height: 1.7;
   color: rgba(255, 255, 255, 0.3);
   text-align: center;
-}
-
-.undo-toast {
-  position: fixed;
-  left: 50%;
-  bottom: 64px;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 14px;
-  border-radius: 9px;
-  background: rgba(30, 30, 34, 0.96);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
-  z-index: 1100;
-  white-space: nowrap;
-}
-
-.undo-text {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.75);
-}
-
-.undo-btn {
-  background: none;
-  border: none;
-  padding: 0;
-  color: var(--focus-color);
-  font-size: 12px;
-  font-family: inherit;
-  cursor: pointer;
-}
-
-.undo-btn:hover {
-  text-decoration: underline;
 }
 </style>

@@ -198,5 +198,5 @@ export function useSettings() {
   ensureSystemSchemeListener()
   ensureInitialized()
 
-  return { settings, settingsReady: loaded, activeTheme, applyThemeToDOM, autostartError }
+  return { settings, settingsReady: loaded, ensureLoaded: () => store.ensureLoaded(), activeTheme, applyThemeToDOM, autostartError }
 }

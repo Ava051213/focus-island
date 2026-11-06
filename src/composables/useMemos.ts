@@ -316,6 +316,9 @@ export function useMemos() {
   }
 
   return {
+    ensureLoaded: async () => {
+      await Promise.all([memoStore.ensureLoaded(), categoryStore.ensureLoaded()])
+    },
     memos,
     categories,
     currentCategoryId,

@@ -112,6 +112,7 @@ export function useDailyStats() {
   }
 
   return {
+    ensureLoaded: () => store.ensureLoaded(),
     dailyStats,
     effectiveDailyStats,
     todayStat,

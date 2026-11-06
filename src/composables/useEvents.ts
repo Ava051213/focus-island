@@ -189,6 +189,7 @@ export function useEvents() {
   }
 
   return {
+    ensureLoaded: () => store.ensureLoaded(),
     events,
     upcoming,
     overdue,
