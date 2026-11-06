@@ -4,42 +4,61 @@ AI 编码工具（Codex、Claude Code、Trae、Cursor 等）在本仓库工作�
 
 > 本文件是仓库唯一的架构说明，改架构时只改这一份。迭代计划也放在这里，不另建路线图文档。
 
-## 当前迭代计划
+## 路线图：1.1.1 → 1.2.0
 
-> 发版后更新或删掉本节。
-> 版本节奏：功能每批完成即发 1.1.x 递增（patch），计划内功能全部完成后升 1.2.0 收尾。计划不提前钉版本号。
+> 1.1.0 功能已齐，1.1.1 补完课程场景与检查更新。这段之后的主题是**加固与瘦身**：不再堆功能，把已有的做扎实、结构理干净，1.2.0 收口。
+> 版本节奏：每批完成发一个 1.1.x patch；全部完成后 `npm version minor` 收 1.2.0。计划不提前钉版本号。
 
-**主题：课程场景打通 + 应用内更新 + 质量加固**
+### 1.1.2 质量地基
 
-### 批次一：课程场景打通（P0）
+先补测试，让后面几步改动都有兜底。
 
-1. ✅ **团子建议接入课程待办**：`useAiButler` 的 coach 上下文加入 Tron 待办（标题、课程名、截止倒计时、是否过期）；48 小时内有截止的作业优先于普通小记建议；`tronApi` 失败时优雅降级（上下文里不带这部分，不报错）。待办可直接成为建议条目，首页点「开始」自动转小记并进入专注（转换机制见第 2 项）
-2. ✅ **课程待办自动转小记**（只保留自动，不做手动入口）：`useTronMemo.ts` 的 `convert()` 幂等新建备忘（标题 `课程名·作业标题`，进「工作」分类），映射落 `tron-memo-links.json`，另有按标题兜底以兼容老数据；小记完成归档后视为没转过。只在首页点「开始」时静默调用。日程页卡片不加「转成小记」按钮、也不做 AI 拆解——手动搬运不增加信息，反而多一步
-3. ✅ **应用内检查更新（轻量方案）**：`useUpdateCheck.ts` 拉 `latest.json`（`raw.githubusercontent.com`，白名单已有）比对版本。启动后 10 秒静默查一次，失败不留痕迹；关于弹窗打开时若还没查过再补一次，之后直接用缓存；设置页 ⓘ 按钮在有新版时带红点，点「前往下载」用系统浏览器打开 release 页。**不引入 tauri-plugin-updater**（要签名密钥与安装包产物约定，个人应用维护成本高）。`scripts/sync-version.mjs` 已把版本同步进 `latest.json`，发版不用手改
+1. **useTronTodos 测试**（`src/composables/__tests__/useTronTodos.test.ts`）：3 秒节流窗口内重复刷新只发一次请求；失败保留上一次成功的列表并标 `stale`；勾选归档写进 `tron-todos-done.json`、`restoreTodoDone` 能撤回；`sortedTodos` 排除已归档、按 `due_ts` 升序、无截止排最后。
+2. **sanitizeHtml 测试**（安全线）：锁住已知绕过样例——`script` / `iframe` / `svg onload` / `form` / 非 checkbox 的 `input` / `style` 一律清掉；正常富文本（`p` `ul` `li` `strong` `a[href]` `img[src]` `input[type=checkbox]`）保留。
+3. **date.ts 测试**：`toLocalDateStr` 的跨零点、跨月、跨年边界；`eventRelativeLabel` 的今天/明天/本周/过期分支。用固定时间戳，不依赖系统时钟。
+4. **CI 试跑 cargo check**：加 `rust-cache`，Windows runner 跑 `cargo check --locked`。能压进 5 分钟就并入 `ci.yml`，压不进就撤掉并在本文件记一句结论，维持只跑前端三项。
 
-### 批次二：质量加固（P0，与批次一穿插做）
+### 1.1.3 清理与发版流程
 
-4. **补测试**（当前覆盖盲区，按价值排序）：`useAiButler`（四道闸门顺序、90 秒防抖、`lastAutoAt` 失败防重试、每日总结 20:00 门槛与次日补生成）、`useTronTodos`（3 秒节流、失败保留旧列表标 stale、勾选归档持久化）、`sanitizeHtml`（安全线，锁住已知绕过样例）、`date.ts`（本地日期边界）
-5. **CI 试跑 cargo check + rust-cache**：能压进 ~5 分钟就并入 CI，压不进维持现状不强求
+5. **.gitignore 补 `.kilo/`、`.zcode/`**，确认 `dist/`、`src-tauri/target/` 已在忽略列表。
+6. **README 重写中文**：定位、截图、启动方式（`start-app.vbs` 不再拉 vite、改前端要重新构建）、托盘/快捷键/课程待办的真实行为、AI Key 与数据存在哪。
+7. **修本文件滞后处**：MemoEditor.vue 现为 1465 行（本节旧稿写 1242）；useTronTodos 的 5 分钟自动刷新等描述与代码对齐。
+8. **发版产物固定英文名**：`productName` 是「专注岛」，NSIS 产物为 `专注岛_x.y.z_x64-setup.exe`，`gh release upload` 会把中文整个吞掉（实测变成 `_x.y.z_x64-setup.exe`）。加 `scripts/bundle-release.mjs`：构建后复制成 `FocusIsland_<version>_x64-setup.exe` 再上传，省掉每次手动改名。
+9. **tag 命名收口**：现存 `focus-island-v1.1.0` 与 `v1.0.x` / `v1.1.1` 两种风格，以后一律 `v*`；旧 tag 不改写历史，只在 README 注明。
 
-### 批次三：收尾与打磨（P1）
+### 1.1.4 结构：MemoEditor 拆分
 
-6. **README 重写**：改中文、修正启动脚本描述（不再拉 vite）、补托盘/快捷键/课程待办的真实行为
-7. **技术债清扫**：`.kilo/` 加 .gitignore；AGENTS.md 修 MemoEditor 行数（现为 1242 行）；tag 统一为 `v*`（现有 `focus-island-v1.1.0` 与 `v1.0.x` 两种命名）
-8. **（视余量）MemoEditor.vue 拆分**：纯结构重构，不改行为
+10. **拆 MemoEditor.vue（1465 行）**，纯结构重构，不改行为。顺序：工具栏 → 右键菜单 → 分类下拉 → 图片与粘贴处理 → 保存/自动保存（可抽成 `useMemoEditor`）。每步单独跑 `vue-tsc` + 全量测试，目标主文件 < 600 行。
+    验收：测试条数不变，粘贴富文本、快捷键、AI 润色行为一致。
 
-### 明确不做（守住 fork 的精简方向）
+### 1.2.0 收口
 
-- 不恢复本周目标进度展示、不恢复全屏自动避让（均刚移除）
-- 不向畅课回写任何数据（`useTronTodos` 的既有红线）
-- 不做账号/云同步，数据与 AI Key 全本地的定位不变
+11. 五项全绿：`vue-tsc`、`npm run test`、`vite:build`、`cargo check`、`cargo test --lib`。
+12. `npm version minor` → 1.2.0（Cargo.toml / Cargo.lock / latest.json 自动同步）。
+13. tag `v1.2.0` → Release，说明写清这一轮是加固与瘦身，没有新功能。
 
-### 发布清单
+### 待定：1.2.0 要不要带一个功能
 
-1. `npx vue-tsc --noEmit` + `npm run test` + `npm run vite:build` 全绿；本地 `cd src-tauri && cargo check`
-2. `npm version patch`（1.1.1 起，自动同步 Cargo.toml 与 latest.json）；计划全部完成发 1.2.0 时用 `npm version minor`
-3. 确认 `latest.json` 版本正确（`npm version` 已自动写入并 `git add`）
-4. tag `v1.2.0`（统一命名）→ GitHub Release
+三个候选都在现有架构内、不加依赖，拍板后插在 1.1.4 之后：
+
+- **数据导出**：把 `$APPDATA/focus-island/` 下的 JSON 打成 zip 存到用户选定目录，换机不丢。只导出不导入也够用。
+- **统计热力图**：`sessions.json` 已有逐日数据，画 8 周方格热力图，不需要新数据源。
+- **快捷添加**：`useQuickAddFocus` 曾移除，可做成「唤起面板并聚焦输入框」，复用现有面板动画。
+
+### 明确不做（守住精简方向）
+
+- 不加账号/云同步，数据与 AI Key 全本地
+- 不向畅课回写任何数据
+- 不恢复本周目标进度展示、不恢复全屏自动避让
+- 不引入 tauri-plugin-updater，不引入状态管理库
+
+### 发布清单（每个 1.1.x）
+
+1. `npx vue-tsc --noEmit` + `npm run test` + `npm run vite:build` 全绿；`cd src-tauri && cargo check` 通过
+2. `npm version patch`（自动同步 Cargo.toml / Cargo.lock / latest.json 并 `git add`，提交并打 `v*` tag）
+3. `npx tauri build --bundles nsis`（MSI 要现下 Wix3，代理常被挡，别用 `--bundles all`）
+4. 产物改名 `FocusIsland_<version>_x64-setup.exe` 再 `gh release create v<version>`
+5. 确认线上 `latest.json` 版本号；旧版客户端会在设置页 ⓘ 上看到红点
 
 ## Commands
 
