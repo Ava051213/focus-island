@@ -13,6 +13,7 @@ import { useMemos } from '../composables/useMemos'
 import { useDailyStats } from '../composables/useDailyStats'
 import { useAchievements } from '../composables/useAchievements'
 import { startAiButler } from '../composables/useAiButler'
+import { scheduleStartupCheck } from '../composables/useUpdateCheck'
 import HomePage from './HomePage.vue'
 import EventsPage from './EventsPage.vue'
 import SettingsPage from './SettingsPage.vue'
@@ -331,6 +332,7 @@ function onPanelKeydown(event: KeyboardEvent) {
 
 onMounted(async () => {
   startBridge()
+  scheduleStartupCheck()
   await invoke('set_click_through', { ignore: false })
   window.addEventListener('keydown', onPanelKeydown)
   window.addEventListener('blur', onDomBlur)

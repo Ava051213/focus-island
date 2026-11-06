@@ -5,10 +5,12 @@ import AppearanceSettings from './AppearanceSettings.vue'
 import BehaviorSettings from './BehaviorSettings.vue'
 import SystemSettings from './SystemSettings.vue'
 import AiSettings from './AiSettings.vue'
+import { useUpdateCheck } from '../composables/useUpdateCheck'
 
 const emit = defineEmits<{ back: [] }>()
 
 const showAbout = ref(false)
+const { hasUpdate } = useUpdateCheck()
 
 function goBack() {
   showAbout.value = false
@@ -28,6 +30,7 @@ function goBack() {
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
           <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
         </svg>
+        <span v-if="hasUpdate" class="update-dot" title="有新版本"></span>
       </button>
     </div>
 
@@ -82,6 +85,7 @@ function goBack() {
 }
 
 .about-btn {
+  position: relative;
   width: 28px;
   height: 28px;
   border-radius: 6px;
@@ -93,6 +97,16 @@ function goBack() {
   align-items: center;
   justify-content: center;
   transition: all 0.2s;
+}
+
+.update-dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #f87171;
 }
 
 .about-btn:hover {

@@ -1,75 +1,34 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { open } from '@tauri-apps/plugin-shell'
-import { getName, getVersion } from '@tauri-apps/api/app'
-import { fetch } from '@tauri-apps/plugin-http'
+import { getName } from '@tauri-apps/api/app'
+import { useUpdateCheck } from '../composables/useUpdateCheck'
 
 const emit = defineEmits<{ close: [] }>()
 
 const appName = ref('专注岛')
-const appVersion = ref('')
 
-const checking = ref(false)
-const updateHint = ref('')
-const latestUrl = ref('')
+const { currentVersion, latest, checking, checkedAt, error, hasUpdate, hint, check, releaseUrl } = useUpdateCheck()
 
 const githubUrl = 'https://github.com/Ava051213/focus-island'
-// GitHub API 对小额未认证请求限流严格，改用仓库里的静态版本文件
-const releasesApi = 'https://raw.githubusercontent.com/Ava051213/focus-island/clean-main/latest.json'
 import appIcon from '../../src-tauri/icons/128x128.png'
 
 onMounted(async () => {
   try {
     appName.value = await getName()
-    appVersion.value = await getVersion()
   } catch {
     appName.value = '专注岛'
-    appVersion.value = '1.3.3'
   }
+  // 还没查过就顺手查一次；查过就直接用启动时那次的结果，不重复打网络
+  if (checkedAt.value === null) void check({ silent: true })
 })
 
 function openGitHub() {
   open(githubUrl)
 }
 
-function isNewer(latest: string, current: string) {
-  const a = latest.replace(/^v/, '').split('.').map(Number)
-  const b = current.replace(/^v/, '').split('.').map(Number)
-  for (let i = 0; i < 3; i++) {
-    if ((a[i] || 0) > (b[i] || 0)) return true
-    if ((a[i] || 0) < (b[i] || 0)) return false
-  }
-  return false
-}
-
-async function checkUpdate() {
-  if (checking.value) return
-  checking.value = true
-  updateHint.value = ''
-  latestUrl.value = ''
-  try {
-    const res = await fetch(releasesApi, {
-      headers: { 'User-Agent': 'focus-island' },
-    })
-    if (!res.ok) throw new Error(String(res.status))
-    const data = await res.json() as { version?: string; url?: string }
-    const tag = data.version ?? ''
-    if (!tag) throw new Error('no version')
-    if (isNewer(tag, appVersion.value)) {
-      updateHint.value = `发现新版本 v${tag}`
-      latestUrl.value = data.url || githubUrl
-    } else {
-      updateHint.value = '已是最新版本'
-    }
-  } catch {
-    updateHint.value = '检查失败，稍后再试'
-  } finally {
-    checking.value = false
-  }
-}
-
 function openLatest() {
-  open(latestUrl.value || githubUrl)
+  open(releaseUrl.value)
 }
 
 function onBackdropClick(event: MouseEvent) {
@@ -90,7 +49,7 @@ function onBackdropClick(event: MouseEvent) {
       <!-- 应用名称和版本 -->
       <div class="app-info">
         <h2 class="app-name">{{ appName }}</h2>
-        <span class="app-version">v{{ appVersion }}</span>
+        <span class="app-version">v{{ currentVersion || '—' }}</span>
       </div>
 
       <!-- GitHub 链接 -->
@@ -103,11 +62,12 @@ function onBackdropClick(event: MouseEvent) {
 
       <!-- 更新检查 -->
       <div class="update-block">
-        <button v-if="latestUrl" class="update-link" @click="openLatest">
-          {{ updateHint }}，前往下载
+        <button v-if="hasUpdate" class="update-link" @click="openLatest">
+          发现新版本 v{{ latest?.version }}，前往下载
         </button>
-        <span v-else-if="updateHint" class="update-hint">{{ updateHint }}</span>
-        <button class="link-btn update-check" :disabled="checking" @click="checkUpdate">
+        <span v-else-if="error" class="update-hint">{{ error }}</span>
+        <span v-else-if="hint" class="update-hint">{{ hint }}</span>
+        <button class="link-btn update-check" :disabled="checking" @click="check()">
           {{ checking ? '检查中…' : '检查更新' }}
         </button>
       </div>

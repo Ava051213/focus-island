@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
  * 版本同步脚本
- * 在 npm version 后自动执行，将版本号同步到 Cargo.toml
+ * 在 npm version 后自动执行，把 package.json 的版本同步到 Cargo.toml 和 latest.json
  */
-import { readFileSync, writeFileSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -29,6 +29,15 @@ cargoToml = cargoToml.replace(
 
 writeFileSync(cargoPath, cargoToml);
 console.log(`[sync-version] ✓ Cargo.toml updated to ${version}`);
+
+// latest.json 是应用内检查更新读取的版本文件，发版时必须跟着动
+const latestPath = resolve(rootDir, 'latest.json');
+if (existsSync(latestPath)) {
+  const latest = JSON.parse(readFileSync(latestPath, 'utf-8'));
+  latest.version = version;
+  writeFileSync(latestPath, `${JSON.stringify(latest, null, 2)}\n`);
+  console.log(`[sync-version] ✓ latest.json updated to ${version}`);
+}
 
 // 可选：如果 Tauri 配置没使用 "../package.json"，也可以同步
 // 但推荐用 "../package.json" 方式，这样不需要手动改
