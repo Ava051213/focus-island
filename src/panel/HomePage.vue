@@ -11,7 +11,7 @@ import type { TronTodo } from '../utils/tronApi'
 import { useWeeklyGoals } from '../composables/useWeeklyGoals'
 import { useDailyStats } from '../composables/useDailyStats'
 import { toLocalDateStr } from '../utils/date'
-import { groupBySegment, type PlanEntry } from '../utils/dayPlan'
+import { orderForDisplay, type PlanEntry } from '../utils/dayPlan'
 
 const emit = defineEmits<{ navigateEvents: [] }>()
 
@@ -211,8 +211,8 @@ function startEntry(entry: PlanEntry) {
   if (memo) start(memo.id, getDisplayTitle(memo))
 }
 
-/** 上午/下午/晚上分组，做完的沉底 */
-const planGroups = computed(() => groupBySegment(todayPlan.value?.entries ?? []))
+/** 平铺展示：按建议先后排，做完的沉底 */
+const planEntries = computed(() => orderForDisplay(todayPlan.value?.entries ?? []))
 
 function dateOffset(offset: number): string {
   const date = new Date()
@@ -363,40 +363,40 @@ function onCoachNoteEnter(event: KeyboardEvent) {
       </div>
 
       <template v-else>
-        <div v-for="group in planGroups" :key="group.segment" class="plan-group">
-          <div class="plan-group-label">{{ group.label }}</div>
-          <div
-            v-for="entry in group.entries"
-            :key="entry.id"
-            class="suggestion-item plan-entry"
-            :class="{ 'plan-done': entry.done }"
+        <div
+          v-for="entry in planEntries"
+          :key="entry.id"
+          class="suggestion-item plan-entry"
+          :class="{ 'plan-done': entry.done }"
+        >
+          <button
+            class="home-check-btn"
+            :class="{ checked: entry.done }"
+            :title="entry.done ? '还没做完，取消勾选' : '这条做完啦'"
+            @click="toggleEntryDone(entry.id)"
           >
-            <button
-              class="home-check-btn"
-              :class="{ checked: entry.done }"
-              :title="entry.done ? '还没做完，取消勾选' : '这条做完啦'"
-              @click="toggleEntryDone(entry.id)"
-            >
-              <svg v-if="entry.done" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4">
-                <polyline points="4 12 9 17 20 6"/>
-              </svg>
-            </button>
-            <div class="suggestion-copy">
-              <div class="suggestion-line">
-                <span v-if="entryCourse(entry)" class="coach-plan-course">{{ entryCourse(entry) }}</span>
-                <span class="suggestion-title">{{ entryTitle(entry) }}</span>
-                <span class="suggestion-meta">{{ entry.pomodoros }} 个番茄</span>
-              </div>
-              <p v-if="entry.note" class="suggestion-reason">{{ entry.note }}</p>
+            <svg v-if="entry.done" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4">
+              <polyline points="4 12 9 17 20 6"/>
+            </svg>
+          </button>
+          <div class="suggestion-copy">
+            <div class="suggestion-line">
+              <span v-if="entryCourse(entry)" class="coach-plan-course">{{ entryCourse(entry) }}</span>
+              <span class="suggestion-title">{{ entryTitle(entry) }}</span>
+              <span class="suggestion-meta">
+                <span v-if="entry.when" class="suggestion-when">{{ entry.when }}</span>
+                {{ entry.pomodoros }} 个番茄
+              </span>
             </div>
-            <div class="suggestion-actions">
-              <button v-if="!entry.done" class="coach-start-btn" :disabled="generating" @click="startEntry(entry)">开始</button>
-              <button class="coach-swap-btn" :disabled="generating" title="这条今天先不算了" @click="removeEntry(entry.id)">✕</button>
-            </div>
+            <p v-if="entry.note" class="suggestion-reason">{{ entry.note }}</p>
+          </div>
+          <div class="suggestion-actions">
+            <button v-if="!entry.done" class="coach-start-btn" :disabled="generating" @click="startEntry(entry)">开始</button>
+            <button class="coach-swap-btn" :disabled="generating" title="这条今天先不算了" @click="removeEntry(entry.id)">✕</button>
           </div>
         </div>
 
-        <div v-if="planGroups.length === 0 && !generating" class="empty">
+        <div v-if="planEntries.length === 0 && !generating" class="empty">
           还没有要做的事，去小记页记一条吧～
         </div>
       </template>
@@ -765,21 +765,7 @@ function onCoachNoteEnter(event: KeyboardEvent) {
   background: color-mix(in srgb, var(--focus-color) 12%, transparent);
 }
 
-/* 今日安排：按上午/下午/晚上分组，做完的沉底划掉 */
-.plan-group {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.plan-group-label {
-  font-size: 9.5px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  color: rgba(255, 255, 255, 0.32);
-  padding: 0 2px;
-}
-
+/* 今日安排：平铺按先后排，做完的沉底划掉 */
 .plan-entry.plan-done {
   opacity: 0.5;
 }

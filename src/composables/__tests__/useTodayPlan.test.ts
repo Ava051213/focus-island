@@ -155,8 +155,6 @@ describe('useTodayPlan', () => {
     expect(api.plan.value!.date).toBe('2026-11-06')
     expect(api.plan.value!.entries[0]).toMatchObject({ source: 'todo', refId: 't1' })
     expect(api.plan.value!.entries[1]).toMatchObject({ source: 'memo', refId: 'm1', pomodoros: 3 })
-    // 中午 12 点起排：待办和小记进下午，剩余的顺延晚上
-    expect(api.plan.value!.entries.map(entry => entry.segment)).toEqual(['afternoon', 'afternoon', 'evening'])
 
     await flushWrite()
     const file = readPlanFile()
@@ -206,8 +204,8 @@ describe('useTodayPlan', () => {
     expect(plan.greeting).toBe('早上好呀')
     expect(plan.care).toBe('记得喝水')
     expect(plan.entries).toHaveLength(2)
-    expect(plan.entries[0]).toMatchObject({ source: 'memo', refId: 'm1', segment: 'morning', pomodoros: 2 })
-    expect(plan.entries[1]).toMatchObject({ source: 'memo', refId: 'm2', segment: 'evening' })
+    expect(plan.entries[0]).toMatchObject({ source: 'memo', refId: 'm1', when: '约 9:00', pomodoros: 2 })
+    expect(plan.entries[1]).toMatchObject({ source: 'memo', refId: 'm2', when: '晚上9点' })
   })
 
   it('模型请求失败时退回本地兜底，不抛错', async () => {

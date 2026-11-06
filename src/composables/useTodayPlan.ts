@@ -17,7 +17,6 @@ import { toLocalDateStr } from '../utils/date'
 import {
   buildFallbackPlan,
   normalizeDayPlan,
-  segmentFromWhen,
   type DayPlan,
   type PlanEntry,
 } from '../utils/dayPlan'
@@ -39,11 +38,11 @@ const store = createPersistedStore({
 })
 
 /** 模型建议里能落地的条目转成安排条目；映射不到小记/待办的丢弃 */
-function entryFromCoachPlan(coachPlan: CoachPlan, now: Date): PlanEntry | null {
+function entryFromCoachPlan(coachPlan: CoachPlan): PlanEntry | null {
   const base = {
     id: crypto.randomUUID(),
     title: coachPlan.title,
-    segment: segmentFromWhen(coachPlan.when, now),
+    when: coachPlan.when || undefined,
     pomodoros: coachPlan.pomodoros,
     note: coachPlan.reason || undefined,
     done: false,
@@ -89,7 +88,7 @@ async function regeneratePlan(feedback: CoachFeedback = {}): Promise<void> {
         const ctx = buildCoachContext()
         const message = mapCoachPlans(await coachToday(ctx), ctx, ctx.dismissed)
         entries = message.plans
-          .map(coachPlan => entryFromCoachPlan(coachPlan, now))
+          .map(entryFromCoachPlan)
           .filter((entry): entry is PlanEntry => entry !== null)
           .slice(0, 8)
         greeting = message.greeting || undefined
@@ -115,7 +114,6 @@ async function regeneratePlan(feedback: CoachFeedback = {}): Promise<void> {
           title: todo.title,
           course: todo.course,
         })),
-        now,
       )
       origin = 'fallback'
     }
