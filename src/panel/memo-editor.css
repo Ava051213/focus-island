@@ -1,0 +1,416 @@
+@reference "../styles.css";
+
+.memo-editor {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  background: transparent;
+  color: #e8e8ea;
+  overflow: hidden;
+}
+
+/* Top Bar */
+.editor-top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.top-bar-spacer {
+  flex: 1;
+}
+
+.save-time {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.35);
+  margin-right: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.top-bar-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.top-bar-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+.top-bar-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.pin-btn.is-pinned {
+  background: color-mix(in srgb, var(--focus-color) 20%, transparent);
+  border-color: color-mix(in srgb, var(--focus-color) 40%, transparent);
+  color: var(--focus-color);
+}
+
+.delete-btn:hover {
+  background: rgba(248, 113, 113, 0.15);
+  border-color: rgba(248, 113, 113, 0.3);
+  color: #f87171;
+}
+
+/* Title Area */
+.editor-title-area {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 16px 4px;
+  flex-shrink: 0;
+}
+
+.estimate-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.estimate-btn {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border-radius: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.estimate-btn:hover {
+  color: var(--focus-color);
+  border-color: color-mix(in srgb, var(--focus-color) 40%, transparent);
+}
+
+.estimate-value {
+  min-width: 14px;
+  text-align: center;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.estimate-label {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+/* 底部操作条 */
+.editor-bottom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+}
+
+.rewrite-hint {
+  flex: 1;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.rewrite-error {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #f87171;
+  cursor: pointer;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.rewrite-error.expanded {
+  display: block;
+  -webkit-line-clamp: unset;
+}
+
+.rewrite-btn {
+  flex-shrink: 0;
+  height: 28px;
+  padding: 0 16px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--focus-color);
+  background: color-mix(in srgb, var(--focus-color) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--focus-color) 35%, transparent);
+  cursor: pointer;
+}
+
+.rewrite-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Editor Content */
+.editor-content-wrapper {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.editor-content-wrapper::-webkit-scrollbar {
+  width: 6px;
+}
+
+.editor-content-wrapper::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.editor-content-wrapper::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 3px;
+}
+
+.editor-content {
+  min-height: 100%;
+  font-size: 14px;
+  line-height: 1.7;
+  color: rgba(255, 255, 255, 0.9);
+  outline: none;
+  caret-color: #fff;
+}
+
+.editor-content :deep(p) {
+  margin: 0 0 12px;
+}
+
+.editor-content :deep(br) {
+  display: block;
+  content: "";
+  margin-bottom: 12px;
+}
+
+.editor-content :deep(div) {
+  margin-bottom: 4px;
+}
+
+.editor-content :deep(b),
+.editor-content :deep(strong) {
+  font-weight: 600;
+  color: #fff;
+}
+
+.editor-content :deep(i),
+.editor-content :deep(em) {
+  font-style: italic;
+}
+
+.editor-content :deep(u) {
+  text-decoration: underline;
+  text-decoration-color: rgba(255, 255, 255, 0.4);
+}
+
+.editor-content :deep(hr.memo-divider) {
+  border: none;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.15);
+  margin: 16px 0;
+}
+
+.editor-content :deep(.memo-checkbox-item) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0;
+  min-height: 24px;
+}
+
+.editor-content :deep(.memo-checkbox) {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  background: transparent;
+  cursor: pointer;
+  appearance: none;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.editor-content :deep(.memo-checkbox:checked) {
+  background: var(--focus-color);
+  border-color: var(--focus-color);
+}
+
+.editor-content :deep(.memo-checkbox:checked::after) {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 4px;
+  height: 8px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.editor-content :deep(.memo-checkbox-text) {
+  color: rgba(255, 255, 255, 0.9);
+  flex: 1;
+  min-width: 1px;
+  outline: none;
+}
+
+.editor-content :deep(.memo-checkbox-text:empty::before) {
+  content: '\200B';
+}
+
+.editor-content :deep(.memo-checkbox:checked + .memo-checkbox-text) {
+  text-decoration: line-through;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.editor-content :deep(img.memo-image) {
+  max-width: 100%;
+  border-radius: 8px;
+  margin: 8px 0;
+  display: block;
+}
+
+.editor-content :deep(ul),
+.editor-content :deep(ol) {
+  margin: 8px 0;
+  padding-left: 24px;
+}
+
+.editor-content :deep(li) {
+  margin: 4px 0;
+}
+
+.editor-content :deep(blockquote) {
+  border-left: 3px solid rgba(255, 255, 255, 0.2);
+  margin: 12px 0;
+  padding-left: 12px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.editor-content :deep(pre) {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 8px;
+  padding: 12px;
+  margin: 12px 0;
+  overflow-x: auto;
+  font-family: 'SF Mono', Monaco, monospace;
+  font-size: 12px;
+}
+
+.editor-content :deep(code) {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-family: 'SF Mono', Monaco, monospace;
+  font-size: 12px;
+}
+
+.editor-content :deep(a) {
+  color: #60a5fa;
+  text-decoration: none;
+}
+
+.editor-content :deep(a:hover) {
+  text-decoration: underline;
+}
+
+/* Delete Confirmation Dialog */
+.delete-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(4px);
+}
+
+.delete-dialog {
+  background: rgba(28, 28, 32, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 20px 24px;
+  min-width: 280px;
+  max-width: 320px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.delete-dialog-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #fff;
+  margin-bottom: 12px;
+}
+
+.delete-dialog-content {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.6);
+  line-height: 1.5;
+  margin-bottom: 20px;
+}
+
+.delete-dialog-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.dialog-btn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid transparent;
+}
+
+.cancel-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.cancel-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: #fff;
+}
+
+.confirm-btn {
+  background: rgba(248, 113, 113, 0.15);
+  border-color: rgba(248, 113, 113, 0.3);
+  color: #f87171;
+}
+
+.confirm-btn:hover {
+  background: rgba(248, 113, 113, 0.25);
+  border-color: rgba(248, 113, 113, 0.5);
+}
+
+
