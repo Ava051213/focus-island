@@ -12,7 +12,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "version": "node scripts/sync-version.mjs && git add src-tauri/Cargo.toml latest.json"
+    "version": "node scripts/sync-version.mjs && git add src-tauri/Cargo.toml src-tauri/Cargo.lock latest.json"
   },
   "dependencies": {
     "@tauri-apps/api": "2.10.1",

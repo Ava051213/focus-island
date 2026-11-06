@@ -39,5 +39,19 @@ if (existsSync(latestPath)) {
   console.log(`[sync-version] ✓ latest.json updated to ${version}`);
 }
 
+// Cargo.lock 里也记着本包版本，漏改的话下次 cargo 构建会留下一个脏文件
+const lockPath = resolve(rootDir, 'src-tauri', 'Cargo.lock');
+if (existsSync(lockPath)) {
+  const lock = readFileSync(lockPath, 'utf-8');
+  const next = lock.replace(
+    /(\[\[package\]\]\nname = "focus-island"\nversion = ")[^"]+(")/,
+    `$1${version}$2`
+  );
+  if (next !== lock) {
+    writeFileSync(lockPath, next);
+    console.log(`[sync-version] ✓ Cargo.lock updated to ${version}`);
+  }
+}
+
 // 可选：如果 Tauri 配置没使用 "../package.json"，也可以同步
 // 但推荐用 "../package.json" 方式，这样不需要手动改
