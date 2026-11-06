@@ -31,6 +31,15 @@ On Windows, `start-app.vbs` launches the built executable without a console wind
 - Global shortcuts can be changed or disabled in the settings window.
 - System notifications are opt-in and can be turned off.
 
+## Data
+
+Everything lives in the local app data directory (`%APPDATA%/focus-island` on Windows, `~/Library/Application Support/focus-island` on macOS). No account, no sync, nothing uploaded. Provider keys for the optional AI features are stored in `settings.json` on the same machine.
+
+## Optional integrations
+
+- A local service on `127.0.0.1:8765` can provide upcoming deadlines. The app only reads from it and never writes back.
+- AI suggestions stay off until a provider key is configured in settings.
+
 ## License
 
 Apache License 2.0
