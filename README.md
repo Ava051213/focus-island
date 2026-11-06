@@ -21,15 +21,15 @@ Build a production bundle:
 npm run build
 ```
 
-On Windows, `start-app.vbs` starts the local development server and the app without opening a console window.
+On Windows, `start-app.vbs` launches the built executable without a console window. Frontend changes need a rebuild for the packaged app; use `npm run dev` for hot reload.
 
 ## Desktop behavior
 
-- The app is single-instance: launching it again focuses the existing window instead of creating a second process or tray icon.
-- Tray icon: left click toggles the island; right click opens the menu (start/pause, skip phase, open panel, show/hide island, quit).
-- Closing a window hides it to the tray by default. Turn off "关闭窗口时隐藏到托盘" in settings to quit directly instead.
-- Global shortcuts: `Ctrl+Alt+Space` on Windows/Linux and `Cmd+Option+Space` on macOS toggle the timer. They can be changed or disabled under Settings → 系统设置.
-- Focus/break completion sends a system notification; notification and sound switches live in the same settings section.
+- Single instance: launching it again focuses the existing window instead of starting a second process.
+- Tray icon: left click toggles the window, right click opens the menu.
+- Closing a window hides it to the tray by default. Turn that off under Settings to quit directly.
+- Global shortcuts can be changed or disabled in the settings window.
+- System notifications are opt-in and can be turned off.
 
 ## License
 
