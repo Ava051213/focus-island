@@ -68,6 +68,15 @@ export interface CoachContext {
   userNotes: string[]
   /** 用户刚刚换掉、不想再看到的小记标题 */
   dismissed: string[]
+  /** 临近截止的畅课课程待办，按截止时间升序，最多 3 条；msLeft 为负表示已过期，null 表示无截止 */
+  todos: Array<{
+    id: string
+    title: string
+    course: string
+    msLeft: number | null
+    /** 给人看的剩余描述，例如「剩 21.3 小时」「已过期 2.0 小时」 */
+    dueLabel: string
+  }>
 }
 
 export interface CoachPlan {
@@ -78,6 +87,10 @@ export interface CoachPlan {
   memoIndex: number | null
   /** 数据层匹配后回填的小记 id */
   memoId: string | null
+  /** 对应 todos 数组的序号，从 1 开始；没有对应待办为 null。todo 和 memo 同一条只给一个 */
+  todoIndex: number | null
+  /** 数据层匹配后回填的课程待办快照，供首页渲染课程标签 */
+  todo: { id: string; course: string } | null
   pomodoros: number
   reason: string
 }
@@ -373,7 +386,7 @@ export function useAi() {
       `你叫团子，住在用户屏幕顶部的专注岛里，是他的小伙伴，不是客服。说话软一点、短一点，可以偶尔调皮，但不要腻，也不要每句都撒娇。
 
 你要先接住用户，再给今天排个先后。只输出 JSON：
-{"greeting":"先回应 userNotes 的最后一句，再带一个今天的具体数字，25-40 字","plans":[{"when":"现在起","memo":小记序号,"title":"小记标题","pomodoros":1,"reason":"为什么现在做，15-25 字"}],"care":"生活提醒，15-30 字","closing":"收尾一句，10-20 字"}
+{"greeting":"先回应 userNotes 的最后一句，再带一个今天的具体数字，25-40 字","plans":[{"when":"现在起","memo":小记序号,"todo":待办序号,"title":"小记标题","pomodoros":1,"reason":"为什么现在做，15-25 字"}],"care":"生活提醒，15-30 字","closing":"收尾一句，10-20 字"}
 
 规则：
 1. plans 优先给 2-3 条（小记足够时），顺序就是先做什么、再做什么、最后做什么。when 写建议时间窗：第一条用「现在起」或具体时刻，后面可以写「约 21:10」「今天收尾」。when 不能早于 now 里的当前时刻。
@@ -385,7 +398,8 @@ export function useAi() {
 7. care 按当前时段说人话，不要编造天气、位置、心情或数据里没有的事。
 8. recentCoaches 只是告诉你最近推荐过哪些小记，用来换角度；里面不含时间，也不要照抄任何旧的时刻。现在几点只看 now。
 9. closing 要贴合当前时段，晚上还早的时候不要随口说晚安。
-10. 一个番茄是 ${ctx.focusMinutes} 分钟。memos 里的 estimatedPomodoros 是用户自己估的番茄数，pomodoros 是已经完成的；plan 的 pomodoros 参考剩余量（estimatedPomodoros 减 pomodoros），没估过就按 1-3 个给，不要一次把剩余量全排进一条。不要 Markdown、不要编号前缀，不要复述原始数据。`,
+10. 一个番茄是 ${ctx.focusMinutes} 分钟。memos 里的 estimatedPomodoros 是用户自己估的番茄数，pomodoros 是已经完成的；plan 的 pomodoros 参考剩余量（estimatedPomodoros 减 pomodoros），没估过就按 1-3 个给，不要一次把剩余量全排进一条。不要 Markdown、不要编号前缀，不要复述原始数据。
+11. todos 是畅课里临近截止的课程作业，已按截止远近排好。安排计划时优先从中挑选作业，可以直接给 todo 序号（对应 todos 数组的 1 起始下标）替代 memo，同一条 plan 的 todo 和 memo 只给一个；作业的 reason 必须引用剩余时间。todos 为空时绝不给 todo 序号，也不要虚构课程作业。`,
       JSON.stringify(ctx),
       0.8,
     )
@@ -400,11 +414,14 @@ export function useAi() {
         .filter((item): item is Record<string, unknown> => !!item && typeof item === 'object')
         .map((plan) => {
           const memoIndexRaw = Number(plan.memo)
+          const todoIndexRaw = Number(plan.todo)
           return {
             title: String(plan.title ?? '').trim().slice(0, 30),
             when: String(plan.when ?? '').trim().slice(0, 12),
             memoIndex: Number.isFinite(memoIndexRaw) && memoIndexRaw > 0 ? memoIndexRaw : null,
             memoId: null,
+            todoIndex: Number.isFinite(todoIndexRaw) && todoIndexRaw > 0 ? todoIndexRaw : null,
+            todo: null,
             pomodoros: Math.min(3, Math.max(1, Number(plan.pomodoros) || 1)),
             reason: String(plan.reason ?? '').trim().slice(0, 80),
           }

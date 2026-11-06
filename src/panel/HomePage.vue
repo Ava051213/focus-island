@@ -3,8 +3,11 @@ import { computed, ref } from 'vue'
 import { useMemos, type Memo } from '../composables/useMemos'
 import { useTimerBridge } from '../composables/useTimerBridge'
 import { eventTime, eventsNow, useEvents } from '../composables/useEvents'
-import { useAiButler, type CoachFeedback } from '../composables/useAiButler'
+import { useAiButler, selectUrgentTodos, type CoachFeedback } from '../composables/useAiButler'
 import type { CoachPlan } from '../composables/useAi'
+import { useTronTodos, todoRemainingLabel } from '../composables/useTronTodos'
+import { useTronMemo } from '../composables/useTronMemo'
+import type { TronTodo } from '../utils/tronApi'
 import { useWeeklyGoals } from '../composables/useWeeklyGoals'
 import { useDailyStats } from '../composables/useDailyStats'
 import { toLocalDateStr } from '../utils/date'
@@ -80,6 +83,9 @@ function undoComplete() {
 const { coachInsight, dailySummary, refreshCoach, configured, preference } = useAiButler()
 const coachMessage = computed(() => coachInsight.value?.coach ?? null)
 
+// 畅课待办：建议条目可以直接来自课程作业，无 Key 时本地提示也会用
+const { sortedTodos: tronSortedTodos } = useTronTodos()
+
 // 团子的表情跟着本周完成的目标数走
 const { doneCount } = useWeeklyGoals()
 const mascotFace = computed(() => ['', '🌱', '✨', '🏆'][doneCount.value] ?? '')
@@ -117,8 +123,11 @@ function timeWord(): string {
 interface LocalCoachMessage {
   text: string
   actionLabel: string | null
-  action: 'start' | 'events'
+  action: 'start' | 'events' | 'todo'
 }
+
+/** 最近的紧急课程作业：48 小时内截止或已过期（复用团子上下文的挑选规则） */
+const urgentTodo = computed(() => selectUrgentTodos(tronSortedTodos.value, Date.now(), 1)[0] ?? null)
 
 const localCoach = computed<LocalCoachMessage>(() => {
   const first = recentMemos.value[0] ?? null
@@ -129,6 +138,13 @@ const localCoach = computed<LocalCoachMessage>(() => {
       text: `还有 ${soonEvent.value.minutes} 分钟到「${soonEvent.value.title}」，先准备一下吧～`,
       actionLabel: '看日程',
       action: 'events',
+    }
+  }
+  if (urgentTodo.value) {
+    return {
+      text: `「${urgentTodo.value.title}」${todoRemainingLabel(urgentTodo.value)}，先啃掉它吧，我陪你～`,
+      actionLabel: '开始做',
+      action: 'todo',
     }
   }
   if (pomodoros === 0 && first) {
@@ -160,6 +176,10 @@ function runLocalCoachAction() {
     emit('navigateEvents')
     return
   }
+  if (localCoach.value.action === 'todo') {
+    if (urgentTodo.value) startTodo(urgentTodo.value)
+    return
+  }
   const memo = recentMemos.value[0]
   if (memo) startMemo(memo)
 }
@@ -172,7 +192,25 @@ function planMemo(plan: CoachPlan): Memo | null {
   return memos.value.find(memo => !memo.completedAt && getDisplayTitle(memo) === plan.title) ?? null
 }
 
+/** 建议条目对应的课程待办：按回填的 id 在最新列表里找 */
+function planTodo(plan: CoachPlan): TronTodo | null {
+  if (!plan.todo) return null
+  return tronSortedTodos.value.find(todo => todo.id === plan.todo?.id) ?? null
+}
+
+/** 把课程待办落成小记再开始；转换与去重都在 useTronMemo 里，转过就直接开始那条小记 */
+function startTodo(todo: TronTodo) {
+  const { convert } = useTronMemo()
+  const { memo } = convert(todo)
+  start(memo.id, getDisplayTitle(memo))
+}
+
 function startPlan(plan: CoachPlan) {
+  const todo = planTodo(plan)
+  if (todo) {
+    startTodo(todo)
+    return
+  }
   const memo = planMemo(plan)
   if (memo) start(memo.id, getDisplayTitle(memo))
 }
@@ -181,9 +219,9 @@ function planEstimate(plan: CoachPlan): number {
   return planMemo(plan)?.estimatedPomodoros ?? 0
 }
 
-/** 建议只保留还能对应到进行中小记的条目 */
+/** 建议只保留还能对应到进行中小记或课程待办的条目 */
 const suggestedPlans = computed(() =>
-  (coachMessage.value?.plans ?? []).filter(plan => !!planMemo(plan)),
+  (coachMessage.value?.plans ?? []).filter(plan => !!planMemo(plan) || !!planTodo(plan)),
 )
 
 function dateOffset(offset: number): string {
@@ -351,11 +389,12 @@ function onCoachNoteEnter(event: KeyboardEvent) {
           <div class="suggestion-copy">
             <div class="suggestion-line">
               <span class="suggestion-rank">{{ index + 1 }}</span>
+              <span v-if="plan.todo?.course" class="coach-plan-course">{{ plan.todo.course }}</span>
               <span class="suggestion-title">{{ plan.title }}</span>
               <span class="suggestion-meta">
                 <span v-if="plan.when" class="suggestion-when">{{ plan.when }}</span>
                 {{ plan.pomodoros }} 个番茄
-                <template v-if="planEstimate(plan)"> · 预计 {{ planEstimate(plan) }}</template>
+                <template v-if="!plan.todo && planEstimate(plan)"> · 预计 {{ planEstimate(plan) }}</template>
               </span>
             </div>
             <p v-if="plan.reason" class="suggestion-reason">{{ plan.reason }}</p>
@@ -801,6 +840,20 @@ function onCoachNoteEnter(event: KeyboardEvent) {
   flex-shrink: 0;
   font-size: 10px;
   color: color-mix(in srgb, var(--focus-color) 75%, transparent);
+}
+
+.coach-plan-course {
+  flex-shrink: 0;
+  max-width: 72px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 9px;
+  line-height: 1.4;
+  color: color-mix(in srgb, var(--focus-color) 80%, transparent);
+  background: color-mix(in srgb, var(--focus-color) 16%, transparent);
 }
 
 .suggestion-title {

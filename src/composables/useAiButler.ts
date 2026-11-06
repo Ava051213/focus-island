@@ -9,6 +9,8 @@ import { useMemos } from './useMemos'
 import { useDailyStats } from './useDailyStats'
 import { aggregateSessionsByTask } from '../timer/sessions'
 import { toLocalDateStr } from '../utils/date'
+import { useTronTodos, todoDueMs, todoRemainingLabel } from './useTronTodos'
+import type { TronTodo } from '../utils/tronApi'
 
 export type AiInsightKind = 'coach' | 'review'
 
@@ -187,11 +189,48 @@ function minutesUntil(at: string, now: Date): number | null {
   return diff >= 0 && diff <= 1440 ? diff : null
 }
 
+/** 多久内截止的课程作业算紧急，团子会优先安排 */
+export const URGENT_TODO_WINDOW_MS = 48 * 60 * 60 * 1000
+
+/**
+ * 挑出紧急的课程待办：48 小时内截止或已过期，按截止升序取前 cap 条。
+ * 输入一般是 useTronTodos 的 sortedTodos（已排除勾掉的和排好序），这里只做筛选，不改数据。
+ */
+export function selectUrgentTodos(todos: TronTodo[], nowMs: number, cap = 3): TronTodo[] {
+  return todos
+    .map(todo => ({ todo, due: todoDueMs(todo) }))
+    .filter((item): item is { todo: TronTodo; due: number } =>
+      item.due !== null && (item.due <= nowMs || item.due - nowMs <= URGENT_TODO_WINDOW_MS))
+    .sort((a, b) => a.due - b.due)
+    .slice(0, cap)
+    .map(item => item.todo)
+}
+
+/**
+ * 模型只给序号，真实的小记 id / 待办快照由本地匹配，避免编造。
+ * todo 序号有效时优先按待办处理；序号越界一律归 null，不报错。
+ */
+export function mapCoachPlans(message: CoachMessage, ctx: CoachContext, dismissed: string[]): CoachMessage {
+  const plans = message.plans
+    .map((plan) => {
+      const todo = plan.todoIndex ? ctx.todos[plan.todoIndex - 1] ?? null : null
+      if (todo) {
+        return { ...plan, memoId: null, todo: { id: todo.id, course: todo.course }, title: todo.title }
+      }
+      const memo = plan.memoIndex ? ctx.memos[plan.memoIndex - 1] ?? null : null
+      return { ...plan, todo: null, memoId: memo?.id ?? null, title: memo?.title ?? plan.title }
+    })
+    // 模型有时会忽略 dismissed，这里再兜一层，保证换掉的条目真的不再出现
+    .filter(plan => !dismissed.includes(plan.title))
+  return { ...message, plans }
+}
+
 function buildContext(): CoachContext {
   const { upcoming, overdue } = useEvents()
   const { memos, activeMemos } = useMemos()
   const { todayStat } = useDailyStats()
   const { settings } = useSettings()
+  const { sortedTodos } = useTronTodos()
 
   // 只拿还在进行中的小记，按用户手动排好的顺序取前 5 条
   const ordered = activeMemos.value.slice(0, 5)
@@ -204,6 +243,8 @@ function buildContext(): CoachContext {
   const next = upcoming.value[0] ?? null
   const minutesToNextEvent = next ? minutesUntil(next.at, now) : null
   const todayStr = toLocalDateStr(now)
+
+  const urgentTodos = selectUrgentTodos(sortedTodos.value, now.getTime())
 
   return {
     now: nowText,
@@ -220,6 +261,16 @@ function buildContext(): CoachContext {
       daysSinceUpdate: Math.floor((now.getTime() - memo.updatedAt) / 86400000),
       pinned: memo.isPinned,
     })),
+    todos: urgentTodos.map((todo) => {
+      const due = todoDueMs(todo)
+      return {
+        id: todo.id,
+        title: todo.title,
+        course: todo.course,
+        msLeft: due === null ? null : due - now.getTime(),
+        dueLabel: todoRemainingLabel(todo, now.getTime()),
+      }
+    }),
     events: upcoming.value.slice(0, 8).map(event => ({
       title: event.title,
       at: event.at,
@@ -302,19 +353,8 @@ async function generateCoach(): Promise<CoachMessage> {
   const { coachToday } = useAi()
   const ctx = buildContext()
   const message = await coachToday(ctx)
-  // 模型只负责给序号，真正的小记 id 和标题由本地匹配，避免编造
-  const plans = message.plans
-    .map((plan) => {
-      const memo = plan.memoIndex ? ctx.memos[plan.memoIndex - 1] ?? null : null
-      return {
-        ...plan,
-        memoId: memo?.id ?? null,
-        title: memo?.title ?? plan.title,
-      }
-    })
-    // 模型有时会忽略 dismissed，这里再兜一层，保证换掉的条目真的不再出现
-    .filter(plan => !state.value.dismissed.includes(plan.title))
-  const enriched: CoachMessage = { ...message, plans }
+  // 序号映射 + dismissed 兜底都抽在纯函数里，见 mapCoachPlans
+  const enriched = mapCoachPlans(message, ctx, state.value.dismissed)
   addInsight('coach', '团子说', formatCoach(enriched), enriched)
   return enriched
 }
