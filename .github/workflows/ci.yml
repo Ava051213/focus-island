@@ -32,3 +32,16 @@ jobs:
 
       - name: Production build
         run: npm run vite:build
+
+  rust:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Cargo check
+        run: cargo check --locked --manifest-path src-tauri/Cargo.toml
