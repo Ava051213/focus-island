@@ -2,7 +2,44 @@
 
 AI 编码工具（Codex、Claude Code、Trae、Cursor 等）在本仓库工作时的唯一说明文件。
 
-> 本文件是仓库唯一的架构说明，改架构时只改这一份。
+> 本文件是仓库唯一的架构说明，改架构时只改这一份。迭代计划也放在这里，不另建路线图文档。
+
+## 当前迭代计划
+
+> 发版后更新或删掉本节。
+> 版本节奏：功能每批完成即发 1.1.x 递增（patch），计划内功能全部完成后升 1.2.0 收尾。计划不提前钉版本号。
+
+**主题：课程场景打通 + 应用内更新 + 质量加固**
+
+### 批次一：课程场景打通（P0）
+
+1. ✅ **团子建议接入课程待办**：`useAiButler` 的 coach 上下文加入 Tron 待办（标题、课程名、截止倒计时、是否过期）；48 小时内有截止的作业优先于普通小记建议；`tronApi` 失败时优雅降级（上下文里不带这部分，不报错）。待办可直接成为建议条目，首页点「开始」自动转小记并进入专注（转换机制见第 2 项）
+2. ✅ **课程待办自动转小记**（只保留自动，不做手动入口）：`useTronMemo.ts` 的 `convert()` 幂等新建备忘（标题 `课程名·作业标题`，进「工作」分类），映射落 `tron-memo-links.json`，另有按标题兜底以兼容老数据；小记完成归档后视为没转过。只在首页点「开始」时静默调用。日程页卡片不加「转成小记」按钮、也不做 AI 拆解——手动搬运不增加信息，反而多一步
+3. ✅ **应用内检查更新（轻量方案）**：`useUpdateCheck.ts` 拉 `latest.json`（`raw.githubusercontent.com`，白名单已有）比对版本。启动后 10 秒静默查一次，失败不留痕迹；关于弹窗打开时若还没查过再补一次，之后直接用缓存；设置页 ⓘ 按钮在有新版时带红点，点「前往下载」用系统浏览器打开 release 页。**不引入 tauri-plugin-updater**（要签名密钥与安装包产物约定，个人应用维护成本高）。`scripts/sync-version.mjs` 已把版本同步进 `latest.json`，发版不用手改
+
+### 批次二：质量加固（P0，与批次一穿插做）
+
+4. **补测试**（当前覆盖盲区，按价值排序）：`useAiButler`（四道闸门顺序、90 秒防抖、`lastAutoAt` 失败防重试、每日总结 20:00 门槛与次日补生成）、`useTronTodos`（3 秒节流、失败保留旧列表标 stale、勾选归档持久化）、`sanitizeHtml`（安全线，锁住已知绕过样例）、`date.ts`（本地日期边界）
+5. **CI 试跑 cargo check + rust-cache**：能压进 ~5 分钟就并入 CI，压不进维持现状不强求
+
+### 批次三：收尾与打磨（P1）
+
+6. **README 重写**：改中文、修正启动脚本描述（不再拉 vite）、补托盘/快捷键/课程待办的真实行为
+7. **技术债清扫**：`.kilo/` 加 .gitignore；AGENTS.md 修 MemoEditor 行数（现为 1242 行）；tag 统一为 `v*`（现有 `focus-island-v1.1.0` 与 `v1.0.x` 两种命名）
+8. **（视余量）MemoEditor.vue 拆分**：纯结构重构，不改行为
+
+### 明确不做（守住 fork 的精简方向）
+
+- 不恢复本周目标进度展示、不恢复全屏自动避让（均刚移除）
+- 不向畅课回写任何数据（`useTronTodos` 的既有红线）
+- 不做账号/云同步，数据与 AI Key 全本地的定位不变
+
+### 发布清单
+
+1. `npx vue-tsc --noEmit` + `npm run test` + `npm run vite:build` 全绿；本地 `cd src-tauri && cargo check`
+2. `npm version patch`（1.1.1 起，自动同步 Cargo.toml 与 latest.json）；计划全部完成发 1.2.0 时用 `npm version minor`
+3. 确认 `latest.json` 版本正确（`npm version` 已自动写入并 `git add`）
+4. tag `v1.2.0`（统一命名）→ GitHub Release
 
 ## Commands
 
@@ -89,6 +126,8 @@ alert → 恢复（窗口内有鼠标/键盘活动）
 | `daily-summaries.json` | `useDailySummaries` | —（团子每日总结，保留最近 30 天） |
 | `sessions.json` | `useSessions` | —（焦点轮次账本，只在 panel 窗口写入） |
 | `timer-snapshot.json` | `useTimerSnapshot` | —（进行中快照，0 防抖，只在 panel 窗口读写） |
+| `tron-todos-done.json` | `useTronTodos` | —（课程待办本地勾选归档，只在 panel 窗口） |
+| `tron-memo-links.json` | `useTronMemo` | —（待办转小记的映射，只在 panel 窗口） |
 
 新增持久化数据时请复用 `createPersistedStore`，不要直接调用 `writeTextFile`。
 
@@ -112,6 +151,8 @@ alert → 恢复（窗口内有鼠标/键盘活动）
 - **`useMemos.ts`**：备忘与分类，同时落 `memos.json` 和 `memo-categories.json`。每条备忘带 `pomodoroCount`（已完成轮数）和 `estimatedPomodoros`（用户预计要用的番茄数，0 表示没估），是当前唯一的专注对象；`completedAt` 用于完成归档（不物理删除，可恢复），`order` 保存用户拖动后的手动顺序，首页取 `activeMemos` 前三条
 - **`useSettings.ts`**：主题、时长、透明度（`islandOpacity`）、缩放（`islandScale`）、显示模式（常驻/边缘停靠）、顶部位置（`islandXRatio`）、`idleMottos`、`shortcuts`（toggleTimer / showWindow / enabled）、`tray.closeToTray`、`notifications`（enabled / sound / permissionAsked）、开机自启、AI Key（硅基主力 / 智谱兜底）/模型/自动建议开关。开机自启以本地设置为准：开关开着就在启动时重新登记系统启动项，不要用系统注册状态反向覆盖开关（否则启动项被清理时开关会被静默关掉）；`syncAutostart` 带 `isTauri()` 守卫，Web 预览与 Vitest 不调用系统接口。同步失败写入 `autostartError`，由设置页展示
 - **`useDockMode.ts`**：边缘停靠模式，消费主窗口统一的指针轮询结果（`is_mouse_over_window`）决定展开或收起细条
+- **`useIslandBridge.ts`**：main 窗口专用，监听 `timer-state-update` / `notification-show` 等事件，把 panel 推来的计时状态映射进灵动岛状态机
+- **`useIslandInteraction.ts`**：main 窗口专用，统一轮询 `is_mouse_over_window` 驱动悬停、拖动与鼠标穿透开关（穿透状态下 webview 收不到 mousemove，只能轮询）；停靠模式复用同一次轮询结果
 - **`useSessions.ts` / `useTimerSnapshot.ts`**：Session 账本与进行中快照的持久化封装，都只在 panel 窗口使用。备忘列表用 `aggregateSessionsByTask()` 按 `taskId` 聚合每条小记的累计番茄数与今日番茄数
 - **`useDailyStats.ts` / `useAchievements.ts`**：每日统计与成就，日期一律用 `src/utils/date.ts` 的本地日期。`useDailyStats` 对外提供 `effectiveDailyStats`，由旧 `daily-stats.json` 累加值与 Session 聚合合并而成
 - **`useWeeklyGoals.ts`**：本周目标（番茄 8 个、专注 3 天、完成 2 条小记）与奖励解锁，进度从 `effectiveDailyStats` 和 `memos.completedAt` 实时计算，周一自动换周，不新增持久化；页面不再展示进度，只保留团子表情和主题奖励的完成度判断
@@ -120,6 +161,8 @@ alert → 恢复（窗口内有鼠标/键盘活动）
 - **`useQuickAddFocus.ts`**：已移除。快捷键 `showWindow` 现在只负责打开清单，不再切换页面或聚焦输入框。
 - **`useTimerCommands.ts`**：`toggle-timer` / `skip` 到 `useTimer` 动作的唯一映射，托盘与快捷键共用
 - **`useSystemNotify.ts`**：系统通知权限、发送与首次隐藏到托盘提示；不承载计时逻辑
+- **`useTronMemo.ts`**：课程待办 → 小记的自动转换与去重。`convert()` 幂等（先认 `tron-memo-links.json` 映射，再按 `课程名·标题` 兜底），只在首页点「开始」时调用一次；小记完成归档后算没转过
+- **`useUpdateCheck.ts`**：应用内检查更新。`scheduleStartupCheck()` 在面板启动 10 秒后静默查一次 `latest.json`，关于弹窗在没查过时补一次；`isNewerVersion` 只比数字段（`1.2.10 > 1.2.9`）。设置页 ⓘ 按钮的红点由 `hasUpdate` 驱动，同一时刻只允许一个在途请求
 - **`useAi.ts` / `useAiButler.ts`**：见下方「AI 模块」
 
 ### Panel 页面路由
@@ -138,6 +181,13 @@ alert → 恢复（窗口内有鼠标/键盘活动）
 
 备忘正文是 HTML，渲染或插入 DOM 前**必须**过 `src/utils/sanitizeHtml.ts`（DOMPurify）。
 
+### 课程待办（畅课 Tron）
+
+- `src/utils/tronApi.ts` 连接本机 `tronclass-picker` 服务（`http://127.0.0.1:8765`，`/api/todos`，8 秒超时）。换端口要**同时**改 `tronApi.ts` 的 `TRON_SERVICE_BASE` 和 `capabilities/default.json` 的 HTTP 白名单
+- `useTronTodos.ts` 是模块级单例：3 秒请求节流（服务端有 3 秒缓存，不要比这更频繁）、5 分钟自动刷新；进前台即刷新（window focus / visibilitychange / `panel-window-transition` open——面板页面被 KeepAlive 缓存时窗口事件不一定触发）。失败时保留上一次成功的列表，交给界面标注「可能过期」
+- 勾选归档只写本地 `tron-todos-done.json`，**绝不向畅课回写任何数据**。展示在日程页「课程待办」区块（`TronTodoCard.vue`）
+- 首页建议点「开始」时 `useTronMemo.convert()` 静默建一条小记（`tron-memo-links.json` 记账），同一条作业只会有一条；日程页卡片只是待办列表，不做转换
+
 ### AI 模块
 
 - **`useAi.ts`**：封装对话请求，所有 prompt 都集中在这里，业务侧只调语义化方法。硅基流动（默认 `Qwen/Qwen3-8B`）是主力，智谱 GLM 是兜底；按顺序逐家尝试，第一家成功即返回，全部失败才抛错。请求走 `@tauri-apps/plugin-http`（Rust 侧发请求），因此不受 CSP 与浏览器跨域限制，也不会产生浏览器网络请求。
@@ -149,6 +199,7 @@ alert → 恢复（窗口内有鼠标/键盘活动）
 - **`useAiButler.ts`**：后台自动建议调度 + `ai-insights.json`。四道闸门按顺序拦：`aiAutoEnabled` → 7:00–23:00 → 距上次 ≥10 分钟 → 当日 <30 次。触发源是 upcoming 事件 / memos（含完成归档）/ 今日番茄的 `watch`，90 秒防抖；另有一个每小时一次的定时刷新，避免一整天重复同一句。失败也写 `lastAutoAt`，避免网络异常时反复重试。
   - 上下文包含当前时段、最近 5 条进行中小记（已完成番茄轮数、预计番茄数、放置天数、置顶）、未来日程及剩余分钟、今日番茄与专注分钟、今天完成的小记，以及最近 3 条旧建议
   - `coachToday` 返回结构化 JSON（开场关心 / 1-3 条带 `when` 时段的先后安排 / 生活提醒 / 收尾）。模型只给 `memo` 序号，`useAiButler` 在本地映射成真实小记 id。首页把 greeting 留在「团子说」卡片，plans 渲染到下方「建议做的事」，每条可直接开始专注
+  - coach 上下文含临近截止的课程待办（48 小时内截止或已过期，`selectUrgentTodos` 按截止升序最多 3 条，来自 useTronTodos）；待办可直接成为建议条目（plan 的 `todo` 字段带课程名快照），首页点「开始」按 `课程·标题` 转成小记并进入专注，已转过则直接开始那条小记。Tron 服务不可用时上下文里就不带待办，不影响其余建议；panel 启动即开始 Tron 轮询（5 分钟一次、仅窗口可见时）
   - 每日总结：当天 20:00 后完成的轮次会生成一次当日总结；白天收工、晚上没再打开的情况，次日首次启动补生成昨天的。内容为当天番茄数、专注分钟、完成的小记和明天一句，无 Key 或请求失败时使用本地规则兜底。总结存在 `daily-summaries.json`，首页团子卡片在当晚或次日展示，当天又完成新轮次时退回普通团子
   - 卡片支持互动：用户可输入一句话（如「我有点累」）、选择「先啃难的 / 先做轻松的」、或逐条换掉。偏好、最近 3 条用户发言、当天换掉的标题都存在 `ai-insights.json`，并随下一次生成传给模型；换掉的条目当天不再出现，跨日清空
   - 结果只取最新一条 coach 建议：greeting 显示在首页「团子说」卡片，plans 显示在下方「建议做的事」；旧格式只存 `content` 时首页退回纯文本展示。旧的 insights 仍保留在 `ai-insights.json` 里，最多 50 条
