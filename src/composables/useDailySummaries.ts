@@ -1,14 +1,14 @@
 import { computed, ref } from 'vue'
 import { createPersistedStore } from './persistence'
 
-/** 青梅生成的每日总结，按日期保留最近 30 天 */
+/** 未晚生成的每日总结，按日期保留最近 30 天 */
 export interface DailySummary {
   /** YYYY-MM-DD */
   date: string
   pomodoros: number
   focusMinutes: number
   completedMemos: string[]
-  /** 青梅对今天的总结 */
+  /** 未晚对今天的总结 */
   summary: string
   /** 明天一句建议 */
   tomorrow: string

@@ -34,7 +34,7 @@ export interface DayPlan {
   entries: PlanEntry[]
   /** model = 按模型建议生成；fallback = 无 Key 或请求失败时的本地排程 */
   origin: 'model' | 'fallback'
-  /** 模型生成时的开场白与生活提醒，青梅卡直接用 */
+  /** 模型生成时的开场白与生活提醒，未晚卡直接用 */
   greeting?: string
   care?: string
   /** 跨日重排时存下的前一天安排（只留一层），供次日补「计划 vs 实际」总结 */

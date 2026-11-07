@@ -13,7 +13,7 @@ import {
 } from '../utils/instruction'
 
 /**
- * 青梅指令入口：一句话 → 识别意图 → 出提案 → 确认才执行。
+ * 未晚指令入口：一句话 → 识别意图 → 出提案 → 确认才执行。
  * 调顺序与加日程纯本地可用；通用拆分需要 AI。不是指令的当闲聊，走原有的排程回应。
  */
 export function useInstructions() {

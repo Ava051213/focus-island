@@ -65,7 +65,7 @@ export interface CoachContext {
   recentCoaches: string[]
   /** 用户当前的先后偏好 */
   preference: 'hard-first' | 'easy-first' | ''
-  /** 用户最近跟青梅说过的话，按时间从旧到新 */
+  /** 用户最近跟未晚说过的话，按时间从旧到新 */
   userNotes: string[]
   /** 用户刚刚换掉、不想再看到的小记标题 */
   dismissed: string[]

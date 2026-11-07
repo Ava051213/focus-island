@@ -272,12 +272,12 @@ function removeEvent() {
         @keydown.enter="submitDraft"
       />
 
-      <div v-if="aiLoading" class="ai-hint">青梅正在整理…</div>
+      <div v-if="aiLoading" class="ai-hint">未晚正在整理…</div>
 
       <div v-else-if="preview" class="ai-preview">
         <div class="preview-head">
           <span>要记成这条喔</span>
-          <span class="source-tag">{{ preview.source === 'ai' ? '青梅整理的' : '我自己理的' }}</span>
+          <span class="source-tag">{{ preview.source === 'ai' ? '未晚整理的' : '我自己理的' }}</span>
         </div>
         <div class="preview-title">{{ preview.title }}</div>
         <div class="preview-meta">
