@@ -233,6 +233,31 @@ describe('useTodayPlan', () => {
     expect(api.plan.value!.entries[0]).toMatchObject({ refId: 'm1', note: '昨天顺延下来', donePomodoros: 0 })
   })
 
+  it('moveEntry 置顶与沉底，做完的不可移', async () => {
+    h.files.set('focus-island/memos.json', JSON.stringify([
+      seedMemo('m1', '第一件'),
+      seedMemo('m2', '第二件'),
+      seedMemo('m3', '第三件'),
+    ]))
+    const { api } = await fresh()
+    await api.ensureTodayPlan()
+    expect(api.plan.value!.entries.map(entry => entry.refId)).toEqual(['m1', 'm2', 'm3'])
+
+    api.moveEntry(api.plan.value!.entries[0].id, 'bottom')
+    expect(api.plan.value!.entries.map(entry => entry.refId)).toEqual(['m2', 'm3', 'm1'])
+
+    const m1Entry = api.plan.value!.entries.find(entry => entry.refId === 'm1')!
+    api.moveEntry(m1Entry.id, 'top')
+    expect(api.plan.value!.entries.map(entry => entry.refId)).toEqual(['m1', 'm2', 'm3'])
+
+    // 做完的条目位置不该被移动（沉底规则管它）
+    api.toggleEntryDone(api.plan.value!.entries[1].id)
+    const doneEntry = api.plan.value!.entries.find(entry => entry.done)!
+    api.moveEntry(doneEntry.id, 'top')
+    expect(api.plan.value!.entries.find(entry => entry.id === doneEntry.id)?.done).toBe(true)
+    expect(api.plan.value!.entries[0].done).toBe(false)
+  })
+
   it('完成番茄推进条目，满额自动勾掉', async () => {
     // est 1 → 计划 1 个番茄，推 1 次就该自动勾掉
     h.files.set('focus-island/memos.json', JSON.stringify([seedMemo('m1', '高数作业', 1)]))

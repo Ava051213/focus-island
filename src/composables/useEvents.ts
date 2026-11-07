@@ -211,19 +211,19 @@ const CN_DIGITS: Record<string, number> = {
   一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6,
   七: 7, 八: 8, 九: 9, 十: 10, 十一: 11, 十二: 12,
 }
-const CN_TIME_RE = /(凌晨|上午|中午|下午|傍晚|晚上)?([一二两三四五六七八九十]{1,3})点(半|[一二三四五六七八九十]{1,2}分)?/
+const CN_TIME_RE = /(凌晨|上午|中午|下午|傍晚|晚上)?([一二两三四五六七八九十]{1,3}|\d{1,2})\s*点\s*(半|[一二三四五六七八九十]{1,2}|\d{1,2})?\s*分?/
 
 /** 原文里有没有能确定的日期/时刻，有的话以本地换算为准，不交给模型猜 */
 export function hasExplicitSchedule(text: string): boolean {
-  return /(今天|明天|后天|大后天|(?:下)?(?:周|星期|礼拜)[一二三四五六日天]|\d{4}年\d{1,2}月\d{1,2}|\d{1,2}[-/月]\d{1,2}|\d{1,2}:\d{2}|[一二两三四五六七八九十]{1,3}点)/.test(text)
+  return /(今天|明天|后天|大后天|(?:下)?(?:周|星期|礼拜)[一二三四五六日天]|\d{4}年\d{1,2}月\d{1,2}|\d{1,2}[-/月]\d{1,2}|\d{1,2}:\d{2}|[一二两三四五六七八九十]{1,3}\s*点|\d{1,2}\s*点)/.test(text)
 }
 
-/** 把「下午三点半」这类说法换算成 HH:mm，认不出返回 null */
+/** 把「下午三点半」「3 点」「3点30分」这类说法换算成 HH:mm，认不出返回 null */
 function parseChineseTime(text: string): string | null {
   const match = text.match(CN_TIME_RE)
   if (!match) return null
   const period = match[1] ?? ''
-  const rawHour = CN_DIGITS[match[2]]
+  const rawHour = /^\d+$/.test(match[2]) ? Number(match[2]) : CN_DIGITS[match[2]]
   if (!rawHour) return null
   let hour = rawHour
   if (period === '下午' || period === '傍晚' || period === '晚上') {
@@ -238,7 +238,7 @@ function parseChineseTime(text: string): string | null {
     minute = 30
   } else if (match[3]) {
     const minuteText = match[3].replace('分', '')
-    minute = CN_DIGITS[minuteText] ?? 0
+    minute = /^\d+$/.test(minuteText) ? Number(minuteText) : (CN_DIGITS[minuteText] ?? 0)
   }
   if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null
   return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
@@ -358,7 +358,10 @@ export function parseQuickEvent(input: string, now: Date = new Date()): QuickEve
   }
 
   return {
-    title: kept.join(' ').trim(),
+    title: kept
+      .join(' ')
+      .replace(/^(帮我?|提醒我?|记得|别忘|加[个一条]?)+/, '')
+      .trim(),
     at: time ? `${date}T${time}` : date,
     tag,
   }

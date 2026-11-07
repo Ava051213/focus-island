@@ -183,6 +183,24 @@ function removeEntry(id: string): void {
   current.updatedAt = Date.now()
 }
 
+/** 调整未完成条目的顺序：置顶或沉到未完成区末尾（做完的始终沉底） */
+function moveEntry(id: string, position: 'top' | 'bottom'): void {
+  const current = plan.value
+  if (!current) return
+  const index = current.entries.findIndex(item => item.id === id)
+  if (index === -1) return
+  const entry = current.entries[index]
+  if (entry.done) return
+  current.entries.splice(index, 1)
+  if (position === 'top') {
+    current.entries.unshift(entry)
+  } else {
+    const undoneCount = current.entries.filter(item => !item.done).length
+    current.entries.splice(undoneCount, 0, entry)
+  }
+  current.updatedAt = Date.now()
+}
+
 /** 完成一轮番茄后推进对应条目；达到预计数就自动勾掉 */
 function advanceEntry(memoId: string): void {
   if (!memoId) return
@@ -263,6 +281,7 @@ export function useTodayPlan() {
     regeneratePlan,
     toggleEntryDone,
     removeEntry,
+    moveEntry,
     advanceEntry,
   }
 }

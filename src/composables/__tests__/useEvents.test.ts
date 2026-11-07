@@ -44,6 +44,22 @@ describe('parseQuickEvent', () => {
     expect(parseQuickEvent('周五 交报告', NOW).at).toBe('2026-11-06')
   })
 
+  it('阿拉伯数字加「点」也算时刻，指令词从标题里去掉', () => {
+    expect(parseQuickEvent('明天 3 点提醒我交作业', NOW)).toEqual({
+      title: '交作业',
+      at: '2026-11-01T03:00',
+      tag: 'other',
+    })
+  })
+
+  it('「3点30分」带分钟', () => {
+    expect(parseQuickEvent('明天 3点30分 取快递', NOW).at).toBe('2026-11-01T03:30')
+  })
+
+  it('「下午3点半」换算成 15:30', () => {
+    expect(parseQuickEvent('明天 下午3点半 交材料', NOW).at).toBe('2026-11-01T15:30')
+  })
+
   it('识别月/日，年份取当年', () => {
     expect(parseQuickEvent('11/15 妈妈生日', NOW)).toEqual({
       title: '妈妈生日',

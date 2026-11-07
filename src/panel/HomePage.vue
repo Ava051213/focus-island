@@ -5,6 +5,7 @@ import { useTimerBridge } from '../composables/useTimerBridge'
 import { eventTime, eventsNow, useEvents } from '../composables/useEvents'
 import { useAiButler, selectUrgentTodos, type CoachFeedback } from '../composables/useAiButler'
 import { useTodayPlan } from '../composables/useTodayPlan'
+import { useInstructions } from '../composables/useInstructions'
 import { useTronTodos, todoRemainingLabel } from '../composables/useTronTodos'
 import { useTronMemo } from '../composables/useTronMemo'
 import type { TronTodo } from '../utils/tronApi'
@@ -63,6 +64,16 @@ const {
   toggleEntryDone,
   removeEntry,
 } = useTodayPlan()
+
+/** 指令入口：加日程、拆小记、调顺序先提案确认，闲聊走排程回应 */
+const {
+  proposal: planProposal,
+  busy: instructionBusy,
+  result: commandResult,
+  submit: submitInstruction,
+  confirm: confirmProposal,
+  cancel: cancelProposal,
+} = useInstructions()
 
 onMounted(() => {
   void ensureTodayPlan()
@@ -260,18 +271,19 @@ function handlePreference(next: 'hard-first' | 'easy-first') {
   void runPlan({ preference: next })
 }
 
-function sendCoachNote() {
+async function sendInstruction() {
   const text = coachNote.value.trim()
-  if (!text || generating.value) return
+  if (!text || generating.value || instructionBusy.value) return
   coachNote.value = ''
-  void runPlan({ userNote: text })
+  const outcome = await submitInstruction(text)
+  if (outcome === 'chat') await runPlan({ userNote: text })
 }
 
 function onCoachNoteEnter(event: KeyboardEvent) {
   // 中文输入法还在选词时，回车是确认候选，不是发送
   if (event.isComposing) return
   event.preventDefault()
-  sendCoachNote()
+  void sendInstruction()
 }
 </script>
 
@@ -281,7 +293,7 @@ function onCoachNoteEnter(event: KeyboardEvent) {
       <div class="coach-head">
         <span class="coach-title">团子说<span v-if="mascotFace" class="coach-face">{{ mascotFace }}</span><span v-if="summaryToShow" class="coach-summary-tag">{{ summaryTagLabel }}</span></span>
         <div class="coach-head-actions">
-          <button v-if="configured" class="link-btn" @click="noteOpen = !noteOpen">
+          <button class="link-btn" @click="noteOpen = !noteOpen">
             {{ noteOpen ? '收起' : '我有个想法' }}
           </button>
         </div>
@@ -295,43 +307,6 @@ function onCoachNoteEnter(event: KeyboardEvent) {
         <p v-else-if="coachInsight" class="coach-content">{{ coachInsight.content }}</p>
         <p v-else class="coach-empty">记点小记，团子就能陪你排啦～</p>
         <p v-if="coachCare" class="coach-care">{{ coachCare }}</p>
-        <div v-if="noteOpen" class="coach-interact">
-          <div class="coach-prefs">
-            <button
-              class="coach-pref-btn"
-              :class="{ active: preference === 'hard-first' }"
-              :disabled="generating"
-              @click="handlePreference('hard-first')"
-            >先啃难的</button>
-            <button
-              class="coach-pref-btn"
-              :class="{ active: preference === 'easy-first' }"
-              :disabled="generating"
-              @click="handlePreference('easy-first')"
-            >先做轻松的</button>
-          </div>
-          <div class="coach-note-row">
-            <input
-              v-model="coachNote"
-              class="coach-note-input"
-              type="text"
-              placeholder="跟团子说一句，比如「我有点累」"
-              :disabled="generating"
-              @keydown.enter="onCoachNoteEnter"
-            />
-            <button
-              class="coach-send-btn"
-              :disabled="generating || !coachNote.trim()"
-              @click="sendCoachNote"
-            >说</button>
-          </div>
-        </div>
-        <p
-          v-if="planError"
-          class="coach-error"
-          :class="{ expanded: coachErrorExpanded }"
-          @click="coachErrorExpanded = !coachErrorExpanded"
-        >{{ planError }}</p>
       </template>
       <template v-else>
         <p class="coach-content">{{ localCoach.text }}</p>
@@ -339,6 +314,51 @@ function onCoachNoteEnter(event: KeyboardEvent) {
           <button class="coach-start-btn" @click="runLocalCoachAction">{{ localCoach.actionLabel }}</button>
         </div>
       </template>
+      <div v-if="noteOpen" class="coach-interact">
+        <div v-if="configured" class="coach-prefs">
+          <button
+            class="coach-pref-btn"
+            :class="{ active: preference === 'hard-first' }"
+            :disabled="generating"
+            @click="handlePreference('hard-first')"
+          >先啃难的</button>
+          <button
+            class="coach-pref-btn"
+            :class="{ active: preference === 'easy-first' }"
+            :disabled="generating"
+            @click="handlePreference('easy-first')"
+          >先做轻松的</button>
+        </div>
+        <div class="coach-note-row">
+          <input
+            v-model="coachNote"
+            class="coach-note-input"
+            type="text"
+            placeholder="跟团子说一句，比如「明天 3 点提醒我交作业」"
+            :disabled="generating || instructionBusy"
+            @keydown.enter="onCoachNoteEnter"
+          />
+          <button
+            class="coach-send-btn"
+            :disabled="generating || instructionBusy || !coachNote.trim()"
+            @click="sendInstruction"
+          >{{ instructionBusy ? '在想…' : '说' }}</button>
+        </div>
+        <div v-if="planProposal" class="coach-proposal">
+          <p class="coach-proposal-text">{{ planProposal.summary }}</p>
+          <div class="coach-proposal-actions">
+            <button class="coach-pref-btn active" :disabled="instructionBusy" @click="confirmProposal()">就这么办</button>
+            <button class="coach-pref-btn" @click="cancelProposal()">算了</button>
+          </div>
+        </div>
+        <p v-if="commandResult" class="coach-result">{{ commandResult }}</p>
+      </div>
+      <p
+        v-if="planError"
+        class="coach-error"
+        :class="{ expanded: coachErrorExpanded }"
+        @click="coachErrorExpanded = !coachErrorExpanded"
+      >{{ planError }}</p>
       <p v-if="planClosing && !summaryToShow" class="coach-care">{{ planClosing }}</p>
     </section>
 
@@ -648,6 +668,36 @@ function onCoachNoteEnter(event: KeyboardEvent) {
   flex-direction: column;
   gap: 6px;
   margin-top: 2px;
+}
+
+/* 指令提案：先过目再执行 */
+.coach-proposal {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 9px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--focus-color) 10%, rgba(255, 255, 255, 0.03));
+  border: 1px solid color-mix(in srgb, var(--focus-color) 30%, transparent);
+}
+
+.coach-proposal-text {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.coach-proposal-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.coach-result {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: color-mix(in srgb, var(--focus-color) 80%, rgba(255, 255, 255, 0.4));
 }
 
 .coach-prefs {
