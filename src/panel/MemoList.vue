@@ -25,7 +25,7 @@ const {
   moveMemo,
   getDisplayTitle,
 } = useMemos()
-const { start } = useTimerBridge()
+const { start, startBlocked, abandonAndStart } = useTimerBridge()
 const { sessions } = useSessions()
 
 /** 每条小记的累计番茄、今日番茄与预计番茄 */
@@ -51,6 +51,17 @@ const memoStatsLabels = computed(() => {
 function handleStartFocus(memo: Memo, event: Event) {
   event.stopPropagation()
   start(memo.id, getDisplayTitle(memo))
+  // 上一轮还在占用时这里开不动（状态机会拒绝），记下想开的那条，给提示条
+  pendingStart.value = startBlocked.value ? memo : null
+}
+
+const pendingStart = ref<Memo | null>(null)
+
+/** 明确放弃占用中的上一轮（落 interrupted 记录），随即开始想开的那条 */
+function abandonThenStart() {
+  if (!pendingStart.value) return
+  abandonAndStart(pendingStart.value.id, getDisplayTitle(pendingStart.value))
+  pendingStart.value = null
 }
 
 function formatTime(timestamp: number): string {
@@ -370,6 +381,11 @@ function handleItemClick(memo: Memo) {
         <button class="archive-close-btn" @click="showArchive = false">关上</button>
       </div>
     </div>
+  </div>
+  <div v-if="pendingStart && startBlocked" class="start-blocked-bar">
+    <span class="blocked-text">「{{ startBlocked.title }}」还在{{ startBlocked.paused ? '暂停' : '进行' }}中</span>
+    <button class="blocked-action" @click="abandonThenStart">结束上一轮并开始这条</button>
+    <button class="blocked-dismiss" @click="pendingStart = null">知道了</button>
   </div>
 </template>
 
@@ -887,5 +903,61 @@ function handleItemClick(memo: Memo) {
 .confirm-btn:hover {
   background: rgba(248, 113, 113, 0.25);
   border-color: rgba(248, 113, 113, 0.5);
+}
+
+.start-blocked-bar {
+  position: fixed;
+  left: 50%;
+  bottom: 60px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 92%;
+  padding: 9px 13px;
+  border-radius: 10px;
+  background: rgba(30, 30, 34, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  z-index: 1100;
+  white-space: nowrap;
+}
+
+.blocked-text {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.75);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.blocked-action {
+  flex-shrink: 0;
+  padding: 4px 9px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--focus-color) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--focus-color) 40%, transparent);
+  color: var(--focus-color);
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.blocked-action:hover {
+  background: color-mix(in srgb, var(--focus-color) 30%, transparent);
+}
+
+.blocked-dismiss {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  padding: 0;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.blocked-dismiss:hover {
+  color: rgba(255, 255, 255, 0.7);
 }
 </style>

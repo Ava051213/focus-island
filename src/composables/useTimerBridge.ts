@@ -42,6 +42,9 @@ export interface TimerStatePayload {
 
 const recoveryPlan = ref<RecoveryPlan>({ kind: 'none', reason: 'missing' })
 
+/** 上一轮还在占用时记下它，界面据此提示；null = 可以直接开新轮 */
+const startBlocked = ref<{ title: string; paused: boolean } | null>(null)
+
 let bridgeStarted = false
 
 export function useTimerBridge() {
@@ -303,9 +306,21 @@ export function useTimerBridge() {
   /**
    * 所有“开始专注”的统一入口：
    * - 显式传入的备必须还在进行中，否则退回未选中，避免拿已删除/已完成的对象开跑；
-   * - 不传对象时（托盘、快捷键、灵动岛）默认带上次用过的备。
+   * - 不传对象时（托盘、快捷键、灵动岛）默认带上次用过的备；
+   * - 上一轮还在跑/暂停时不开新轮，置 startBlocked 给界面提示（状态机本来就会拒绝，这里把它翻译成人话）。
    */
   function startRound(taskId: string | null, taskTitle?: string) {
+    const info = timer.getRoundInfo()
+    const busyStatuses = ['focus', 'focusPaused', 'break', 'breakPaused']
+    if (busyStatuses.includes(info.status)) {
+      startBlocked.value = {
+        title: info.taskTitle ?? '上一轮',
+        paused: info.status === 'focusPaused' || info.status === 'breakPaused',
+      }
+      return
+    }
+    startBlocked.value = null
+
     if (taskId) {
       const memo = memoApi.memos.value.find(item => item.id === taskId && !item.completedAt)
       if (!memo) {
@@ -321,6 +336,21 @@ export function useTimerBridge() {
     else timer.start(null)
   }
 
+  /** 放弃占用中的上一轮（落 interrupted Session），随即开始新的一条 */
+  function abandonAndStart(taskId: string | null, taskTitle?: string) {
+    abandonAndRecord()
+    startBlocked.value = null
+    startRound(taskId, taskTitle)
+  }
+
+  // 占用解除（轮次结束/被处理）后自动收起提示
+  watch(
+    () => timer.status.value,
+    (status) => {
+      if (status === 'idle' || status === 'completed') startBlocked.value = null
+    },
+  )
+
   /** 再来一轮：只复用 start 路径，Session 仍由阶段结束时的 effect 写入 */
   function repeatLastRound(): boolean {
     const last = lastMemo.value
@@ -332,6 +362,8 @@ export function useTimerBridge() {
   return {
     ...timer,
     start: startRound,
+    startBlocked,
+    abandonAndStart,
     repeatLastRound,
     lastMemo,
     abandon: abandonAndRecord,

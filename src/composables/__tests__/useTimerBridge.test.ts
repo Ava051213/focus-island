@@ -109,7 +109,7 @@ vi.mock('../useTimer', async () => {
       extendNotification: vi.fn(),
       restore: vi.fn(),
       getSnapshot: vi.fn(() => null),
-      getRoundInfo: vi.fn(() => ({})),
+      getRoundInfo: vi.fn(() => ({ status: 'idle' })),
       onPhaseEventCallback: vi.fn(),
     }),
   }
