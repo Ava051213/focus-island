@@ -111,6 +111,13 @@ export interface DailySummaryInput {
   completedMemos: string[]
   /** 当天打过卡的小记，pomodoros 是当天完成的轮数 */
   workedMemos: Array<{ title: string; pomodoros: number; estimatedPomodoros: number }>
+  /** 今日安排的「计划 vs 实际」对照；当天没有安排时缺省 */
+  plan?: {
+    planned: number
+    finished: number
+    finishedTitles: string[]
+    idleTitles: string[]
+  }
 }
 
 export interface DailySummaryResult {
@@ -484,7 +491,8 @@ export function useAi() {
 1. summary 必须基于数据：完成了几个番茄、专注多久、完成或推进了哪些小记。数字要准确，不要编造没发生过的事。
 2. 今天番茄很少时不要硬夸，轻轻接住就好；完成得多时可以真诚地夸一句。
 3. tomorrow 只给一件具体的小事或一个轻提醒，不要列清单，不要说「继续加油」。
-4. 不要 Markdown、不要编号、不要复述原始数据。`,
+4. input.plan 存在时，summary 必须先对照今天的安排：排了几件、按计划完成了几件、哪些没做完（点到为止，不要一一念标题），数字要准确，完成了就真诚肯定，落下多了就轻描淡写地带一句明天接上。
+5. 不要 Markdown、不要编号、不要复述原始数据。`,
       JSON.stringify(ctx),
       0.7,
     )

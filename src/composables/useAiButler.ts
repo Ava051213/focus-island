@@ -10,6 +10,8 @@ import { useDailyStats } from './useDailyStats'
 import { aggregateSessionsByTask } from '../timer/sessions'
 import { toLocalDateStr } from '../utils/date'
 import { useTronTodos, todoDueMs, todoRemainingLabel } from './useTronTodos'
+import { getPlanSnapshot } from './useTodayPlan'
+import { planFactsForDate } from '../utils/dayPlan'
 import type { TronTodo } from '../utils/tronApi'
 
 export type AiInsightKind = 'coach' | 'review'
@@ -364,6 +366,9 @@ async function generateCoach(): Promise<CoachMessage> {
 function localSummary(input: DailySummaryInput): DailySummaryResult {
   const parts = [`今天完成 ${input.pomodoros} 个番茄，专注 ${input.focusMinutes} 分钟`]
   if (input.completedMemos.length > 0) parts.push(`收起了 ${input.completedMemos.length} 条小记`)
+  if (input.plan) {
+    parts.push(`安排的 ${input.plan.planned} 件里按计划完成了 ${input.plan.finished} 件`)
+  }
   const summary = `${parts.join('，')}。${input.pomodoros >= 6 ? '今天挺拼的，晚上早点歇着。' : '慢慢来就好。'}`
   const tomorrow = input.completedMemos[0]
     ? `明天可以接着安排「${input.completedMemos[0]}」之后的事。`
@@ -411,6 +416,8 @@ async function generateDailySummary(date: string = toLocalDateStr(new Date())): 
     focusMinutes: stat.focusMinutes,
     completedMemos,
     workedMemos,
+    // 当天的安排（或 previous 里存的昨天安排）有内容时，小结带上「计划 vs 实际」
+    plan: planFactsForDate(getPlanSnapshot(), date),
   }
 
   summaryGenerating = true

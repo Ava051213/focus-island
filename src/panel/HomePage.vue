@@ -57,6 +57,7 @@ const coachCare = computed(() =>
 const {
   plan: todayPlan,
   generating,
+  closing: planClosing,
   ensureTodayPlan,
   regeneratePlan,
   toggleEntryDone,
@@ -338,6 +339,7 @@ function onCoachNoteEnter(event: KeyboardEvent) {
           <button class="coach-start-btn" @click="runLocalCoachAction">{{ localCoach.actionLabel }}</button>
         </div>
       </template>
+      <p v-if="planClosing && !summaryToShow" class="coach-care">{{ planClosing }}</p>
     </section>
 
     <section class="zone">
@@ -379,17 +381,17 @@ function onCoachNoteEnter(event: KeyboardEvent) {
               <polyline points="4 12 9 17 20 6"/>
             </svg>
           </button>
-          <div class="suggestion-copy">
-            <div class="suggestion-line">
-              <span v-if="entryCourse(entry)" class="coach-plan-course">{{ entryCourse(entry) }}</span>
-              <span class="suggestion-title">{{ entryTitle(entry) }}</span>
-              <span class="suggestion-meta">
-                <span v-if="entry.when" class="suggestion-when">{{ entry.when }}</span>
-                {{ entry.pomodoros }} 个番茄
-              </span>
+            <div class="suggestion-copy">
+              <div class="suggestion-line">
+                <span v-if="entryCourse(entry)" class="coach-plan-course">{{ entryCourse(entry) }}</span>
+                <span class="suggestion-title">{{ entryTitle(entry) }}</span>
+                <span class="suggestion-meta">
+                  <span v-if="entry.when" class="suggestion-when">{{ entry.when }}</span>
+                  {{ entry.donePomodoros > 0 ? `今天 ${entry.donePomodoros}/${entry.pomodoros}` : `${entry.pomodoros} 个番茄` }}
+                </span>
+              </div>
+              <p v-if="entry.note" class="suggestion-reason">{{ entry.note }}</p>
             </div>
-            <p v-if="entry.note" class="suggestion-reason">{{ entry.note }}</p>
-          </div>
           <div class="suggestion-actions">
             <button v-if="!entry.done" class="coach-start-btn" :disabled="generating" @click="startEntry(entry)">开始</button>
             <button class="coach-swap-btn" :disabled="generating" title="这条今天先不算了" @click="removeEntry(entry.id)">✕</button>

@@ -23,6 +23,8 @@ export interface PlanEntry {
   note?: string
   done: boolean
   doneAt: number | null
+  /** 今天在这条上完成的番茄数；达到 pomodoros 就自动勾掉 */
+  donePomodoros: number
 }
 
 /** 某一天的完整安排；date 不是今天就该重排了 */
@@ -35,6 +37,11 @@ export interface DayPlan {
   /** 模型生成时的开场白与生活提醒，团子卡直接用 */
   greeting?: string
   care?: string
+  /** 跨日重排时存下的前一天安排（只留一层），供次日补「计划 vs 实际」总结 */
+  previous?: {
+    date: string
+    entries: PlanEntry[]
+  }
   createdAt: number
   updatedAt: number
 }
@@ -89,15 +96,26 @@ function memoNote(memo: RulesMemoInput, now: Date): string | undefined {
 
 /**
  * 本地规则排程，永远先排完整骨架：
- * 临近截止的课程待办（已按截止升序传入）在前，小记按打分在后，合计不超过 8 条。
+ * 临近截止的课程待办（已按截止升序传入）在前，昨天顺延的未完成条目居中，
+ * 小记按打分在后，合计不超过 8 条。
  */
 export function buildRulesPlan(
   memos: RulesMemoInput[],
   todos: RulesTodoInput[],
   now: Date,
+  carryOver: PlanEntry[] = [],
 ): PlanEntry[] {
-  const candidates: Array<Omit<PlanEntry, 'id' | 'done' | 'doneAt'>> = []
-  for (const todo of todos.slice(0, 3)) {
+  const candidates: Array<Omit<PlanEntry, 'id' | 'done' | 'doneAt' | 'donePomodoros'>> = []
+  const carriedMemoIds = new Set(
+    carryOver.filter(entry => entry.source === 'memo').map(entry => entry.refId),
+  )
+  const carriedTodoIds = new Set(
+    carryOver.filter(entry => entry.source === 'todo').map(entry => entry.refId),
+  )
+  let todoCount = 0
+  for (const todo of todos) {
+    if (todoCount >= 3) break
+    if (carriedTodoIds.has(todo.id)) continue
     candidates.push({
       source: 'todo',
       refId: todo.id,
@@ -107,6 +125,20 @@ export function buildRulesPlan(
       pomodoros: 1,
       note: todo.dueLabel || undefined,
     })
+    todoCount += 1
+  }
+  // 昨天没做完的顺延下来，进度清零重计
+  for (const carried of carryOver) {
+    if (candidates.length >= PLAN_CAP) break
+    candidates.push({
+      source: carried.source,
+      refId: carried.refId,
+      title: carried.title,
+      course: carried.course,
+      when: undefined,
+      pomodoros: carried.pomodoros,
+      note: '昨天顺延下来',
+    })
   }
 
   // 稳定排序：同分保持用户手动顺序
@@ -115,6 +147,7 @@ export function buildRulesPlan(
     .sort((a, b) => b.score - a.score)
   for (const { memo } of ranked) {
     if (candidates.length >= PLAN_CAP) break
+    if (carriedMemoIds.has(memo.id)) continue
     // 剩余量 = 估的减去已完成的；没估过就先给 1 个
     const remaining = memo.estimatedPomodoros > 0
       ? memo.estimatedPomodoros - memo.pomodoroCount
@@ -134,6 +167,7 @@ export function buildRulesPlan(
     id: crypto.randomUUID(),
     done: false,
     doneAt: null,
+    donePomodoros: 0,
   }))
 }
 
@@ -143,6 +177,42 @@ export function rulesGreeting(entries: PlanEntry[], now: Date): string | undefin
   const hour = now.getHours()
   const timeWord = hour < 6 ? '夜深了' : hour < 11 ? '早上好' : hour < 14 ? '中午好' : hour < 18 ? '下午好' : '晚上好'
   return `${timeWord}，排好了今天要做的 ${entries.length} 件事，先从「${entries[0].title}」动手吧。`
+}
+
+/** 傍晚收口：18 点后报今天还剩几件；没到点或没有剩余就不说 */
+export function planClosing(entries: PlanEntry[], now: Date): string | undefined {
+  if (now.getHours() < 18) return undefined
+  const idle = entries.filter(entry => !entry.done)
+  if (idle.length === 0) return undefined
+  const listed = idle.slice(0, 2).map(entry => entry.title).join('、')
+  return idle.length <= 2
+    ? `今天还剩 ${idle.length} 件：${listed}`
+    : `今天还剩 ${idle.length} 件：${listed} 等`
+}
+
+export interface PlanFacts {
+  planned: number
+  finished: number
+  finishedTitles: string[]
+  idleTitles: string[]
+}
+
+/** 「计划 vs 实际」事实提取：当天计划优先，其次 previous 里存的昨天计划 */
+export function planFactsForDate(plan: DayPlan | null | undefined, date: string): PlanFacts | undefined {
+  const entries = plan?.date === date
+    ? plan.entries
+    : plan?.previous?.date === date
+      ? plan.previous.entries
+      : null
+  if (!entries || entries.length === 0) return undefined
+  const finished = entries.filter(entry => entry.done)
+  const idle = entries.filter(entry => !entry.done)
+  return {
+    planned: entries.length,
+    finished: finished.length,
+    finishedTitles: finished.map(entry => entry.title),
+    idleTitles: idle.map(entry => entry.title),
+  }
 }
 
 export interface PlanRefinementApplied {
@@ -216,6 +286,20 @@ function normalizeEntry(raw: unknown): PlanEntry | null {
     note: typeof item.note === 'string' && item.note ? item.note.slice(0, 80) : undefined,
     done: Boolean(item.done),
     doneAt: typeof item.doneAt === 'number' ? item.doneAt : null,
+    donePomodoros: Math.max(0, Math.round(Number(item.donePomodoros) || 0)),
+  }
+}
+
+function normalizePrevious(raw: unknown): DayPlan['previous'] {
+  if (!raw || typeof raw !== 'object') return undefined
+  const item = raw as Record<string, unknown>
+  if (typeof item.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(item.date)) return undefined
+  const rawEntries = Array.isArray(item.entries) ? item.entries : []
+  return {
+    date: item.date,
+    entries: rawEntries
+      .map(normalizeEntry)
+      .filter((entry): entry is PlanEntry => entry !== null),
   }
 }
 
@@ -235,6 +319,7 @@ export function normalizeDayPlan(raw: unknown): DayPlan {
     origin: item.origin === 'model' ? 'model' : 'fallback',
     greeting: typeof item.greeting === 'string' && item.greeting ? item.greeting : undefined,
     care: typeof item.care === 'string' && item.care ? item.care : undefined,
+    previous: normalizePrevious(item.previous),
     createdAt: Number(item.createdAt) || Date.now(),
     updatedAt: Number(item.updatedAt) || Date.now(),
   }

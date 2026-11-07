@@ -12,14 +12,16 @@ import {
   applyPlanRefinement,
   buildRulesPlan,
   normalizeDayPlan,
+  planClosing,
   rulesGreeting,
   type DayPlan,
+  type PlanEntry,
 } from '../utils/dayPlan'
 
 /**
  * 今日安排：当天稳定存在的一份执行计划，做完勾掉，不随后台刷新漂移。
- * 只在 panel 窗口读写；规则引擎永远先排完整骨架，模型只做可选的润色
- * （重排、补时间提示与理由、开场白），没 Key 或失败时保持规则结果。
+ * 只在 panel 窗口读写；规则引擎永远先排完整骨架，模型只做可选的润色。
+ * 完成的番茄当场推进条目，没做完的跨日顺延，新截止插队，傍晚收口报剩余。
  */
 const plan = ref<DayPlan | null>(null)
 const generating = ref(false)
@@ -50,9 +52,21 @@ async function regeneratePlan(feedback: CoachFeedback = {}): Promise<void> {
     const now = new Date()
     const date = toLocalDateStr(now)
     const { sortedTodos } = useTronTodos()
-
-    // 1. 规则引擎排完整骨架：临近截止的待办在前，小记按 置顶/放置天数/动量 打分
     const urgentTodos = selectUrgentTodos(sortedTodos.value, now.getTime(), 3)
+
+    const prev = plan.value
+    const sameDay = prev?.date === date
+    // 跨日顺延：昨天没做完、且今天还有着落的（小记仍在进行中 / 待办仍在紧急窗内），最多 3 条
+    const carryOver = prev && !sameDay
+      ? prev.entries
+          .filter(entry => !entry.done)
+          .filter(entry => entry.source === 'memo'
+            ? activeMemos.value.some(memo => memo.id === entry.refId)
+            : urgentTodos.some(todo => todo.id === entry.refId))
+          .slice(0, 3)
+      : []
+
+    // 1. 规则引擎排完整骨架：待办在前，顺延居中，小记按 置顶/放置天数/动量 打分
     let entries = buildRulesPlan(
       activeMemos.value.map(memo => ({
         id: memo.id,
@@ -69,6 +83,7 @@ async function regeneratePlan(feedback: CoachFeedback = {}): Promise<void> {
         dueLabel: todoRemainingLabel(todo, now.getTime()),
       })),
       now,
+      carryOver,
     )
     let greeting = rulesGreeting(entries, now)
     let care: string | undefined
@@ -120,15 +135,20 @@ async function regeneratePlan(feedback: CoachFeedback = {}): Promise<void> {
       }
     }
 
-    const prev = plan.value
     plan.value = {
       date,
       entries,
       origin,
       greeting,
       care,
+      // 跨日把前一天存进 previous（只留一层），供次日补「计划 vs 实际」总结
+      previous: sameDay
+        ? prev?.previous
+        : prev
+          ? { date: prev.date, entries: prev.entries }
+          : undefined,
       // 同一天内重排保留原始创建时间；跨日算新的一份
-      createdAt: prev?.date === date ? prev.createdAt : Date.now(),
+      createdAt: sameDay && prev ? prev.createdAt : Date.now(),
       updatedAt: Date.now(),
     }
   } finally {
@@ -163,6 +183,52 @@ function removeEntry(id: string): void {
   current.updatedAt = Date.now()
 }
 
+/** 完成一轮番茄后推进对应条目；达到预计数就自动勾掉 */
+function advanceEntry(memoId: string): void {
+  if (!memoId) return
+  const current = plan.value
+  if (!current) return
+  const entry = current.entries.find(item => item.source === 'memo' && item.refId === memoId && !item.done)
+  if (!entry) return
+  entry.donePomodoros += 1
+  if (entry.donePomodoros >= entry.pomodoros) {
+    entry.done = true
+    entry.doneAt = Date.now()
+  }
+  current.updatedAt = Date.now()
+}
+
+/** 新截止插队：紧急窗内的新待办插入安排，不动其余条目的顺序 */
+function insertUrgentTodo(): void {
+  const current = plan.value
+  if (!current || generating.value) return
+  if (current.date !== toLocalDateStr(new Date())) return
+  const now = new Date()
+  const { sortedTodos } = useTronTodos()
+  const urgent = selectUrgentTodos(sortedTodos.value, now.getTime(), 3)
+  const existing = new Set(
+    current.entries.filter(entry => entry.source === 'todo').map(entry => entry.refId),
+  )
+  const fresh = urgent.filter(todo => !existing.has(todo.id))
+  if (fresh.length === 0) return
+  const inserts: PlanEntry[] = fresh.map(todo => ({
+    id: crypto.randomUUID(),
+    source: 'todo',
+    refId: todo.id,
+    title: todo.title,
+    course: todo.course || undefined,
+    when: undefined,
+    pomodoros: 1,
+    note: `${todoRemainingLabel(todo, now.getTime())} · 新进来的截止`,
+    done: false,
+    doneAt: null,
+    donePomodoros: 0,
+  }))
+  const firstTodoIndex = current.entries.findIndex(entry => entry.source === 'todo')
+  current.entries.splice(firstTodoIndex === -1 ? 0 : firstTodoIndex, 0, ...inserts)
+  current.updatedAt = Date.now()
+}
+
 let dayWatchInstalled = false
 
 export function useTodayPlan() {
@@ -177,14 +243,31 @@ export function useTodayPlan() {
         if (plan.value && plan.value.date !== today) void regeneratePlan()
       },
     )
+    watch(
+      () => useTronTodos().sortedTodos.value.map(todo => todo.id).join('|'),
+      () => insertUrgentTodo(),
+    )
   }
+
+  const closing = computed(() => {
+    const current = plan.value
+    if (!current || current.date !== toLocalDateStr(eventsNow.value)) return null
+    return planClosing(current.entries, eventsNow.value) ?? null
+  })
 
   return {
     plan: computed(() => plan.value),
     generating: computed(() => generating.value),
+    closing,
     ensureTodayPlan,
     regeneratePlan,
     toggleEntryDone,
     removeEntry,
+    advanceEntry,
   }
+}
+
+/** 供 useAiButler 取计划做「计划 vs 实际」总结；返回值只读使用 */
+export function getPlanSnapshot(): DayPlan | null {
+  return plan.value
 }

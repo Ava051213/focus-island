@@ -10,6 +10,7 @@ import { useMemos } from './useMemos'
 import { useAchievements } from './useAchievements'
 import { useSettings } from './useSettings'
 import { useAiButler } from './useAiButler'
+import { useTodayPlan } from './useTodayPlan'
 import { useSessions } from './useSessions'
 import { useTimerSnapshot } from './useTimerSnapshot'
 import { notifyPhaseEnd } from './useSystemNotify'
@@ -49,6 +50,7 @@ export function useTimerBridge() {
   const { recordPomodoro: recordAchievementPomodoro, recordEarlyBird, recordNightOwl } = useAchievements()
   const { settings } = useSettings()
   const { recordRound } = useAiButler()
+  const { advanceEntry } = useTodayPlan()
   const sessions = useSessions()
   const snapshot = useTimerSnapshot()
   const memoApi = useMemos()
@@ -89,7 +91,11 @@ export function useTimerBridge() {
 
   function recordCompletedRound(session: ReturnType<typeof buildSession>, startedAt: number | null) {
     if (session.status !== 'completed') return
-    if (session.taskId) incrementPomodoro(session.taskId)
+    if (session.taskId) {
+      incrementPomodoro(session.taskId)
+      // 今天安排里有这条小记的话，当场推进一格，满额自动勾掉
+      advanceEntry(session.taskId)
+    }
     recordAchievementPomodoro()
     recordRound({
       memoId: session.taskId,

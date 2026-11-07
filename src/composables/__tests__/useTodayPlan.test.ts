@@ -216,7 +216,7 @@ describe('useTodayPlan', () => {
     expect(data.entries[0].done).toBe(true)
   })
 
-  it('面板开着跨零点，安排自动重排成新的一天', async () => {
+  it('面板开着跨零点：重排新的一天、顺延没做完的、存下 previous', async () => {
     h.files.set('focus-island/memos.json', JSON.stringify([seedMemo('m1', '高数作业')]))
     const { api } = await fresh()
     await api.ensureTodayPlan()
@@ -228,5 +228,55 @@ describe('useTodayPlan', () => {
     await settle()
 
     expect(api.plan.value!.date).toBe('2026-11-07')
+    expect(api.plan.value!.previous?.date).toBe('2026-11-06')
+    // m1 还在进行中，顺延到今天且标注
+    expect(api.plan.value!.entries[0]).toMatchObject({ refId: 'm1', note: '昨天顺延下来', donePomodoros: 0 })
   })
+
+  it('完成番茄推进条目，满额自动勾掉', async () => {
+    // est 1 → 计划 1 个番茄，推 1 次就该自动勾掉
+    h.files.set('focus-island/memos.json', JSON.stringify([seedMemo('m1', '高数作业', 1)]))
+    const { api } = await fresh()
+    await api.ensureTodayPlan()
+    const entry = api.plan.value!.entries.find(item => item.refId === 'm1')!
+    expect(entry.donePomodoros).toBe(0)
+
+    api.advanceEntry('m1')
+
+    const after = api.plan.value!.entries.find(item => item.refId === 'm1')!
+    expect(after.donePomodoros).toBe(1)
+    expect(after.done).toBe(true)
+    expect(after.doneAt).toBeGreaterThan(0)
+    // 再推进没有未完成条目可推，不报错
+    api.advanceEntry('m1')
+    api.advanceEntry('不存在的自增不炸')
+    expect(api.plan.value!.entries.find(item => item.refId === 'm1')!.donePomodoros).toBe(1)
+  })
+
+  it('紧急窗内的新待办插队进今天的安排，且不重复插', async () => {
+    h.files.set('focus-island/memos.json', JSON.stringify([seedMemo('m1', '高数作业')]))
+    const { api } = await fresh()
+    await api.ensureTodayPlan()
+    expect(api.plan.value!.entries.some(entry => entry.source === 'todo')).toBe(false)
+
+    // tron 服务这时吐出一条紧急作业
+    h.tronTodos = [makeTodo('t-new', '2026-11-06T23:59:00')]
+    await fresh2()
+    await settle()
+
+    const todoEntries = api.plan.value!.entries.filter(entry => entry.source === 'todo')
+    expect(todoEntries).toHaveLength(1)
+    expect(todoEntries[0]).toMatchObject({ refId: 't-new' })
+    expect(todoEntries[0].note).toContain('新进来的截止')
+    // 待办列表没变化时不会重复插
+    await settle()
+    expect(api.plan.value!.entries.filter(entry => entry.source === 'todo')).toHaveLength(1)
+  })
+
+  /** 触发 tron 拉取并等它落到 sortedTodos（不重建模块，只重新调用 composable） */
+  async function fresh2() {
+    const tronMod = await import('../useTronTodos')
+    tronMod.refreshTronTodos({ force: true })
+    await settle()
+  }
 })

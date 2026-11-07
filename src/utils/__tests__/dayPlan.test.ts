@@ -4,6 +4,8 @@ import {
   buildRulesPlan,
   normalizeDayPlan,
   orderForDisplay,
+  planClosing,
+  planFactsForDate,
   rulesGreeting,
   type DayPlan,
   type PlanEntry,
@@ -78,9 +80,108 @@ describe('buildRulesPlan', () => {
   })
 })
 
+describe('buildRulesPlan 的顺延合并', () => {
+  const carried: PlanEntry = {
+    id: 'old-1',
+    source: 'memo',
+    refId: 'm1',
+    title: '昨天的事',
+    pomodoros: 2,
+    done: false,
+    doneAt: null,
+    donePomodoros: 1,
+  }
+
+  it('顺延条目排在待办之后、打分小记之前，进度清零并标注', () => {
+    const entries = buildRulesPlan(
+      [memo({ id: 'm1' }), memo({ id: 'm2' })],
+      [{ id: 't1', title: '作业', course: '课', dueLabel: '剩 1 天' }],
+      NOW,
+      [carried],
+    )
+    expect(entries.map(entry => entry.refId)).toEqual(['t1', 'm1', 'm2'])
+    expect(entries[1]).toMatchObject({
+      source: 'memo',
+      note: '昨天顺延下来',
+      pomodoros: 2,
+      done: false,
+      doneAt: null,
+      donePomodoros: 0,
+    })
+    expect(entries[1].id).not.toBe('old-1')
+  })
+
+  it('顺延过的小记/待办不会被再次捞进列表', () => {
+    const todoCarried: PlanEntry = { ...carried, source: 'todo', refId: 't9' }
+    const entries = buildRulesPlan(
+      [memo({ id: 'm1' })],
+      [
+        { id: 't9', title: '顺延过的', course: '', dueLabel: '剩 1 天' },
+        { id: 't1', title: '新的', course: '', dueLabel: '剩 2 天' },
+      ],
+      NOW,
+      [carried, todoCarried],
+    )
+    // t9 只以顺延条目的身份出现一次，不会和紧急窗里的 t9 重复
+    expect(entries.filter(entry => entry.source === 'todo').map(entry => entry.refId)).toEqual(['t1', 't9'])
+    expect(entries.filter(entry => entry.refId === 't9')).toHaveLength(1)
+    expect(entries.find(entry => entry.refId === 't9')?.note).toBe('昨天顺延下来')
+    expect(entries.filter(entry => entry.refId === 'm1')).toHaveLength(1)
+  })
+})
+
+describe('planClosing', () => {
+  const entry = (id: string, done = false): PlanEntry => ({
+    id, source: 'memo', refId: id, title: `事 ${id}`, pomodoros: 1, done, doneAt: done ? 1 : null, donePomodoros: 0,
+  })
+
+
+  it('18 点前不收口', () => {
+    expect(planClosing([entry('a')], new Date(2026, 10, 6, 17, 59))).toBeUndefined()
+  })
+
+  it('傍晚报剩余：两件全列，三件以上列两件加「等」', () => {
+    expect(planClosing([entry('a'), entry('b', true)], new Date(2026, 10, 6, 19, 0)))
+      .toBe('今天还剩 1 件：事 a')
+    expect(planClosing([entry('a'), entry('b')], new Date(2026, 10, 6, 19, 0)))
+      .toBe('今天还剩 2 件：事 a、事 b')
+    expect(planClosing([entry('a'), entry('b'), entry('c')], new Date(2026, 10, 6, 19, 0)))
+      .toBe('今天还剩 3 件：事 a、事 b 等')
+  })
+
+  it('都做完了就不说', () => {
+    expect(planClosing([entry('a', true)], new Date(2026, 10, 6, 19, 0))).toBeUndefined()
+  })
+})
+
+describe('planFactsForDate', () => {
+  const done: PlanEntry = { id: 'd', source: 'memo', refId: 'm1', title: '做完的', pomodoros: 1, done: true, doneAt: 1, donePomodoros: 1 }
+  const idle: PlanEntry = { id: 'i', source: 'memo', refId: 'm2', title: '拖着的', pomodoros: 1, done: false, doneAt: null, donePomodoros: 0 }
+
+  it('优先取当天的计划', () => {
+    const plan: DayPlan = { date: '2026-11-06', entries: [done, idle], origin: 'fallback', createdAt: 1, updatedAt: 1 }
+    const facts = planFactsForDate(plan, '2026-11-06')
+    expect(facts).toEqual({ planned: 2, finished: 1, finishedTitles: ['做完的'], idleTitles: ['拖着的'] })
+  })
+
+  it('跨日补总结时取 previous 里的昨天计划', () => {
+    const plan: DayPlan = {
+      date: '2026-11-07',
+      entries: [],
+      origin: 'fallback',
+      previous: { date: '2026-11-06', entries: [done, idle] },
+      createdAt: 1,
+      updatedAt: 1,
+    }
+    expect(planFactsForDate(plan, '2026-11-06')?.planned).toBe(2)
+    expect(planFactsForDate(plan, '2026-11-07')).toBeUndefined()
+    expect(planFactsForDate(null, '2026-11-06')).toBeUndefined()
+  })
+})
+
 describe('rulesGreeting', () => {
   const entry: PlanEntry = {
-    id: 'e1', source: 'memo', refId: 'm1', title: '高数作业', pomodoros: 2, done: false, doneAt: null,
+    id: 'e1', source: 'memo', refId: 'm1', title: '高数作业', pomodoros: 2, done: false, doneAt: null, donePomodoros: 0,
   }
 
   it('报个数并指向第一条；空列表不说话', () => {
@@ -97,7 +198,7 @@ describe('rulesGreeting', () => {
 
 describe('applyPlanRefinement', () => {
   const entry = (id: string): PlanEntry => ({
-    id, source: 'memo', refId: id, title: `标题 ${id}`, pomodoros: 1, done: false, doneAt: null,
+    id, source: 'memo', refId: id, title: `标题 ${id}`, pomodoros: 1, done: false, doneAt: null, donePomodoros: 0,
   })
 
   it('items 先按骨架序号套注解，order 再重排', () => {
@@ -162,6 +263,7 @@ describe('normalizeDayPlan', () => {
     pomodoros: 2,
     done: true,
     doneAt: 1000,
+    donePomodoros: 2,
   }
   const validPlan: DayPlan = {
     date: '2026-11-06',
@@ -205,6 +307,20 @@ describe('normalizeDayPlan', () => {
     expect('segment' in result.entries[0]).toBe(false)
   })
 
+  it('donePomodoros 与 previous 都能读回，坏数据容忍', () => {
+    const result = normalizeDayPlan({
+      date: '2026-11-06',
+      entries: [{ ...validEntry, done: false, doneAt: null, donePomodoros: 2 }],
+      previous: { date: '2026-11-05', entries: [validEntry], junk: true },
+      createdAt: 1,
+      updatedAt: 2,
+    })
+    expect(result.entries[0].donePomodoros).toBe(2)
+    expect(result.previous?.date).toBe('2026-11-05')
+    expect(result.previous?.entries).toHaveLength(1)
+    expect(normalizeDayPlan({ ...validPlan, previous: 'garbage' }).previous).toBeUndefined()
+  })
+
   it('番茄数钳制、非法 origin 退回 fallback、when 截断、缺省时间戳补当前', () => {
     const result = normalizeDayPlan({
       date: '2026-11-06',
@@ -235,6 +351,7 @@ describe('orderForDisplay', () => {
     pomodoros: 1,
     done: false,
     doneAt: null,
+    donePomodoros: 0,
     ...over,
   })
 
