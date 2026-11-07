@@ -486,7 +486,7 @@ function formatUpdateTime(timestamp: number): string {
         :showNewButton="false"
         @change="onCategoryChange"
       />
-      <div class="estimate-stepper" title="预计这条要用几个番茄，团子会参考它安排今天">
+      <div class="estimate-stepper" title="预计这条要用几个番茄，青梅会参考它安排今天">
         <button class="estimate-btn" @click="adjustEstimate(-1)">−</button>
         <span class="estimate-value">{{ localEstimatedPomodoros }}</span>
         <button class="estimate-btn" @click="adjustEstimate(1)">+</button>

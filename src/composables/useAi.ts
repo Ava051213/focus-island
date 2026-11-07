@@ -2,6 +2,7 @@ import { computed } from 'vue'
 import { fetch } from '@tauri-apps/plugin-http'
 import { useSettings } from './useSettings'
 import { toLocalDateStr } from '../utils/date'
+import { ASSISTANT_NAME } from '../utils/assistant'
 
 const ZHIPU_ENDPOINT = 'https://open.bigmodel.cn/api/paas/v4/chat/completions'
 const SILICON_ENDPOINT = 'https://api.siliconflow.cn/v1/chat/completions'
@@ -64,7 +65,7 @@ export interface CoachContext {
   recentCoaches: string[]
   /** 用户当前的先后偏好 */
   preference: 'hard-first' | 'easy-first' | ''
-  /** 用户最近跟团子说过的话，按时间从旧到新 */
+  /** 用户最近跟青梅说过的话，按时间从旧到新 */
   userNotes: string[]
   /** 用户刚刚换掉、不想再看到的小记标题 */
   dismissed: string[]
@@ -348,7 +349,7 @@ export function useAi() {
     options: ChatOptions = {},
   ): Promise<string> {
     const providers = collectProviders()
-    if (providers.length === 0) throw new Error('我还没拿到钥匙呢～去「设置 → 团子」填一下 Key 呀')
+    if (providers.length === 0) throw new Error(`我还没拿到钥匙呢～去「设置 → ${ASSISTANT_NAME}」填一下 Key 呀`)
 
     const failures: string[] = []
     for (const provider of providers) {
@@ -429,7 +430,7 @@ export function useAi() {
 
   async function coachToday(ctx: CoachContext): Promise<CoachMessage> {
     const text = await chat(
-      `你叫团子，住在用户屏幕顶部的专注岛里，是他的小伙伴，不是客服。说话软一点、短一点，可以偶尔调皮，但不要腻，也不要每句都撒娇。
+      `你叫${ASSISTANT_NAME}，住在用户屏幕顶部的专注岛里，像一位从小一起长大、总陪在身边的年下小伙伴：亲昵、软、偶尔撒娇，但每句话都要有实际内容，不堆语气词、不说空话、不是客服。
 
 你要先接住用户，再给今天排个先后。只输出 JSON：
 {"greeting":"先回应 userNotes 的最后一句，再带一个今天的具体数字，25-40 字","plans":[{"when":"现在起","memo":小记序号,"todo":待办序号,"title":"小记标题","pomodoros":1,"reason":"为什么现在做，15-25 字"}],"care":"生活提醒，15-30 字","closing":"收尾一句，10-20 字"}
@@ -485,7 +486,7 @@ export function useAi() {
 
   async function summarizeDay(ctx: DailySummaryInput): Promise<DailySummaryResult> {
     const text = await chat(
-      `你是团子，住在用户屏幕顶部的专注岛里。晚上要给他一句当天的小结，语气软、具体，不要空泛的鼓励。
+      `你是${ASSISTANT_NAME}，住在用户屏幕顶部的专注岛里，像他从小一起长大的年下伙伴。晚上要给他一句当天的小结，语气软、亲昵、具体，不要空泛的鼓励。
 只输出 JSON：{"summary":"今天做完的事，40-70 字，可以带数字，也可以说一句辛苦了","tomorrow":"明天一句轻一点的建议，20-40 字"}
 规则：
 1. summary 必须基于数据：完成了几个番茄、专注多久、完成或推进了哪些小记。数字要准确，不要编造没发生过的事。
@@ -510,7 +511,7 @@ export function useAi() {
 
   async function refinePlan(input: PlanRefineInput): Promise<PlanRefinement> {
     const text = await chat(
-      `你是团子，住在用户屏幕顶部的专注岛里。今天的安排清单已经由本地规则排好，你只负责润色：调整先后、补时间提示、把理由说成人话。不能增删条目。
+      `你是${ASSISTANT_NAME}，住在用户屏幕顶部的专注岛里，像他从小一起长大的年下伙伴。今天的安排清单已经由本地规则排好，你只负责润色：调整先后、补时间提示、把理由说成人话。不能增删条目。
 只输出 JSON：
 {"greeting":"开场一句，25-40 字","care":"生活提醒，15-30 字，没有就空串","order":[按先后的序号数组，必须包含每一个 index，一个不落],"items":[{"index":1,"when":"现在起","note":"为什么排这里，15-25 字"}]}
 规则：

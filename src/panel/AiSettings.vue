@@ -36,7 +36,7 @@ async function runAiTest(id: 'silicon' | 'zhipu') {
 <template>
   <div class="settings-section">
     <div class="section-title-row">
-      <div class="section-title">团子</div>
+      <div class="section-title">青梅</div>
       <button class="section-toggle" @click="aiOpen = !aiOpen">
         {{ aiOpen ? '收起' : '更多设置' }}
       </button>

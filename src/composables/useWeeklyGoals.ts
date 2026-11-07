@@ -39,8 +39,8 @@ const REWARD_BY_GOAL: Record<WeeklyGoalId, WeeklyRewardId> = {
 
 export const WEEKLY_REWARD_LABELS: Record<WeeklyRewardId, string> = {
   'theme-dawn': '晨光主题',
-  'mottos-gentle': '团子的悄悄话',
-  'mascot-face': '团子的新表情',
+  'mottos-gentle': '青梅的悄悄话',
+  'mascot-face': '青梅的新表情',
 }
 
 const REWARD_IDS = Object.keys(WEEKLY_REWARD_LABELS) as WeeklyRewardId[]

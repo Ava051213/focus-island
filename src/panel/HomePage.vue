@@ -13,8 +13,10 @@ import { useWeeklyGoals } from '../composables/useWeeklyGoals'
 import { useDailyStats } from '../composables/useDailyStats'
 import { toLocalDateStr } from '../utils/date'
 import { orderForDisplay, type PlanEntry } from '../utils/dayPlan'
+import { ASSISTANT_NAME } from '../utils/assistant'
 
 const emit = defineEmits<{ navigateEvents: [] }>()
+const assistantName = ASSISTANT_NAME
 
 const {
   memos,
@@ -43,7 +45,7 @@ function startMemo(memo: Memo) {
   start(memo.id, getDisplayTitle(memo))
 }
 
-/** 团子的开场白与生活提醒直接放在首页，不再单独占一个页面 */
+/** 青梅的开场白与生活提醒直接放在首页，不再单独占一个页面 */
 const { coachInsight, dailySummary, configured, preference } = useAiButler()
 const coachMessage = computed(() => coachInsight.value?.coach ?? null)
 
@@ -87,7 +89,7 @@ onActivated(() => {
 // 畅课待办：建议条目可以直接来自课程作业，无 Key 时本地提示也会用
 const { sortedTodos: tronSortedTodos } = useTronTodos()
 
-// 团子的表情跟着本周完成的目标数走
+// 青梅的表情跟着本周完成的目标数走
 const { doneCount } = useWeeklyGoals()
 const mascotFace = computed(() => ['', '🌱', '✨', '🏆'][doneCount.value] ?? '')
 
@@ -127,7 +129,7 @@ interface LocalCoachMessage {
   action: 'start' | 'events' | 'todo'
 }
 
-/** 最近的紧急课程作业：48 小时内截止或已过期（复用团子上下文的挑选规则） */
+/** 最近的紧急课程作业：48 小时内截止或已过期（复用青梅上下文的挑选规则） */
 const urgentTodo = computed(() => selectUrgentTodos(tronSortedTodos.value, Date.now(), 1)[0] ?? null)
 
 const localCoach = computed<LocalCoachMessage>(() => {
@@ -232,7 +234,7 @@ function dateOffset(offset: number): string {
   return toLocalDateStr(date)
 }
 
-/** 总结优先展示；当天已有总结后又开始新一轮时，说明当时不是最后一轮，退回普通团子 */
+/** 总结优先展示；当天已有总结后又开始新一轮时，说明当时不是最后一轮，退回普通青梅 */
 const summaryToShow = computed(() => {
   const summary = dailySummary.value
   if (!summary) return null
@@ -291,7 +293,7 @@ function onCoachNoteEnter(event: KeyboardEvent) {
   <div class="home-page">
     <section class="coach-card">
       <div class="coach-head">
-        <span class="coach-title">团子说<span v-if="mascotFace" class="coach-face">{{ mascotFace }}</span><span v-if="summaryToShow" class="coach-summary-tag">{{ summaryTagLabel }}</span></span>
+        <span class="coach-title">{{ assistantName }}说<span v-if="mascotFace" class="coach-face">{{ mascotFace }}</span><span v-if="summaryToShow" class="coach-summary-tag">{{ summaryTagLabel }}</span></span>
         <div class="coach-head-actions">
           <button class="link-btn" @click="noteOpen = !noteOpen">
             {{ noteOpen ? '收起' : '我有个想法' }}
@@ -305,7 +307,7 @@ function onCoachNoteEnter(event: KeyboardEvent) {
       <template v-else-if="configured">
         <p v-if="coachGreeting" class="coach-greeting">{{ coachGreeting }}</p>
         <p v-else-if="coachInsight" class="coach-content">{{ coachInsight.content }}</p>
-        <p v-else class="coach-empty">记点小记，团子就能陪你排啦～</p>
+        <p v-else class="coach-empty">记点小记，青梅就能陪你排啦～</p>
         <p v-if="coachCare" class="coach-care">{{ coachCare }}</p>
       </template>
       <template v-else>
@@ -334,7 +336,7 @@ function onCoachNoteEnter(event: KeyboardEvent) {
             v-model="coachNote"
             class="coach-note-input"
             type="text"
-            placeholder="跟团子说一句，比如「明天 3 点提醒我交作业」"
+            placeholder="跟青梅说一句，比如「明天 3 点提醒我交作业」"
             :disabled="generating || instructionBusy"
             @keydown.enter="onCoachNoteEnter"
           />

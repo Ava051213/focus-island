@@ -9,6 +9,7 @@ import { useMemos } from './useMemos'
 import { useDailyStats } from './useDailyStats'
 import { aggregateSessionsByTask } from '../timer/sessions'
 import { toLocalDateStr } from '../utils/date'
+import { ASSISTANT_NAME } from '../utils/assistant'
 import { useTronTodos, todoDueMs, todoRemainingLabel } from './useTronTodos'
 import { getPlanSnapshot } from './useTodayPlan'
 import { planFactsForDate } from '../utils/dayPlan'
@@ -55,7 +56,7 @@ interface ButlerState {
   lastSeenAt: number
   /** 用户选的先后偏好 */
   preference: CoachPreference | ''
-  /** 用户最近跟团子说过的话，最多保留 3 条 */
+  /** 用户最近跟青梅说过的话，最多保留 3 条 */
   userNotes: Array<{ text: string; at: number }>
   /** 用户换掉、当天不想再看到的小记标题 */
   dismissed: string[]
@@ -191,7 +192,7 @@ function minutesUntil(at: string, now: Date): number | null {
   return diff >= 0 && diff <= 1440 ? diff : null
 }
 
-/** 多久内截止的课程作业算紧急，团子会优先安排 */
+/** 多久内截止的课程作业算紧急，青梅会优先安排 */
 export const URGENT_TODO_WINDOW_MS = 48 * 60 * 60 * 1000
 
 /**
@@ -358,7 +359,7 @@ async function generateCoach(): Promise<CoachMessage> {
   const message = await coachToday(ctx)
   // 序号映射 + dismissed 兜底都抽在纯函数里，见 mapCoachPlans
   const enriched = mapCoachPlans(message, ctx, state.value.dismissed)
-  addInsight('coach', '团子说', formatCoach(enriched), enriched)
+  addInsight('coach', `${ASSISTANT_NAME}说`, formatCoach(enriched), enriched)
   return enriched
 }
 

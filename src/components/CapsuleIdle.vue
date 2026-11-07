@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted, watch } from "vue";
 import { eventRelativeLabel, eventTime, useEvents } from "../composables/useEvents";
 import { useSettings } from "../composables/useSettings";
 import { useRewardUnlocks } from "../composables/useWeeklyGoals";
+import { ASSISTANT_NAME } from "../utils/assistant";
 
 const { upcoming } = useEvents();
 const { settings } = useSettings();
@@ -23,11 +24,11 @@ const DEFAULT_MOTTOS = [
 
 // 完成本周专注目标后解锁的温柔文案包
 const GENTLE_MOTTOS = [
-    "今天也慢慢来，团子陪着你～",
+    `今天也慢慢来，${ASSISTANT_NAME}陪着你～`,
     "已经做得很好了，歇一下也没关系～",
-    "别忘了喝水呀，团子在这儿等你～",
+    `别忘了喝水呀，${ASSISTANT_NAME}在这儿等你～`,
     "伸个懒腰再继续，不差这一小会儿～",
-    "累的时候靠一会儿，团子不催你～",
+    `累的时候靠一会儿，${ASSISTANT_NAME}不催你～`,
 ];
 
 const mottos = computed(() => {
