@@ -207,6 +207,41 @@ async function onPaste(e: ClipboardEvent) {
 }
 
 // Insert image from File/Blob
+// 正文里存的是 base64，原图直塞会把 memos.json 撑到几 MB，插入前先压到限宽内
+const IMAGE_MAX_EDGE = 1280
+const IMAGE_QUALITY = 0.8
+
+function readAsDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = () => reject(reader.error)
+    reader.readAsDataURL(blob)
+  })
+}
+
+// 压不了（GIF 会丢动画、解码失败）或压完反而更大时返回 null，用原图
+async function compressImage(file: File): Promise<Blob | null> {
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) return null
+  try {
+    const bitmap = await createImageBitmap(file)
+    const scale = Math.min(1, IMAGE_MAX_EDGE / Math.max(bitmap.width, bitmap.height))
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale))
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale))
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return null
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+    bitmap.close()
+    const blob = await new Promise<Blob | null>(resolve =>
+      canvas.toBlob(resolve, 'image/webp', IMAGE_QUALITY),
+    )
+    return blob && blob.size < file.size ? blob : null
+  } catch {
+    return null
+  }
+}
+
 async function insertImageFromFile(file: File) {
   // Check file size (2MB limit)
   if (file.size > 2 * 1024 * 1024) {
@@ -214,15 +249,16 @@ async function insertImageFromFile(file: File) {
     return
   }
 
-  const reader = new FileReader()
-  reader.onload = (e) => {
-    const base64 = e.target?.result as string
+  try {
+    const compressed = await compressImage(file)
+    const base64 = await readAsDataUrl(compressed ?? file)
     const imgHtml = `<img src="${base64}" class="memo-image" style="max-width: 100%; border-radius: 8px; margin: 8px 0;">`
 
     editorRef.value?.focus()
     insertHtml(imgHtml)
+  } catch {
+    // 读文件失败就不插入
   }
-  reader.readAsDataURL(file)
 }
 
 // Delete confirmation
