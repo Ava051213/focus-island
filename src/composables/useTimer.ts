@@ -30,8 +30,6 @@ const activeTaskId = ref<string | null>(null)
 const activeTaskTitle = ref<string | null>(null)
 const focusStartedAt = ref<number | null>(null)
 const pendingNotification = ref<NotificationType>(null)
-const activeSubtaskId = ref<string | null>(null)
-const activeSubtaskTitle = ref<string | null>(null)
 
 let machineState: TimerState = createIdleState(INITIAL_SECS * 1000, INITIAL_SECS * 1000)
 let intervalId: ReturnType<typeof setInterval> | null = null
@@ -181,14 +179,7 @@ export function useTimer() {
     return `${m}:${s}`
   })
 
-  function setSubtaskContext(subtaskId: string | null, subtaskTitle: string | null) {
-    activeSubtaskId.value = subtaskId
-    activeSubtaskTitle.value = subtaskTitle
-  }
-
   function start(taskId: string | null, taskTitle?: string) {
-    activeSubtaskId.value = null
-    activeSubtaskTitle.value = null
     const focusSecs = settings.value.focusDuration * 60
     const effects = apply({
       event: 'START',
@@ -346,8 +337,6 @@ export function useTimer() {
       payload: { plannedDurationMs: focusSecs * 1000 },
     })
     stopTicking()
-    activeSubtaskId.value = null
-    activeSubtaskTitle.value = null
   }
 
   /** 从快照恢复；只接受进行中的状态 */
@@ -400,8 +389,6 @@ export function useTimer() {
     activeTaskTitle,
     focusStartedAt,
     pendingNotification,
-    activeSubtaskId,
-    activeSubtaskTitle,
     progress,
     displayTime,
     start,
@@ -418,6 +405,5 @@ export function useTimer() {
     getRoundInfo,
     onPhaseDoneCallback,
     onPhaseEventCallback,
-    setSubtaskContext,
   }
 }

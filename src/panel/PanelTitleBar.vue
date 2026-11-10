@@ -30,7 +30,7 @@ const displayIconPaths = computed(() => props.iconPaths?.length ? props.iconPath
           />
         </svg>
       </span>
-      <span class="titlebar-title">{{ title || 'TODO' }}</span>
+      <span class="titlebar-title">{{ title }}</span>
     </div>
 
     <div v-if="showSearch" class="titlebar-search">

@@ -28,37 +28,12 @@ const getDateString = toLocalDateStr
 const { mergeDaily } = useSessions()
 const effectiveDailyStats = computed<DailyStat[]>(() => mergeDaily(dailyStats.value))
 
-function getStatByDate(date: string): DailyStat | undefined {
-  return dailyStats.value.find(s => s.date === date)
-}
-
 function getEffectiveStatByDate(date: string): DailyStat | undefined {
   return effectiveDailyStats.value.find(s => s.date === date)
 }
 
 export function useDailyStats() {
   void store.ensureLoaded()
-
-  function recordPomodoro(focusMinutes: number) {
-    const today = getDateString()
-    let stat = getStatByDate(today)
-    if (!stat) {
-      stat = { date: today, pomodoros: 0, focusMinutes: 0, tasksCompleted: 0 }
-      dailyStats.value.push(stat)
-    }
-    stat.pomodoros++
-    stat.focusMinutes += focusMinutes
-  }
-
-  function recordTaskCompleted() {
-    const today = getDateString()
-    let stat = getStatByDate(today)
-    if (!stat) {
-      stat = { date: today, pomodoros: 0, focusMinutes: 0, tasksCompleted: 0 }
-      dailyStats.value.push(stat)
-    }
-    stat.tasksCompleted++
-  }
 
   function getStatsInRange(startDate: Date, endDate: Date): DailyStat[] {
     const start = getDateString(startDate)
@@ -119,8 +94,6 @@ export function useDailyStats() {
     weekStats,
     monthStats,
     allTimeStats,
-    recordPomodoro,
-    recordTaskCompleted,
     getStatsInRange,
     getMonthStats,
     summarizeStats,

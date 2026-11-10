@@ -418,21 +418,6 @@ async function execPaste() {
   }
 }
 
-async function execPasteAsPlainText() {
-  if (!editorRef.value) return
-
-  try {
-    const text = await readText()
-    if (text) {
-      editorRef.value.focus()
-      document.execCommand('insertText', false, text)
-      onContentChange()
-    }
-  } catch {
-    // 静默失败，不弹窗
-  }
-}
-
 // Close color picker when clicking outside
 function onDocumentClick(e: MouseEvent) {
   const target = e.target as HTMLElement
@@ -601,7 +586,7 @@ function formatUpdateTime(timestamp: number): string {
       :has-selection="hasSelection"
       @copy="onContextMenuAction(execCopy)"
       @paste="onContextMenuAction(execPaste)"
-      @paste-plain-text="onContextMenuAction(execPasteAsPlainText)"
+      @paste-plain-text="onContextMenuAction(execPaste)"
       @select-all="onContextMenuAction(selectAll)"
     />
   </div>

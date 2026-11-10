@@ -1,5 +1,6 @@
 import { ref, computed } from 'vue'
 import { createPersistedStore } from './persistence'
+import { stripHtml } from '../utils/stripHtml'
 
 export interface Memo {
   id: string
@@ -108,7 +109,7 @@ const categoryStore = createPersistedStore({
 })
 
 function extractTitleFromContent(content: string, maxLength: number = 10): string {
-  const plainText = content.replace(/<[^>]+>/g, '').trim()
+  const plainText = stripHtml(content)
   if (plainText.length === 0) return '无标题'
   return plainText.slice(0, maxLength) + (plainText.length > maxLength ? '...' : '')
 }

@@ -10,6 +10,7 @@ import { useDailyStats } from './useDailyStats'
 import { aggregateSessionsByTask } from '../timer/sessions'
 import { toLocalDateStr } from '../utils/date'
 import { ASSISTANT_NAME } from '../utils/assistant'
+import { stripHtml } from '../utils/stripHtml'
 import { useTronTodos, todoDueMs, todoRemainingLabel } from './useTronTodos'
 import { getPlanSnapshot } from './useTodayPlan'
 import { planFactsForDate } from '../utils/dayPlan'
@@ -143,18 +144,6 @@ const store = createPersistedStore({
     }
   },
 })
-
-function stripHtml(html: string): string {
-  return html
-    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
 
 function addInsight(kind: AiInsightKind, title: string, content: string, coach?: CoachMessage) {
   state.value.insights.unshift({
@@ -575,7 +564,6 @@ export function useAiButler() {
   }
 
   return {
-    insights: computed(() => state.value.insights),
     coachInsight,
     dailySummary,
     configured,

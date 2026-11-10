@@ -4,6 +4,7 @@ import { useMemos, type Memo } from '../composables/useMemos'
 import { useSessions } from '../composables/useSessions'
 import { useTimerBridge } from '../composables/useTimerBridge'
 import { aggregateSessionsByTask } from '../timer/sessions'
+import { stripHtml } from '../utils/stripHtml'
 import MemoCategoryTag from './MemoCategoryTag.vue'
 
 const props = defineProps<{
@@ -97,7 +98,7 @@ function formatCompletedAt(memo: Memo): string {
 }
 
 function getContentPreview(content: string, maxLength: number = 40): string {
-  const plainText = content.replace(/<[^>]+>/g, '').trim()
+  const plainText = stripHtml(content)
   if (plainText.length === 0) return '还没写什么呢～'
   if (plainText.length <= maxLength) return plainText
   return plainText.slice(0, maxLength) + '...'

@@ -216,25 +216,6 @@ function parseTaskList(text: string): string[] {
   return lines.slice(0, 6)
 }
 
-function parseNameList(text: string): string[] {
-  const raw = stripCodeFence(text)
-  try {
-    const data = JSON.parse(raw)
-    const list = Array.isArray(data?.names) ? data.names : []
-    const result = list
-      .map((item: unknown) => String(item ?? '').trim())
-      .filter((item: string) => item.length > 0)
-    if (result.length > 0) return result.slice(0, 3)
-  } catch {
-    // 解析失败时退化为按行拆分
-  }
-  const lines = raw
-    .split('\n')
-    .map(line => line.replace(/^[\s\-*•\d.、]+/, '').trim())
-    .filter(line => line.length > 0)
-  return lines.slice(0, 3)
-}
-
 export function useAi() {
   const { settings } = useSettings()
 
@@ -391,18 +372,6 @@ export function useAi() {
     return parseTaskList(text)
   }
 
-  async function suggestToday(tasks: PlanTaskInput[], todayPomodoros: number): Promise<string> {
-    const payload = {
-      todayPomodoros,
-      tasks: tasks.slice(0, 20),
-    }
-    return chat(
-      '你是专注计划助手。根据任务清单和今日已完成的番茄数，给出今天最值得先做的 3 件事，并为每件事建议番茄数。使用「1. 任务名：建议 n 个番茄，理由一句话」的格式，总字数不超过 200，不要输出其它内容。',
-      JSON.stringify(payload),
-      0.5,
-    )
-  }
-
   async function polishMemo(content: string): Promise<{ title: string; content: string }> {
     const plain = content.trim()
     if (!plain) throw new Error('这条小记还空空的呀')
@@ -550,23 +519,6 @@ export function useAi() {
     return { greeting: '', care: '', order: [], items: [] }
   }
 
-  async function evaluatePlan(plan: string, extra: string, tasks: PlanTaskInput[]): Promise<string> {
-    return chat(
-      '你是计划评估助手。先指出计划里最明显的风险或遗漏（2-3 条），再给出一份按天或按时段的粗略安排。输出分两段：「评估」和「安排」，总字数不超过 400，不要输出多余内容。',
-      JSON.stringify({ plan: plan.slice(0, 2000), extra: extra.slice(0, 500), tasks }),
-      0.5,
-    )
-  }
-
-  async function suggestTaskNames(idea: string): Promise<string[]> {
-    const text = await chat(
-      '你是任务命名助手。把用户粗糙的想法改写成规范的待办标题：动词开头、不超过 16 个字、不加语气词和编号。给出 3 个候选。只输出 JSON：{"names":["候选1","候选2","候选3"]}',
-      idea.slice(0, 200),
-      0.4,
-    )
-    return parseNameList(text)
-  }
-
   async function generatePlan(prompt: string, extra: string, tasks: PlanTaskInput[]): Promise<PlanArtifacts> {
     const text = await chat(
       '你是计划助手。把用户的想法整理成可执行的待办任务和一份简短备忘。只输出 JSON：{"tasks":["任务1","任务2"],"memo":{"title":"标题","content":"正文"}}。任务 3~8 条，动词开头，每条不超过 18 个字；备忘标题不超过 12 个字，正文用短行列出关键安排。不要编造用户没提过的事实。',
@@ -629,13 +581,10 @@ export function useAi() {
     configured,
     testProvider,
     breakdownGoal,
-    suggestToday,
     polishMemo,
     coachToday,
     summarizeDay,
     refinePlan,
-    evaluatePlan,
-    suggestTaskNames,
     generatePlan,
     extractEvent,
   }

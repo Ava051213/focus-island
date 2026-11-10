@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useMemos, type Memo } from '../composables/useMemos'
+import { stripHtml } from '../utils/stripHtml'
 import MemoEditor from './MemoEditor.vue'
 import MemoList from './MemoList.vue'
 import MemoCategoryDialog from './MemoCategoryDialog.vue'
@@ -33,7 +34,7 @@ const plainTextCache = new Map<string, { source: string; text: string }>()
 function getPlainContent(memo: Memo): string {
   const cached = plainTextCache.get(memo.id)
   if (cached && cached.source === memo.content) return cached.text
-  const text = memo.content.replace(/<[^>]+>/g, '').trim().toLowerCase()
+  const text = stripHtml(memo.content).toLowerCase()
   plainTextCache.set(memo.id, { source: memo.content, text })
   return text
 }

@@ -8,7 +8,7 @@ const emit = defineEmits<{
   (e: 'skip'): void
 }>()
 
-const { displayTime, phase, activeTaskTitle, activeSubtaskTitle, running } = useTimer()
+const { displayTime, phase, activeTaskTitle, running } = useTimer()
 
 // 休息阶段轮换小提示，只换文字，不增加操作
 const BREAK_TIPS = [
@@ -53,7 +53,6 @@ const resolvedTitle = computed(() => {
   if (phase.value === 'break') {
     return BREAK_TIPS[breakTipIndex.value % BREAK_TIPS.length]
   }
-  if (activeSubtaskTitle.value) return activeSubtaskTitle.value
   return activeTaskTitle.value ?? null
 })
 

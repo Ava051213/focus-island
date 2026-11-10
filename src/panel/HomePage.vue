@@ -504,114 +504,6 @@ function onCoachNoteEnter(event: KeyboardEvent) {
   color: rgba(255, 255, 255, 0.86);
 }
 
-/* 收起时的第一条安排 */
-.coach-preview {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 8px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.035);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.coach-preview-copy {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.coach-preview-title {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.9);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.coach-preview-meta {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 10.5px;
-  color: rgba(255, 255, 255, 0.42);
-}
-
-.coach-preview-when {
-  color: color-mix(in srgb, var(--focus-color) 75%, transparent);
-}
-
-.coach-plans {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.coach-plan {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 8px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.035);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.coach-plan-copy {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.coach-plan-line {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-.coach-plan-index {
-  flex-shrink: 0;
-  width: 15px;
-  height: 15px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 9px;
-  font-weight: 700;
-  color: var(--focus-color);
-  background: color-mix(in srgb, var(--focus-color) 16%, transparent);
-}
-
-.coach-plan-title {
-  flex: 1;
-  min-width: 0;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.9);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.coach-plan-pomo {
-  flex-shrink: 0;
-  font-size: 10px;
-  color: color-mix(in srgb, var(--focus-color) 78%, transparent);
-}
-
-.coach-plan-reason {
-  margin: 0;
-  padding-left: 21px;
-  font-size: 10.5px;
-  line-height: 1.5;
-  color: rgba(255, 255, 255, 0.42);
-}
-
 .coach-start-btn {
   flex-shrink: 0;
   padding: 4px 9px;
@@ -629,40 +521,9 @@ function onCoachNoteEnter(event: KeyboardEvent) {
   background: color-mix(in srgb, var(--focus-color) 28%, transparent);
 }
 
-.coach-start-btn:disabled,
-.coach-swap-btn:disabled {
+.coach-start-btn:disabled {
   opacity: 0.4;
   cursor: default;
-}
-
-.coach-plan-actions {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.coach-swap-btn {
-  padding: 4px 7px;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.45);
-  font-size: 11px;
-  font-family: inherit;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.coach-swap-btn:hover {
-  color: rgba(255, 255, 255, 0.8);
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.coach-plan-when {
-  margin-right: 6px;
-  color: color-mix(in srgb, var(--focus-color) 75%, transparent);
-  font-variant-numeric: tabular-nums;
 }
 
 .coach-interact {
@@ -797,13 +658,6 @@ function onCoachNoteEnter(event: KeyboardEvent) {
   color: rgba(255, 255, 255, 0.5);
 }
 
-.coach-closing {
-  margin: 0;
-  font-size: 11px;
-  line-height: 1.6;
-  color: color-mix(in srgb, var(--focus-color) 62%, rgba(255, 255, 255, 0.4));
-}
-
 .coach-empty {
   margin: 0;
   font-size: 11px;
@@ -827,12 +681,6 @@ function onCoachNoteEnter(event: KeyboardEvent) {
 .plan-entry.plan-done .suggestion-title {
   text-decoration: line-through;
   color: rgba(255, 255, 255, 0.4);
-}
-
-.suggestion-list {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
 }
 
 .suggestion-item {
@@ -863,12 +711,6 @@ function onCoachNoteEnter(event: KeyboardEvent) {
   align-items: baseline;
   gap: 6px;
   min-width: 0;
-}
-
-.suggestion-rank {
-  flex-shrink: 0;
-  font-size: 10px;
-  color: color-mix(in srgb, var(--focus-color) 75%, transparent);
 }
 
 .coach-plan-course {

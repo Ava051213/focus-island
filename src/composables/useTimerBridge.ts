@@ -35,8 +35,6 @@ export interface TimerStatePayload {
   running: boolean
   activeTaskId: string | null
   activeTaskTitle: string | null
-  activeSubtaskId: string | null
-  activeSubtaskTitle: string | null
   syncedAt: number
 }
 
@@ -70,8 +68,6 @@ export function useTimerBridge() {
       running: timer.running.value,
       activeTaskId: timer.activeTaskId.value,
       activeTaskTitle: timer.activeTaskTitle.value,
-      activeSubtaskId: timer.activeSubtaskId.value,
-      activeSubtaskTitle: timer.activeSubtaskTitle.value,
     }
   }
 

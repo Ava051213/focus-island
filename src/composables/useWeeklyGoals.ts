@@ -105,7 +105,6 @@ export function useWeeklyGoals() {
   void store.ensureLoaded()
 
   const weekStart = computed(() => getWeekStart(now.value))
-  const weekStartStr = computed(() => toLocalDateStr(weekStart.value))
 
   function sync() {
     const start = getWeekStart(new Date())
@@ -151,10 +150,9 @@ export function useWeeklyGoals() {
   })
 
   const doneCount = computed(() => goals.value.filter(goal => goal.done).length)
-  const allDone = computed(() => doneCount.value === goals.value.length)
   const unlockedRewards = computed(() => state.value.unlockedRewards)
 
-  return { goals, doneCount, allDone, weekStart, weekStartStr, unlockedRewards }
+  return { doneCount, unlockedRewards }
 }
 
 /** 只读已解锁奖励，给主窗口和设置页用；不加载统计和备忘 */
