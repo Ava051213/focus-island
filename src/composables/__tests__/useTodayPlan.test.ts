@@ -51,7 +51,7 @@ vi.mock('../useAi', () => ({
   useAi: () => ({ configured: h.configured, refinePlan: h.refinePlan }),
 }))
 
-function seedMemo(id: string, title: string, estimatedPomodoros = 0): Record<string, unknown> {
+function seedMemo(id: string, title: string, estimatedPomodoros = 0, extra: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     id,
     title,
@@ -62,6 +62,7 @@ function seedMemo(id: string, title: string, estimatedPomodoros = 0): Record<str
     estimatedPomodoros,
     createdAt: 1,
     updatedAt: 1,
+    ...extra,
   }
 }
 
@@ -101,11 +102,11 @@ async function fresh() {
   ])
   const api = planMod.useTodayPlan()
   // 各 store 是模块级单例，先触发加载，文件里的数据才进得了内存
-  memosMod.useMemos()
+  const memosApi = memosMod.useMemos()
   tronMod.useTronTodos()
   eventsMod.useEvents()
   await settle()
-  return { api }
+  return { api, memosApi }
 }
 
 function readPlanFile(): { schemaVersion: number; data: Record<string, unknown> } {
@@ -304,4 +305,71 @@ describe('useTodayPlan', () => {
     tronMod.refreshTronTodos({ force: true })
     await settle()
   }
+
+  it('今天已打卡的重复小记不进安排，没打卡的照常进', async () => {
+    h.files.set('focus-island/memos.json', JSON.stringify([
+      seedMemo('m1', '背单词', 0, { repeat: 'daily', lastDoneDate: '2026-11-06' }),
+      seedMemo('m2', '高数作业'),
+    ]))
+    const { api } = await fresh()
+
+    await api.ensureTodayPlan()
+
+    expect(api.plan.value!.entries.map(entry => entry.refId)).toEqual(['m2'])
+  })
+
+  it('勾条目连带打卡，取消连带清掉；打卡也反过来勾条目', async () => {
+    h.files.set('focus-island/memos.json', JSON.stringify([
+      seedMemo('m1', '背单词', 0, { repeat: 'daily' }),
+      seedMemo('m2', '高数作业'),
+    ]))
+    const { api, memosApi } = await fresh()
+    await api.ensureTodayPlan()
+    const m1Entry = api.plan.value!.entries.find(entry => entry.refId === 'm1')!
+    const m1 = memosApi.memos.value.find(memo => memo.id === 'm1')!
+
+    // 勾安排条目 → 小记打卡
+    api.toggleEntryDone(m1Entry.id)
+    expect(m1.lastDoneDate).toBe('2026-11-06')
+
+    // 取消勾选 → 打卡一并清掉
+    api.toggleEntryDone(m1Entry.id)
+    expect(m1.lastDoneDate).toBeNull()
+
+    // 小记侧打卡 → 条目同步勾掉；再取消 → 条目恢复
+    api.checkInMemo('m1', true)
+    expect(m1.lastDoneDate).toBe('2026-11-06')
+    expect(api.plan.value!.entries.find(entry => entry.refId === 'm1')!.done).toBe(true)
+
+    api.checkInMemo('m1', false)
+    expect(m1.lastDoneDate).toBeNull()
+    expect(api.plan.value!.entries.find(entry => entry.refId === 'm1')!.done).toBe(false)
+
+    // 普通小记勾条目不动小记
+    const m2Entry = api.plan.value!.entries.find(entry => entry.refId === 'm2')!
+    api.toggleEntryDone(m2Entry.id)
+    expect(memosApi.memos.value.find(memo => memo.id === 'm2')?.completedAt ?? null).toBeNull()
+  })
+
+  it('重复小记满额自动勾掉时打卡，跨日重新出现且不算顺延', async () => {
+    h.files.set('focus-island/memos.json', JSON.stringify([
+      seedMemo('m1', '背单词', 1, { repeat: 'daily' }),
+    ]))
+    const { api } = await fresh()
+    await api.ensureTodayPlan()
+
+    // 估 1 个番茄，跑完一轮条目自动勾掉并打卡
+    api.advanceEntry('m1')
+    expect(api.plan.value!.entries[0].done).toBe(true)
+
+    // 跨零点：昨天的条目是勾掉的，不进顺延；今天没打卡，作为新条目出现
+    vi.setSystemTime(new Date(2026, 10, 7, 8, 0, 0))
+    await vi.advanceTimersByTimeAsync(60_000)
+    await settle()
+
+    expect(api.plan.value!.date).toBe('2026-11-07')
+    const entry = api.plan.value!.entries.find(item => item.refId === 'm1')!
+    expect(entry.done).toBe(false)
+    expect(entry.note ?? '').not.toContain('顺延')
+  })
 })

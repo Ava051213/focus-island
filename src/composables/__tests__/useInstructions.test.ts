@@ -22,6 +22,8 @@ const h = vi.hoisted(() => {
         pomodoroCount: 0,
         estimatedPomodoros: 0,
         completedAt: null,
+        repeat: null,
+        lastDoneDate: null,
       }
       h.memos.value.unshift(memo)
       return memo
@@ -145,6 +147,23 @@ describe('useInstructions 提案生命周期', () => {
     expect(created.map(memo => memo.estimatedPomodoros)).toEqual([2, 2])
     expect(h.memos.value.find(memo => memo.id === 'm1')?.completedAt).not.toBeNull()
     expect(h.regeneratePlan).toHaveBeenCalledTimes(1)
+  })
+
+  it('拆分重复小记：拆出的新条目不继承每日重复', async () => {
+    h.memos.value = [{
+      id: 'm1', title: '背单词', content: '', categoryId: 'work',
+      estimatedPomodoros: 0, completedAt: null, repeat: 'daily', lastDoneDate: null,
+    }]
+    const ins = await fresh()
+
+    expect(await ins.submit('背单词拆成早晚各一次')).toBe('proposal')
+    await ins.confirm()
+
+    const created = h.memos.value.filter(memo => String(memo.id).startsWith('new-'))
+    expect(created).toHaveLength(2)
+    for (const memo of created) {
+      expect(memo.repeat).not.toBe('daily')
+    }
   })
 
   it('通用拆分没 Key 时明确拒绝并提示', async () => {

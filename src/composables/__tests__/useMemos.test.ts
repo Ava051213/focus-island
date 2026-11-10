@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@tauri-apps/plugin-fs', () => ({
   BaseDirectory: { AppData: 'AppData' },
@@ -130,5 +130,85 @@ describe('useMemos 主流程', () => {
     memos.deleteMemo(memo!.id)
 
     expect(memos.memos.value).toHaveLength(0)
+  })
+})
+
+describe('useMemos 重复小记打卡', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  /** 开了每日重复的小记 */
+  async function freshDaily() {
+    const memos = await freshMemos()
+    const memo = memos.addQuickMemo('背单词')
+    memos.updateMemo(memo!.id, { repeat: 'daily' })
+    return { memos, memo: memo! }
+  }
+
+  it('打卡记下今天并算活动，重复打卡幂等', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 10, 11, 9, 0, 0))
+    const { memos, memo } = await freshDaily()
+
+    memos.checkInToday(memo.id)
+    const firstUpdatedAt = memo.updatedAt
+    expect(memo.lastDoneDate).toBe('2026-11-11')
+
+    vi.setSystemTime(new Date(2026, 10, 11, 15, 0, 0))
+    memos.checkInToday(memo.id)
+    expect(memo.lastDoneDate).toBe('2026-11-11')
+    expect(memo.updatedAt).toBe(firstUpdatedAt)
+  })
+
+  it('取消打卡清掉记录；普通小记打卡是空操作', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 10, 11, 9, 0, 0))
+    const { memos, memo } = await freshDaily()
+    memos.checkInToday(memo.id)
+
+    memos.uncheckIn(memo.id)
+    expect(memo.lastDoneDate).toBeNull()
+
+    const plain = memos.addQuickMemo('普通的一条')
+    expect(() => memos.checkInToday(plain!.id)).not.toThrow()
+    expect(plain?.lastDoneDate ?? null).toBeNull()
+  })
+
+  it('打卡后沉底，次日自动回到未完成', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 10, 11, 9, 0, 0))
+    const memos = await freshMemos()
+    const other = memos.addQuickMemo('别的事')
+    const memo = memos.addQuickMemo('背单词')
+    memos.updateMemo(memo!.id, { repeat: 'daily' })
+
+    // 正常顺序：后建的背单词排最前
+    expect(memos.activeMemos.value[0]?.id).toBe(memo!.id)
+
+    memos.checkInToday(memo!.id)
+    // 打卡后沉底
+    expect(memos.activeMemos.value.at(-1)?.id).toBe(memo!.id)
+    expect(memos.activeMemos.value[0]?.id).toBe(other!.id)
+
+    // 次日：打卡自然失效，回到原顺序。
+    // activeMemos 的日期比较没有响应式依赖（面板失焦会自动收起，跨零点陈旧
+    // 排序实际看不到），这里手动替换数组触发一次重算
+    vi.setSystemTime(new Date(2026, 10, 12, 9, 0, 0))
+    memos.memos.value = [...memos.memos.value]
+    expect(memos.activeMemos.value[0]?.id).toBe(memo!.id)
+    expect(memos.activeMemos.value[1]?.id).toBe(other!.id)
+  })
+
+  it('归档与打卡互不干扰：重复小记勾选归档后不再出现在进行中', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 10, 11, 9, 0, 0))
+    const { memos, memo } = await freshDaily()
+    memos.checkInToday(memo.id)
+    memos.completeMemo(memo.id)
+
+    expect(memo.completedAt).not.toBeNull()
+    expect(memos.activeMemos.value).toHaveLength(0)
+    expect(memos.completedMemos.value.map(item => item.id)).toContain(memo.id)
   })
 })
