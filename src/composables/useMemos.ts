@@ -1,5 +1,6 @@
 import { ref, computed } from 'vue'
 import { createPersistedStore } from './persistence'
+import { toLocalDateStr } from '../utils/date'
 import { stripHtml } from '../utils/stripHtml'
 
 export interface Memo {
@@ -16,8 +17,17 @@ export interface Memo {
   order?: number
   /** 完成归档时间，null 表示还在进行中 */
   completedAt?: number | null
+  /** 每天重复的小记：打卡走 lastDoneDate，不碰 completedAt（归档语义） */
+  repeat?: 'daily' | null
+  /** 最近一次打卡的本地日期（YYYY-MM-DD），null 表示今天还没打卡 */
+  lastDoneDate?: string | null
   createdAt: number
   updatedAt: number
+}
+
+/** 重复小记「今天已完成」＝打卡日期就是今天；按本地日期比较，次日自然回到未完成 */
+export function isMemoDoneToday(memo: Memo, today: string = toLocalDateStr(new Date())): boolean {
+  return memo.repeat === 'daily' && memo.lastDoneDate === today
 }
 
 export interface MemoCategory {
@@ -77,7 +87,7 @@ const memoStore = createPersistedStore({
   snapshot: () => memos.value,
   restore: (data) => {
     if (!Array.isArray(data)) throw new Error('memos.json is not an array')
-    // 老数据没有 pomodoroCount / completedAt / order，这里一次补齐
+    // 老数据没有 pomodoroCount / completedAt / order / repeat，这里一次补齐
     const list = data
       .filter((raw): raw is Partial<Memo> => !!raw && typeof raw === 'object')
       .map(raw => ({
@@ -85,6 +95,8 @@ const memoStore = createPersistedStore({
         pomodoroCount: Number(raw.pomodoroCount) || 0,
         estimatedPomodoros: Math.max(0, Math.floor(Number(raw.estimatedPomodoros) || 0)),
         completedAt: Number(raw.completedAt) > 0 ? Number(raw.completedAt) : null,
+        repeat: raw.repeat === 'daily' ? 'daily' : null,
+        lastDoneDate: typeof raw.lastDoneDate === 'string' && raw.lastDoneDate ? raw.lastDoneDate : null,
       })) as Memo[]
     if (list.some(memo => typeof memo.order !== 'number')) {
       sortMemos(list).forEach((memo, index) => {
@@ -151,6 +163,8 @@ export function useMemos() {
       estimatedPomodoros: 0,
       order: minOrder - 1,
       completedAt: null,
+      repeat: null,
+      lastDoneDate: null,
       createdAt: now,
       updatedAt: now,
     }
@@ -193,6 +207,24 @@ export function useMemos() {
     sortMemos(memos.value.filter(item => !item.completedAt)).forEach((item, index) => {
       item.order = index
     })
+  }
+
+  /** 重复小记打卡：记下今天的日期，算活动（刷新 updatedAt） */
+  function checkInToday(id: string) {
+    const memo = memos.value.find(m => m.id === id)
+    if (!memo || memo.repeat !== 'daily') return
+    const today = toLocalDateStr(new Date())
+    if (memo.lastDoneDate === today) return
+    memo.lastDoneDate = today
+    memo.updatedAt = Date.now()
+  }
+
+  /** 取消今天的打卡 */
+  function uncheckIn(id: string) {
+    const memo = memos.value.find(m => m.id === id)
+    if (!memo || memo.repeat !== 'daily' || !memo.lastDoneDate) return
+    memo.lastDoneDate = null
+    memo.updatedAt = Date.now()
   }
 
   /** 勾选完成：不删除，进归档，可以从已完成列表恢复 */
@@ -281,10 +313,15 @@ export function useMemos() {
     return true
   }
 
-  /** 所有未完成的小记，按置顶 + 手动顺序排列 */
-  const activeMemos = computed(() =>
-    sortMemos(memos.value.filter(memo => !memo.completedAt)),
-  )
+  /** 所有未完成的小记，按置顶 + 手动顺序排列；今天已打卡的重复小记沉底 */
+  const activeMemos = computed(() => {
+    const today = toLocalDateStr(new Date())
+    const sorted = sortMemos(memos.value.filter(memo => !memo.completedAt))
+    return [
+      ...sorted.filter(memo => !isMemoDoneToday(memo, today)),
+      ...sorted.filter(memo => isMemoDoneToday(memo, today)),
+    ]
+  })
 
   const filteredMemos = computed(() => {
     if (currentCategoryId.value === 'all') return activeMemos.value
@@ -335,6 +372,8 @@ export function useMemos() {
     togglePin,
     completeMemo,
     restoreMemo,
+    checkInToday,
+    uncheckIn,
     moveMemo,
     incrementPomodoro,
     addCategory,
