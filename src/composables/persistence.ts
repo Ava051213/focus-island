@@ -10,7 +10,7 @@ import {
 } from '@tauri-apps/plugin-fs'
 import { emitTo, listen } from '@tauri-apps/api/event'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
-import { migrate, UnknownSchemaVersionError, wrapWithVersion, type Migration } from '../utils/schema'
+import { migrate, UnknownSchemaVersionError, wrapJsonWithVersion, type Migration } from '../utils/schema'
 
 const DATA_DIR = 'focus-island'
 const baseDir = BaseDirectory.AppData
@@ -160,10 +160,9 @@ export function createPersistedStore(opts: PersistedStoreOptions): PersistedStor
   // JSON of the state as last loaded, received or saved; unchanged state is never written back.
   let lastJson: string | null = null
 
-  function serialize(data: unknown): string {
-    return JSON.stringify(
-      opts.schemaVersion === undefined ? data : wrapWithVersion(data, opts.schemaVersion),
-    )
+  // 信封只包一层，data 的 JSON 串直接复用，热路径上整份数据只 stringify 一遍
+  function serializeJson(json: string): string {
+    return opts.schemaVersion === undefined ? json : wrapJsonWithVersion(json, opts.schemaVersion)
   }
 
   async function load() {
@@ -208,7 +207,7 @@ export function createPersistedStore(opts: PersistedStoreOptions): PersistedStor
     loaded.value = true
     // Persist migrations/normalization applied by restore().
     if (restored && result.status === 'ok' && (migrated || lastJson !== JSON.stringify(fileData))) {
-      file.write(serialize(current))
+      file.write(serializeJson(lastJson))
     }
   }
 
@@ -225,7 +224,7 @@ export function createPersistedStore(opts: PersistedStoreOptions): PersistedStor
       const json = JSON.stringify(data)
       if (json === lastJson) return
       lastJson = json
-      file.write(serialize(data))
+      file.write(serializeJson(json))
       if (opts.syncEvent) emitToOtherWindow(opts.syncEvent, json)
     },
     { deep: true },

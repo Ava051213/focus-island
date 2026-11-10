@@ -1,5 +1,6 @@
 import { ref, watch, type Ref } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
+import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { availableMonitors, getCurrentWindow, PhysicalPosition } from '@tauri-apps/api/window'
 import { useSettings } from './useSettings'
 import { useDockMode } from './useDockMode'
@@ -80,6 +81,39 @@ export function useIslandInteraction(options: IslandInteractionOptions) {
   function startHoverPolling() {
     if (hoverTimer !== null) return
     void runHoverPoll()
+  }
+
+  function pauseHoverPolling() {
+    if (hoverTimer !== null) {
+      window.clearTimeout(hoverTimer)
+      hoverTimer = null
+    }
+  }
+
+  // 灵动岛藏进托盘后悬停判定没有意义：停掉轮询，并把可能残留的悬停态
+  // 复位回穿透；重新显示时恢复轮询。
+  async function onIslandVisibility(visible: boolean) {
+    if (visible) {
+      startHoverPolling()
+      return
+    }
+    pauseHoverPolling()
+    if (hoverActive.value) {
+      hoverActive.value = false
+      syncClickThrough()
+    }
+    updatePointerOver(false)
+  }
+
+  let unlistenVisibility: UnlistenFn | null = null
+  let visibilityInstalled = false
+
+  async function installVisibilityWatch() {
+    if (visibilityInstalled) return
+    visibilityInstalled = true
+    unlistenVisibility = await listen<boolean>('island-visibility-changed', ({ payload }) => {
+      void onIslandVisibility(Boolean(payload))
+    })
   }
 
   async function onIslandClick() {
@@ -234,13 +268,14 @@ export function useIslandInteraction(options: IslandInteractionOptions) {
     syncClickThrough()
     startHoverPolling()
     void applyWindowSize()
+    void installVisibilityWatch()
   }
 
   function stop() {
-    if (hoverTimer !== null) {
-      window.clearTimeout(hoverTimer)
-      hoverTimer = null
-    }
+    pauseHoverPolling()
+    unlistenVisibility?.()
+    unlistenVisibility = null
+    visibilityInstalled = false
   }
 
   // 停靠状态或缩放变化时重新计算窗口尺寸

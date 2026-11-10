@@ -68,6 +68,11 @@ export function wrapWithVersion<T>(data: T, version: number = CORE_SCHEMA_VERSIO
   return { schemaVersion: version, data }
 }
 
+/** 与 wrapWithVersion 相同的信封形状，但接收已序列化的 data JSON，避免大对象二次 stringify */
+export function wrapJsonWithVersion(json: string, version: number): string {
+  return `{"schemaVersion":${version},"data":${json}}`
+}
+
 export function isVersionedEnvelope(value: unknown): value is VersionedEnvelope {
   return isRecord(value)
     && typeof value.schemaVersion === 'number'

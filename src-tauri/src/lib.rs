@@ -20,17 +20,18 @@ use core_graphics::event::CGEvent;
 use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
 
 #[cfg(target_os = "windows")]
-use windows::Win32::Foundation::POINT;
+use windows::Win32::Foundation::{POINT, RECT};
 #[cfg(target_os = "windows")]
 use windows::Win32::UI::WindowsAndMessaging::{
-    AllowSetForegroundWindow, GetCursorPos, ASFW_ANY,
+    AllowSetForegroundWindow, GetCursorPos, GetWindowRect, ASFW_ANY,
 };
 
 #[cfg(target_os = "linux")]
 use x11::xlib;
 
 const PANEL_GAP_Y: i32 = 6;
-const TRAY_ICON_BYTES: &[u8] = include_bytes!("../icons/icon.png");
+// 托盘图标只渲染 16~32px，用小图省掉约 165KB 二进制体积和一次大图解码
+const TRAY_ICON_BYTES: &[u8] = include_bytes!("../icons/32x32.png");
 
 /// 用户偏好里需要 Rust 侧即时读取的部分。
 /// 关闭窗口时按它决定「隐藏到托盘」还是「直接退出」，默认隐藏到托盘。
@@ -143,6 +144,23 @@ fn mouse_position_raw() -> (f64, f64) {
 #[tauri::command]
 fn is_mouse_over_window<R: Runtime>(window: WebviewWindow<R>, pad: f64) -> bool {
     let (mx, my) = mouse_position_raw();
+
+    // Windows 直接拿 hwnd 查窗口矩形：outer_position/outer_size 各要
+    // 「发消息给事件循环并等回执」一趟，而这个命令被前端 200~400ms 轮询着。
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(hwnd) = window.hwnd() {
+            let mut rect = RECT::default();
+            if unsafe { GetWindowRect(hwnd, &mut rect) }.is_ok() {
+                let x0 = rect.left as f64 - pad;
+                let y0 = rect.top as f64 - pad;
+                let x1 = rect.right as f64 + pad;
+                let y1 = rect.bottom as f64 + pad;
+                return mx >= x0 && mx <= x1 && my >= y0 && my <= y1;
+            }
+        }
+    }
+
     let Ok(pos) = window.outer_position() else { return false };
     let Ok(size) = window.outer_size() else { return false };
 
@@ -294,10 +312,13 @@ fn toggle_main_window<R: Runtime>(app: &AppHandle<R>) {
     if let Some(main) = app.get_webview_window("main") {
         if main.is_visible().unwrap_or(true) {
             let _ = main.hide();
+            // 可见性同步给前端：隐藏期间停掉悬停轮询
+            let _ = main.emit("island-visibility-changed", false);
         } else {
             let _ = main.unminimize();
             let _ = main.show();
             let _ = main.set_focus();
+            let _ = main.emit("island-visibility-changed", true);
         }
     }
 }
@@ -308,6 +329,7 @@ fn restore_main_window<R: Runtime>(app: &AppHandle<R>) {
         let _ = main.unminimize();
         let _ = main.show();
         let _ = main.set_focus();
+        let _ = main.emit("island-visibility-changed", true);
     }
 
     // 面板已经开着的话也把焦点拿回来，但不额外打开新窗口
@@ -488,6 +510,7 @@ fn animate_panel_open<R: Runtime>(app: AppHandle<R>) {
     if let Some(main) = app.get_webview_window("main") {
         if !main.is_visible().unwrap_or(true) {
             let _ = main.show();
+            let _ = main.emit("island-visibility-changed", true);
         }
     }
     let _ = panel.show();
@@ -565,6 +588,7 @@ pub fn run() {
                     if window.label() == "main" {
                         // 首次隐藏时前端会给一次「已藏到托盘」的提示
                         let _ = window.emit("island-hidden-to-tray", ());
+                        let _ = window.emit("island-visibility-changed", false);
                     }
                 } else {
                     window.app_handle().exit(0);
