@@ -60,3 +60,75 @@ describe('useMemos addQuickMemo', () => {
     expect(memos.activeMemos.value).toHaveLength(2)
   })
 })
+
+describe('useMemos 主流程', () => {
+  it('完成归档：completedAt 记时间，从进行中列表消失，可恢复', async () => {
+    const memos = await freshMemos()
+    const memo = memos.addQuickMemo('交房租')
+    memos.completeMemo(memo!.id)
+
+    expect(memo?.completedAt).not.toBeNull()
+    expect(memos.activeMemos.value).toHaveLength(0)
+    expect(memos.memos.value).toHaveLength(1)
+
+    memos.restoreMemo(memo!.id)
+    expect(memos.activeMemos.value).toHaveLength(1)
+  })
+
+  it('完成重复调用是幂等的，不会覆盖第一次的时间', async () => {
+    const memos = await freshMemos()
+    const memo = memos.addQuickMemo('交房租')
+    memos.completeMemo(memo!.id)
+    const first = memo!.completedAt
+    memos.completeMemo(memo!.id)
+
+    expect(memo?.completedAt).toBe(first)
+  })
+
+  it('置顶后排在最前，取消后回到普通组最前', async () => {
+    const memos = await freshMemos()
+    const a = memos.addQuickMemo('第一条')
+    const b = memos.addQuickMemo('第二条')
+    memos.togglePin(b!.id)
+
+    expect(memos.activeMemos.value[0]?.id).toBe(b!.id)
+    expect(b?.isPinned).toBe(true)
+
+    memos.togglePin(b!.id)
+    expect(b?.isPinned).toBe(false)
+    // 取消钉住后回到普通组的最前（与实现的注释约定一致）
+    expect(memos.activeMemos.value[0]?.id).toBe(b!.id)
+    expect(memos.activeMemos.value[1]?.id).toBe(a!.id)
+  })
+
+  it('updateMemo 打补丁并刷新 updatedAt，目标不存在时不动', async () => {
+    const memos = await freshMemos()
+    const memo = memos.addQuickMemo('原始')
+    const before = memo!.updatedAt
+
+    memos.updateMemo(memo!.id, { title: '改好了', estimatedPomodoros: 3 })
+    expect(memo?.title).toBe('改好了')
+    expect(memo?.estimatedPomodoros).toBe(3)
+    expect(memo!.updatedAt).toBeGreaterThanOrEqual(before)
+
+    expect(() => memos.updateMemo('no-such-id', { title: 'x' })).not.toThrow()
+  })
+
+  it('专注一轮累加番茄数，未知 id 静默跳过', async () => {
+    const memos = await freshMemos()
+    const memo = memos.addQuickMemo('背单词')
+    memos.incrementPomodoro(memo!.id)
+    memos.incrementPomodoro(memo!.id)
+
+    expect(memo?.pomodoroCount).toBe(2)
+    expect(() => memos.incrementPomodoro('no-such-id')).not.toThrow()
+  })
+
+  it('deleteMemo 移除条目', async () => {
+    const memos = await freshMemos()
+    const memo = memos.addQuickMemo('要删掉的')
+    memos.deleteMemo(memo!.id)
+
+    expect(memos.memos.value).toHaveLength(0)
+  })
+})
