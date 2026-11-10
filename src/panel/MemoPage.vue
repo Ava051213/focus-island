@@ -26,17 +26,19 @@ const view = ref<'list' | 'edit'>('list')
 const editingMemo = ref<Memo | null>(null)
 const showCategoryDialog = ref(false)
 
-// Cache plain-text content for search (avoid repeated regex on every keystroke)
-const plainTextCache = new Map<string, string>()
+// Cache plain-text content for search (avoid repeated regex on every keystroke).
+// Keep the source content alongside: editing a memo keeps its id, so compare by
+// content identity to invalidate the entry instead of searching stale text.
+const plainTextCache = new Map<string, { source: string; text: string }>()
 function getPlainContent(memo: Memo): string {
   const cached = plainTextCache.get(memo.id)
-  if (cached !== undefined) return cached
+  if (cached && cached.source === memo.content) return cached.text
   const text = memo.content.replace(/<[^>]+>/g, '').trim().toLowerCase()
-  plainTextCache.set(memo.id, text)
+  plainTextCache.set(memo.id, { source: memo.content, text })
   return text
 }
 
-// Invalidate cache when memo content changes (purge stale entries periodically)
+// Purge entries for memos no longer in the list (memory hygiene only)
 const filteredMemosIds = computed(() => new Set(filteredMemos.value.map(m => m.id)))
 watch(filteredMemosIds, (ids) => {
   for (const key of plainTextCache.keys()) {

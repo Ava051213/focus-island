@@ -390,7 +390,12 @@ onUnmounted(() => {
 async function closeWindow() {
   if (isClosing.value || panelAnimState.value === 'closing') return
   isClosing.value = true
-  await invoke('animate_panel_close')
+  try {
+    await invoke('animate_panel_close')
+  } catch {
+    // 复位标记，下次仍可收起，否则面板会永远卡在「正在关闭」
+    isClosing.value = false
+  }
 }
 </script>
 

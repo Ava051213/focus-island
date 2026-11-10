@@ -50,6 +50,11 @@ function pickRandomMottos(count: number): string[] {
     return result;
 }
 
+// 随机座右铭单独存一份：轮播条目随日程每分钟重算，随机选择不能放进那条
+// 路径，否则座右铭每次都被重新抽取、文字反复闪动。座右铭池变了才重抽。
+const randomMottos = ref<string[]>([]);
+watch(mottos, () => { randomMottos.value = pickRandomMottos(2); }, { immediate: true });
+
 interface CarouselItem {
     key: string;
     type: "event" | "motto";
@@ -77,10 +82,9 @@ const carouselItems = computed<CarouselItem[]>(() => {
             when: clock ? `${eventRelativeLabel(e.at)} ${clock}` : eventRelativeLabel(e.at),
         };
     });
-    const randomMottos = pickRandomMottos(2);
-    randomMottos.forEach((m, i) => {
+    randomMottos.value.forEach((m, i) => {
         items.push({
-            key: `motto-r-${i}-${m}`,
+            key: `motto-r-${i}`,
             type: "motto" as const,
             text: m,
         });

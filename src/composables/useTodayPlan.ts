@@ -261,8 +261,9 @@ export function useTodayPlan() {
         if (plan.value && plan.value.date !== today) void regeneratePlan()
       },
     )
+    const { sortedTodos } = useTronTodos()
     watch(
-      () => useTronTodos().sortedTodos.value.map(todo => todo.id).join('|'),
+      () => sortedTodos.value.map(todo => todo.id).join('|'),
       () => insertUrgentTodo(),
     )
   }
