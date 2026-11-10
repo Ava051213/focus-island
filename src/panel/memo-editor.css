@@ -116,6 +116,33 @@
   color: rgba(255, 255, 255, 0.35);
 }
 
+/* 每天重复开关：开启后勾选是打卡 */
+.daily-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.daily-toggle:hover {
+  color: var(--focus-color);
+  border-color: color-mix(in srgb, var(--focus-color) 40%, transparent);
+}
+
+.daily-toggle.active {
+  color: var(--focus-color);
+  border-color: color-mix(in srgb, var(--focus-color) 45%, transparent);
+  background: color-mix(in srgb, var(--focus-color) 14%, transparent);
+}
+
 /* 底部操作条 */
 .editor-bottom {
   display: flex;

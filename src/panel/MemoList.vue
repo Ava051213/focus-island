@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { useMemos, type Memo } from '../composables/useMemos'
+import { useMemos, isMemoDoneToday, type Memo } from '../composables/useMemos'
 import { useSessions } from '../composables/useSessions'
 import { useTimerBridge } from '../composables/useTimerBridge'
+import { useTodayPlan } from '../composables/useTodayPlan'
 import { aggregateSessionsByTask } from '../timer/sessions'
 import { stripHtml } from '../utils/stripHtml'
 import MemoCategoryTag from './MemoCategoryTag.vue'
@@ -27,6 +28,7 @@ const {
   getDisplayTitle,
 } = useMemos()
 const { start, startBlocked, abandonAndStart } = useTimerBridge()
+const { checkInMemo } = useTodayPlan()
 const { sessions } = useSessions()
 
 /** 每条小记的累计番茄、今日番茄与预计番茄 */
@@ -137,6 +139,16 @@ function cancelDeleteMemo() {
 const completingId = ref<string | null>(null)
 const undoState = ref<{ id: string; title: string } | null>(null)
 let undoTimer: ReturnType<typeof setTimeout> | null = null
+
+/** 勾选按钮的分流：重复小记是打卡/取消，普通小记才是收起归档 */
+function handleCheckMemo(memo: Memo, event: Event) {
+  event.stopPropagation()
+  if (memo.repeat === 'daily') {
+    checkInMemo(memo.id, !isMemoDoneToday(memo))
+    return
+  }
+  handleCompleteMemo(memo, event)
+}
 
 function handleCompleteMemo(memo: Memo, event: Event) {
   event.stopPropagation()
@@ -268,6 +280,7 @@ function handleItemClick(memo: Memo) {
       class="memo-item"
       :class="{
         'is-pinned': memo.isPinned,
+        'is-done-today': isMemoDoneToday(memo),
         'is-completing': completingId === memo.id,
         'is-dragging': draggingId === memo.id,
         'drop-before': dropTarget?.id === memo.id && !dropTarget.after,
@@ -280,8 +293,9 @@ function handleItemClick(memo: Memo) {
       <div class="memo-item-header">
         <button
           class="memo-check-btn"
-          @click="(e) => handleCompleteMemo(memo, e)"
-          title="做完了，收起来"
+          :class="{ 'is-checked': isMemoDoneToday(memo) }"
+          @click="(e) => handleCheckMemo(memo, e)"
+          :title="isMemoDoneToday(memo) ? '取消今天的打卡' : memo.repeat === 'daily' ? '今天做完了，打个卡' : '做完了，收起来'"
         >
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4">
             <polyline points="4 12 9 17 20 6"/>
@@ -319,6 +333,12 @@ function handleItemClick(memo: Memo) {
         </div>
       </div>
       <div class="memo-item-meta">
+        <span v-if="memo.repeat === 'daily'" class="daily-badge" title="每天都要做，勾选是打卡">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 2l4 4-4 4" /><path d="M3 11v-1a4 4 0 0 1 4-4h14" /><path d="M7 22l-4-4 4-4" /><path d="M21 13v1a4 4 0 0 1-4 4H3" />
+          </svg>
+          每天
+        </span>
         <MemoCategoryTag :category-id="memo.categoryId" />
         <span class="memo-item-stats">{{ memoStatsLabels[memo.id] }}</span>
         <span class="memo-item-time">{{ formatTime(memo.updatedAt) }}</span>
@@ -504,6 +524,35 @@ function handleItemClick(memo: Memo) {
   border-color: color-mix(in srgb, var(--focus-color) 60%, transparent);
   background: color-mix(in srgb, var(--focus-color) 12%, transparent);
   color: color-mix(in srgb, var(--focus-color) 80%, transparent);
+}
+
+/* 重复小记今天已打卡：勾选点亮，标题划线，整卡变淡 */
+.memo-check-btn.is-checked {
+  border-color: var(--focus-color);
+  background: var(--focus-color);
+  color: rgba(0, 0, 0, 0.55);
+}
+
+.memo-item.is-done-today .memo-item-title {
+  text-decoration: line-through;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.memo-item.is-done-today {
+  opacity: 0.62;
+}
+
+.daily-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 9px;
+  line-height: 1.4;
+  color: color-mix(in srgb, var(--focus-color) 80%, transparent);
+  background: color-mix(in srgb, var(--focus-color) 16%, transparent);
 }
 
 .memo-item.is-completing {

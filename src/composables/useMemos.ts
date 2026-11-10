@@ -183,7 +183,7 @@ export function useMemos() {
     return memo
   }
 
-  function updateMemo(id: string, patch: Partial<Pick<Memo, 'title' | 'content' | 'categoryId' | 'isPinned' | 'estimatedPomodoros'>>) {
+  function updateMemo(id: string, patch: Partial<Pick<Memo, 'title' | 'content' | 'categoryId' | 'isPinned' | 'estimatedPomodoros' | 'repeat'>>) {
     const memo = memos.value.find(m => m.id === id)
     if (!memo) return
     Object.assign(memo, patch)

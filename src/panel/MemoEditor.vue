@@ -16,7 +16,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  update: [patch: Partial<Pick<Memo, 'title' | 'content' | 'categoryId' | 'isPinned' | 'estimatedPomodoros'>>]
+  update: [patch: Partial<Pick<Memo, 'title' | 'content' | 'categoryId' | 'isPinned' | 'estimatedPomodoros' | 'repeat'>>]
   delete: []
   back: [isEmpty: boolean]
 }>()
@@ -27,6 +27,7 @@ const localContent = ref(props.memo.content)
 const localCategoryId = ref(props.memo.categoryId)
 const localIsPinned = ref(props.memo.isPinned)
 const localEstimatedPomodoros = ref(props.memo.estimatedPomodoros ?? 0)
+const localRepeat = ref(props.memo.repeat === 'daily')
 const rewriting = ref(false)
 const rewriteError = ref('')
 const rewriteErrorExpanded = ref(false)
@@ -45,6 +46,7 @@ const { schedule: scheduleSave, saveNow } = useMemoAutoSave({
     categoryId: localCategoryId.value,
     isPinned: localIsPinned.value,
     estimatedPomodoros: localEstimatedPomodoros.value,
+    repeat: localRepeat.value ? 'daily' : null,
   }),
   commit: patch => emit('update', patch),
 })
@@ -75,6 +77,7 @@ watch(() => props.memo, (newMemo) => {
   localCategoryId.value = newMemo.categoryId
   localIsPinned.value = newMemo.isPinned
   localEstimatedPomodoros.value = newMemo.estimatedPomodoros ?? 0
+  localRepeat.value = newMemo.repeat === 'daily'
 }, { deep: true })
 
 // Category change
@@ -91,6 +94,12 @@ function adjustEstimate(delta: number) {
 // Pin toggle
 function togglePin() {
   localIsPinned.value = !localIsPinned.value
+  scheduleSave()
+}
+
+// 每天重复开关：开启后勾选是打卡，次日自动回来；关闭恢复普通勾选归档
+function toggleRepeat() {
+  localRepeat.value = !localRepeat.value
   scheduleSave()
 }
 
@@ -513,6 +522,17 @@ function formatUpdateTime(timestamp: number): string {
         <button class="estimate-btn" @click="adjustEstimate(1)">+</button>
         <span class="estimate-label">番茄</span>
       </div>
+      <button
+        class="daily-toggle"
+        :class="{ active: localRepeat }"
+        @click="toggleRepeat"
+        :title="localRepeat ? '每天都要做：已开启，勾选是打卡，次日自动回来' : '每天都要做：开启后勾选是打卡，不归档'"
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M17 2l4 4-4 4" /><path d="M3 11v-1a4 4 0 0 1 4-4h14" /><path d="M7 22l-4-4 4-4" /><path d="M21 13v1a4 4 0 0 1-4 4H3" />
+        </svg>
+        <span>每天</span>
+      </button>
     </div>
 
     <!-- Rich Text Toolbar -->

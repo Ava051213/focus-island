@@ -1,7 +1,7 @@
 import { onBeforeUnmount, ref } from 'vue'
 import type { Memo } from './useMemos'
 
-export type MemoPatch = Partial<Pick<Memo, 'title' | 'content' | 'categoryId' | 'isPinned' | 'estimatedPomodoros'>>
+export type MemoPatch = Partial<Pick<Memo, 'title' | 'content' | 'categoryId' | 'isPinned' | 'estimatedPomodoros' | 'repeat'>>
 
 /** 停手 10 秒才真正落库，减少编辑时的列表抖动 */
 const SAVE_DEBOUNCE_MS = 10000
