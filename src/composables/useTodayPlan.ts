@@ -2,7 +2,7 @@ import { computed, ref, watch } from 'vue'
 import { createPersistedStore } from './persistence'
 import { useAi } from './useAi'
 import { eventsNow, useEvents } from './useEvents'
-import { useMemos } from './useMemos'
+import { useMemos, isMemoDoneToday } from './useMemos'
 import { useTronTodos, todoRemainingLabel } from './useTronTodos'
 import { useSettings } from './useSettings'
 import { useDailyStats } from './useDailyStats'
@@ -67,8 +67,10 @@ async function regeneratePlan(feedback: CoachFeedback = {}): Promise<void> {
       : []
 
     // 1. 规则引擎排完整骨架：待办在前，顺延居中，小记按 置顶/放置天数/动量 打分
+    // 今天已打卡的重复小记不进候选：今天做完了，别再占安排的坑
+    const planCandidates = activeMemos.value.filter(memo => !isMemoDoneToday(memo))
     let entries = buildRulesPlan(
-      activeMemos.value.map(memo => ({
+      planCandidates.map(memo => ({
         id: memo.id,
         title: memo.title,
         isPinned: memo.isPinned,
@@ -164,7 +166,27 @@ async function ensureTodayPlan(): Promise<void> {
   await regeneratePlan()
 }
 
-/** 勾掉/取消一条，只改这份安排，不动小记与待办本身 */
+/**
+ * 重复小记的打卡与今日安排保持一致：勾小记连带勾条目，勾条目连带打卡。
+ * 普通小记不受影响（维持「勾选不动小记」的约定）。
+ */
+function syncMemoCheckIn(memoId: string, done: boolean): void {
+  const { memos, checkInToday, uncheckIn } = useMemos()
+  const memo = memos.value.find(item => item.id === memoId)
+  if (!memo || memo.repeat !== 'daily') return
+  if (done) checkInToday(memoId)
+  else uncheckIn(memoId)
+
+  const current = plan.value
+  if (!current) return
+  const entry = current.entries.find(item => item.source === 'memo' && item.refId === memoId)
+  if (!entry || entry.done === done) return
+  entry.done = done
+  entry.doneAt = done ? Date.now() : null
+  current.updatedAt = Date.now()
+}
+
+/** 勾掉/取消一条：普通条目只改安排；重复小记的条目连带打卡/取消 */
 function toggleEntryDone(id: string): void {
   const current = plan.value
   if (!current) return
@@ -173,6 +195,7 @@ function toggleEntryDone(id: string): void {
   entry.done = !entry.done
   entry.doneAt = entry.done ? Date.now() : null
   current.updatedAt = Date.now()
+  if (entry.source === 'memo') syncMemoCheckIn(entry.refId, entry.done)
 }
 
 /** 这条今天先不算了，从安排里移除 */
@@ -212,6 +235,8 @@ function advanceEntry(memoId: string): void {
   if (entry.donePomodoros >= entry.pomodoros) {
     entry.done = true
     entry.doneAt = Date.now()
+    // 重复小记的条目跑满额自动勾掉时，今天的打卡一并记上
+    syncMemoCheckIn(memoId, true)
   }
   current.updatedAt = Date.now()
 }
@@ -284,6 +309,8 @@ export function useTodayPlan() {
     removeEntry,
     moveEntry,
     advanceEntry,
+    /** 小记卡片打卡/取消用：同步安排条目，普通小记是空操作 */
+    checkInMemo: syncMemoCheckIn,
   }
 }
 
