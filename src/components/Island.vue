@@ -54,6 +54,9 @@ const capsuleWidth = computed(() => BASE_WIDTH * (settings.value.islandScale ?? 
 const capsuleHeight = computed(() => BASE_HEIGHT * (settings.value.islandScale ?? 1));
 const capsuleRadius = computed(() => capsuleHeight.value / 2);
 
+// 岛贴底边时内容朝屏幕内侧长：通知横幅翻到岛上方，挤压动画原点也翻到底部
+const bannerFlipped = computed(() => settings.value.islandEdge === "bottom");
+
 const progressScale = computed(() => {
     if (state.value === "idle" || state.value === "alert") return 0;
     const v = timer.progress.value;
@@ -90,6 +93,7 @@ onUnmounted(() => {
 <template>
     <div
         class="island-container w-full h-full flex items-start justify-center"
+        :class="{ 'flip-inner': bannerFlipped }"
     >
         <div class="island-stack">
             <div
@@ -179,6 +183,19 @@ onUnmounted(() => {
 <style scoped>
 .island-container {
     /* items-start justify-center to stick to top edge */
+}
+
+/* 贴底边时整组内容沉到窗口底部，横幅出现在岛上方 */
+.island-container.flip-inner {
+    align-items: flex-end;
+}
+
+.island-container.flip-inner .island-stack {
+    flex-direction: column-reverse;
+}
+
+.island-container.flip-inner .capsule-motion {
+    transform-origin: center bottom;
 }
 
 .island-stack {

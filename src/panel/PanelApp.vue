@@ -157,6 +157,9 @@ function applyTransitionVars(metrics: PanelTransitionMetrics) {
   const fromRadius = `${Math.max(12, Math.round(metrics.island_height / 2))}px`
   const topLift = `${Math.round(clamp(metrics.island_height * 0.24, 8, 14))}px`
 
+  // 面板在岛上方（岛贴底边）时从底边长出：原点翻到底部，起手的上抬也反向
+  const opensUpward = panelCenterY < islandCenterY
+
   root.style.setProperty('--panel-from-x', `${translateX.toFixed(2)}px`)
   root.style.setProperty('--panel-from-y', `${translateY.toFixed(2)}px`)
   root.style.setProperty('--panel-from-sx', scaleX.toFixed(4))
@@ -164,6 +167,8 @@ function applyTransitionVars(metrics: PanelTransitionMetrics) {
   root.style.setProperty('--panel-from-radius', fromRadius)
   root.style.setProperty('--panel-close-arc', `${closeArc.toFixed(2)}px`)
   root.style.setProperty('--panel-top-lift', topLift)
+  root.style.setProperty('--panel-origin-y', opensUpward ? '100%' : '0%')
+  root.style.setProperty('--panel-lift-sign', opensUpward ? '1' : '-1')
 }
 
 async function prepareTransitionVars() {
@@ -480,7 +485,7 @@ async function closeWindow() {
   overflow: hidden;
   color: #e8e8ea;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  transform-origin: 50% 0;
+  transform-origin: 50% var(--panel-origin-y, 0%);
   contain: layout paint;
   backface-visibility: hidden;
   clip-path: inset(0 round 12px);
@@ -494,6 +499,8 @@ async function closeWindow() {
   --panel-from-radius: 24px;
   --panel-close-arc: -20px;
   --panel-top-lift: 10px;
+  --panel-origin-y: 0%;
+  --panel-lift-sign: -1;
 }
 
 .panel-sheen,
@@ -542,7 +549,7 @@ async function closeWindow() {
 .motion-opening-ready {
   opacity: 0.92;
   border-radius: var(--panel-from-radius);
-  transform: translate3d(var(--panel-from-x), calc(var(--panel-from-y) - var(--panel-top-lift)), 0)
+  transform: translate3d(var(--panel-from-x), calc(var(--panel-from-y) + var(--panel-lift-sign) * var(--panel-top-lift)), 0)
     scale(var(--panel-from-sx), var(--panel-from-sy));
   pointer-events: none;
 }
@@ -574,7 +581,7 @@ async function closeWindow() {
   0% {
     opacity: 0.92;
     border-radius: var(--panel-from-radius);
-    transform: translate3d(var(--panel-from-x), calc(var(--panel-from-y) - var(--panel-top-lift)), 0)
+    transform: translate3d(var(--panel-from-x), calc(var(--panel-from-y) + var(--panel-lift-sign) * var(--panel-top-lift)), 0)
       scale(var(--panel-from-sx), var(--panel-from-sy));
   }
 
@@ -617,7 +624,7 @@ async function closeWindow() {
   100% {
     opacity: 0.18;
     border-radius: var(--panel-from-radius);
-    transform: translate3d(var(--panel-from-x), calc(var(--panel-from-y) - var(--panel-top-lift)), 0)
+    transform: translate3d(var(--panel-from-x), calc(var(--panel-from-y) + var(--panel-lift-sign) * var(--panel-top-lift)), 0)
       scale(var(--panel-from-sx), var(--panel-from-sy));
   }
 }
