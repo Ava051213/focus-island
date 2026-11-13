@@ -67,7 +67,7 @@ export function pickBubbleLine(kind: BubbleKind, recent: readonly string[], rand
 
 /** 密度档位 → 撒娇泡泡的基础间隔（毫秒）；调用方在此基础上加随机抖动 */
 export const BUBBLE_TONE_MS: Record<'quiet' | 'normal' | 'lively', number> = {
-  quiet: 60 * 60 * 1000,
-  normal: 25 * 60 * 1000,
-  lively: 10 * 60 * 1000,
+  quiet: 30 * 60 * 1000,
+  normal: 12 * 60 * 1000,
+  lively: 5 * 60 * 1000,
 }

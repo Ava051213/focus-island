@@ -25,9 +25,9 @@ const displayModeOptions: Array<{ id: IslandDisplayMode; label: string; hint: st
 ]
 
 const toneOptions: Array<{ id: BubbleTone; label: string; hint: string }> = [
-  { id: 'quiet', label: '安静', hint: '大概一小时冒一句' },
-  { id: 'normal', label: '正常', hint: '二十来分钟一句' },
-  { id: 'lively', label: '勤快', hint: '十来分钟一句，很黏人' },
+  { id: 'quiet', label: '安静', hint: '半小时上下冒一句' },
+  { id: 'normal', label: '正常', hint: '十来分钟一句' },
+  { id: 'lively', label: '勤快', hint: '五分钟上下一句，很黏人' },
 ]
 
 function switchColorMode(mode: ColorMode) {
