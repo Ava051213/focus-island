@@ -26,6 +26,8 @@ export interface FloatingBubble {
   driftMs: number
   /** 整段弧线的水平偏移（px），正负随机决定弧的朝向 */
   arcX: number
+  /** 弧线的节奏：先横后竖 / 先竖后横 / 对称弧 */
+  arcEase: string
 }
 
 /** 同时最多几个泡泡在飘 */
@@ -190,7 +192,8 @@ function spawn(kind: BubbleKind, text?: string) {
       y: point.y,
       riseTo,
       driftMs,
-      arcX: (Math.random() * 2 - 1) * 90,
+      arcX: (Math.random() * 2 - 1) * 170,
+      arcEase: ['ease-out', 'ease-in', 'ease-in-out'][Math.floor(Math.random() * 3)],
     }
     bubbles.value.push(bubble)
     window.setTimeout(() => {

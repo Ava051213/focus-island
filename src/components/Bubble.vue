@@ -18,6 +18,7 @@ defineEmits<{ click: [] }>();
             '--rise-to': -bubble.riseTo + 'px',
             '--drift-ms': bubble.driftMs + 'ms',
             '--arc-x': bubble.arcX + 'px',
+            '--arc-ease': bubble.arcEase,
         }"
         @click.stop="$emit('click')"
     >
@@ -60,7 +61,7 @@ defineEmits<{ click: [] }>();
 }
 
 .bubble-arc {
-    animation: bubble-arc var(--drift-ms) ease-in-out forwards;
+    animation: bubble-arc var(--drift-ms) var(--arc-ease, ease-in-out) forwards;
     will-change: transform;
 }
 
