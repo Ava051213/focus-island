@@ -14,6 +14,7 @@ import { useDailyStats } from '../composables/useDailyStats'
 import { useAchievements } from '../composables/useAchievements'
 import { startAiButler } from '../composables/useAiButler'
 import { scheduleStartupCheck } from '../composables/useUpdateCheck'
+import { panelOpensUpward } from '../utils/panelTransition'
 import HomePage from './HomePage.vue'
 import EventsPage from './EventsPage.vue'
 import SettingsPage from './SettingsPage.vue'
@@ -158,7 +159,7 @@ function applyTransitionVars(metrics: PanelTransitionMetrics) {
   const topLift = `${Math.round(clamp(metrics.island_height * 0.24, 8, 14))}px`
 
   // 面板在岛上方（岛贴底边）时从底边长出：原点翻到底部，起手的上抬也反向
-  const opensUpward = panelCenterY < islandCenterY
+  const opensUpward = panelOpensUpward(islandCenterY, panelCenterY)
 
   root.style.setProperty('--panel-from-x', `${translateX.toFixed(2)}px`)
   root.style.setProperty('--panel-from-y', `${translateY.toFixed(2)}px`)

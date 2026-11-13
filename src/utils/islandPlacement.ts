@@ -125,3 +125,16 @@ export function snapToNearestEdge(
   const snapped = islandPositionForEdge(area, windowSize, edge, ratio)
   return { ...snapped, edge }
 }
+
+/** 停靠细条的窗口尺寸：贴顶/底是横条，贴左/右变竖条（scale 为缩放比例） */
+export function stripWindowSize(
+  edge: IslandEdge,
+  scale: number,
+  stripThickness: number,
+): { width: number; height: number } {
+  const vertical = edge === 'left' || edge === 'right'
+  return {
+    width: (vertical ? stripThickness : 360) * scale,
+    height: (vertical ? 360 : stripThickness) * scale,
+  }
+}

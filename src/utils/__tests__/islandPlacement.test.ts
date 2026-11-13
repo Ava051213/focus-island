@@ -7,6 +7,7 @@ import {
   nearestEdge,
   offsetAlongEdge,
   snapToNearestEdge,
+  stripWindowSize,
 } from '../islandPlacement'
 
 // 1920×1080 显示器、360×42 窗口（物理像素）
@@ -118,5 +119,22 @@ describe('clamp01', () => {
     expect(clamp01(1.5)).toBe(1)
     expect(clamp01(-0.2)).toBe(0)
     expect(clamp01(0.4)).toBe(0.4)
+  })
+})
+
+describe('stripWindowSize', () => {
+  it('贴顶/底是横条（360×14）', () => {
+    expect(stripWindowSize('top', 1, 14)).toEqual({ width: 360, height: 14 })
+    expect(stripWindowSize('bottom', 1, 14)).toEqual({ width: 360, height: 14 })
+  })
+
+  it('贴左/右变竖条（14×360）', () => {
+    expect(stripWindowSize('left', 1, 14)).toEqual({ width: 14, height: 360 })
+    expect(stripWindowSize('right', 1, 14)).toEqual({ width: 14, height: 360 })
+  })
+
+  it('跟随缩放比例', () => {
+    expect(stripWindowSize('top', 1.5, 14)).toEqual({ width: 540, height: 21 })
+    expect(stripWindowSize('right', 0.5, 14)).toEqual({ width: 7, height: 180 })
   })
 })

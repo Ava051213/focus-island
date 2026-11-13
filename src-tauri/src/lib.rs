@@ -162,6 +162,25 @@ fn island_position_for_edge(
 /// 闲置收起时沿边露出的细边宽度（物理像素）
 const PEEK_REVEAL_PX: i64 = 10;
 
+/// 闲置收起时往屏外滑的距离：窗口在垂直于边方向的长度减去露出的细边
+fn peek_outward(win_along: i64) -> i64 {
+    (win_along - PEEK_REVEAL_PX).max(0)
+}
+
+/// 满贴边位置往屏外方向再滑 outward 像素（沿边方向不动）
+fn shift_outward(x: i32, y: i32, edge: IslandEdge, outward: i64) -> (i32, i32) {
+    if outward <= 0 {
+        return (x, y);
+    }
+    let shift = outward.min(i64::from(i32::MAX)) as i32;
+    match edge {
+        IslandEdge::Top => (x, y - shift),
+        IslandEdge::Bottom => (x, y + shift),
+        IslandEdge::Left => (x - shift, y),
+        IslandEdge::Right => (x + shift, y),
+    }
+}
+
 /// 按 give 的贴边参数把主窗口摆到所在显示器的可用区域上；
 /// outward > 0 时往屏外方向再滑这么多像素（闲置收起用）。
 fn apply_island_place<R: Runtime>(app: &AppHandle<R>, place: IslandPlace, outward: i64) {
@@ -183,21 +202,13 @@ fn apply_island_place<R: Runtime>(app: &AppHandle<R>, place: IslandPlace, outwar
         })
     });
     let Some(area) = area else { return };
-    let (mut x, mut y) = island_position_for_edge(
+    let (x, y) = island_position_for_edge(
         area,
         (size.width as i64, size.height as i64),
         place.edge,
         place.ratio,
     );
-    if outward > 0 {
-        let shift = outward.min(i64::from(i32::MAX)) as i32;
-        match place.edge {
-            IslandEdge::Top => y -= shift,
-            IslandEdge::Bottom => y += shift,
-            IslandEdge::Left => x -= shift,
-            IslandEdge::Right => x += shift,
-        }
-    }
+    let (x, y) = shift_outward(x, y, place.edge, outward);
     let _ = main.set_position(tauri::PhysicalPosition::new(x, y));
 }
 
@@ -226,7 +237,7 @@ fn peek_island<R: Runtime>(app: AppHandle<R>, retract: bool) {
             IslandEdge::Top | IslandEdge::Bottom => size.height as i64,
             IslandEdge::Left | IslandEdge::Right => size.width as i64,
         };
-        (along - PEEK_REVEAL_PX).max(0)
+        peek_outward(along)
     } else {
         0
     };
@@ -1050,5 +1061,29 @@ mod tests {
         assert_eq!(IslandEdge::parse("left"), Some(IslandEdge::Left));
         assert_eq!(IslandEdge::parse("right"), Some(IslandEdge::Right));
         assert_eq!(IslandEdge::parse("center"), None);
+    }
+}
+
+#[cfg(test)]
+mod peek_tests {
+    use super::*;
+
+    #[test]
+    fn peek_outward_leaves_a_sliver() {
+        // 42 高的窗口收起时滑出 32、露出 10
+        assert_eq!(peek_outward(42), 32);
+        assert_eq!(peek_outward(14), 4);
+        // 窗口比露出宽度还小就原地不动
+        assert_eq!(peek_outward(8), 0);
+    }
+
+    #[test]
+    fn shift_outward_slides_away_from_screen() {
+        assert_eq!(shift_outward(780, 0, IslandEdge::Top, 32), (780, -32));
+        assert_eq!(shift_outward(780, 1038, IslandEdge::Bottom, 32), (780, 1070));
+        assert_eq!(shift_outward(0, 519, IslandEdge::Left, 32), (-32, 519));
+        assert_eq!(shift_outward(1560, 519, IslandEdge::Right, 32), (1592, 519));
+        // 0 表示不外滑
+        assert_eq!(shift_outward(780, 0, IslandEdge::Top, 0), (780, 0));
     }
 }
