@@ -24,19 +24,14 @@ export interface FloatingBubble {
   /** 向上飘的距离（px）：空间够就飘到对侧边缘，岛贴顶时飘进屏幕中途淡出 */
   riseTo: number
   driftMs: number
-  /** 双频正弦横摆的两组幅度/相位（非整数频率比，轨迹永不重复） */
-  swayA1: number
-  swayA2: number
-  phase1: number
-  phase2: number
-  /** 旋转晃动的相位 */
-  wobblePhase: number
+  /** 整段弧线的水平偏移（px），正负随机决定弧的朝向 */
+  arcX: number
 }
 
 /** 同时最多几个泡泡在飘 */
 const MAX_CONCURRENT = 3
-/** 漂移时长（毫秒）与移除余量 */
-const DRIFT_MS = 7800
+/** 漂移时长基准（毫秒）与移除余量 */
+const DRIFT_MS = 9500
 const REMOVE_SLACK_MS = 150
 /** 无泡泡后多久隐藏 overlay */
 const HIDE_GRACE_MS = 3000
@@ -182,7 +177,7 @@ function spawn(kind: BubbleKind, text?: string) {
     const line = text ?? pickBubbleLine(kind, recentLines)
     recentLines = [line, ...recentLines].slice(0, 6)
     lastBubbleAt = Date.now()
-    const driftMs = DRIFT_MS + Math.random() * 1200
+    const driftMs = DRIFT_MS + Math.random() * 2500
     // 永远向上飘：空间够就一路飘出屏幕顶；岛贴顶时上方空间太小，
     // 改为向屏幕内部飘约 38% 高度后中途淡出，别刚出生就撞顶消失
     const availableUp = point.y + 90
@@ -195,11 +190,7 @@ function spawn(kind: BubbleKind, text?: string) {
       y: point.y,
       riseTo,
       driftMs,
-      swayA1: 38 + Math.random() * 28,
-      swayA2: 12 + Math.random() * 14,
-      phase1: Math.random() * driftMs,
-      phase2: Math.random() * driftMs,
-      wobblePhase: Math.random() * 2700,
+      arcX: (Math.random() * 2 - 1) * 90,
     }
     bubbles.value.push(bubble)
     window.setTimeout(() => {

@@ -17,28 +17,22 @@ defineEmits<{ click: [] }>();
             top: bubble.y + 'px',
             '--rise-to': -bubble.riseTo + 'px',
             '--drift-ms': bubble.driftMs + 'ms',
-            '--sway-a1': bubble.swayA1 + 'px',
-            '--sway-a2': bubble.swayA2 + 'px',
-            '--phase1': -bubble.phase1 + 'ms',
-            '--phase2': -bubble.phase2 + 'ms',
-            '--wobble-phase': -bubble.wobblePhase + 'ms',
+            '--arc-x': bubble.arcX + 'px',
         }"
         @click.stop="$emit('click')"
     >
-        <div class="bubble-sway1">
-            <div class="bubble-sway2">
-                <div class="bubble-float">
-                    <span class="bubble-shine"></span>
-                    <div class="bubble-inner">{{ bubble.text }}</div>
-                </div>
+        <div class="bubble-arc">
+            <div class="bubble-float">
+                <span class="bubble-shine"></span>
+                <div class="bubble-inner">{{ bubble.text }}</div>
             </div>
         </div>
     </div>
 </template>
 
 <style scoped>
-/* 轨迹 = 匀速上飘 ⊕ 两个非整数频率比的正弦横摆 ⊕ 轻微旋转晃动。
-   每层各自平滑、相位随机，叠加出来是一条处处连续、永不重复的利萨如路线。 */
+/* 运动只有两笔：匀速直线上升 + 一条缓慢的弧形偏移。
+   没有转折、没有旋转、没有颤动——气泡是刚体，轻盈 = 干净利落。 */
 .bubble-drift {
     position: absolute;
     animation: bubble-rise var(--drift-ms) linear forwards;
@@ -48,16 +42,15 @@ defineEmits<{ click: [] }>();
 @keyframes bubble-rise {
     0% {
         opacity: 0;
-        transform: translateY(0) scale(0.7);
+        transform: translateY(0) scale(0.88);
     }
 
-    9% {
-        opacity: 0.96;
-        transform: translateY(calc(var(--rise-to) * 0.02)) scale(1);
+    8% {
+        opacity: 0.97;
     }
 
-    86% {
-        opacity: 0.96;
+    84% {
+        opacity: 0.97;
     }
 
     100% {
@@ -66,80 +59,24 @@ defineEmits<{ click: [] }>();
     }
 }
 
-/* 主摆：整个漂移期一个周期 */
-.bubble-sway1 {
-    animation: bubble-sway var(--drift-ms) ease-in-out infinite;
-    animation-delay: var(--phase1);
+.bubble-arc {
+    animation: bubble-arc var(--drift-ms) ease-in-out forwards;
     will-change: transform;
 }
 
-/* 次摆：频率是非整数比（×0.37），叠加出永不循环的 wandering */
-.bubble-sway2 {
-    animation: bubble-sway calc(var(--drift-ms) * 0.37) ease-in-out infinite;
-    animation-delay: var(--phase2);
-    will-change: transform;
-}
-
-@keyframes bubble-sway {
-    0% {
-        transform: translateX(0);
-    }
-
-    12.5% {
-        transform: translateX(var(--amp, var(--sway-a1)));
-    }
-
-    25% {
-        transform: translateX(0);
-    }
-
-    37.5% {
-        transform: translateX(calc(var(--amp, var(--sway-a1)) * -1));
-    }
-
-    50% {
-        transform: translateX(0);
-    }
-
-    62.5% {
-        transform: translateX(var(--amp, var(--sway-a1)));
-    }
-
-    75% {
-        transform: translateX(0);
-    }
-
-    87.5% {
-        transform: translateX(calc(var(--amp, var(--sway-a1)) * -1));
-    }
-
-    100% {
-        transform: translateX(0);
-    }
-}
-
-.bubble-sway1 .bubble-sway2 {
-    --amp: var(--sway-a2);
-}
-
-/* 轻微的旋转+上下晃动：真泡泡在空气里会这样颤 */
-.bubble-float {
-    position: relative;
-    animation: bubble-wobble 3.4s ease-in-out infinite alternate;
-    animation-delay: var(--wobble-phase);
-}
-
-@keyframes bubble-wobble {
+/* 一整段弧：只朝一个方向缓慢偏移，中段最快、两端最慢 */
+@keyframes bubble-arc {
     from {
-        transform: translateY(-5px) rotate(-1.4deg);
+        transform: translateX(0);
     }
 
     to {
-        transform: translateY(5px) rotate(1.4deg);
+        transform: translateX(var(--arc-x));
     }
 }
 
 .bubble-float {
+    position: relative;
     max-width: 420px;
     white-space: nowrap;
     padding: 7px 16px;
@@ -176,9 +113,5 @@ defineEmits<{ click: [] }>();
     background: radial-gradient(rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0));
     transform: rotate(-24deg);
     pointer-events: none;
-}
-
-.bubble-inner {
-    position: relative;
 }
 </style>
