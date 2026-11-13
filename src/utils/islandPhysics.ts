@@ -52,17 +52,17 @@ export interface PhysicsParams {
 
 /** 手感参数集中处；要调弹跳的「弹性」改这里 */
 export const PHYSICS: PhysicsParams = {
-  gravity: 2600,
-  floorRestitution: 0.55,
-  ceilingRestitution: 0.5,
-  wallRestitution: 0.7,
-  floorFriction: 0.85,
-  rollFriction: 700,
-  settleSpeed: 90,
-  settleSpeedX: 60,
+  gravity: 2800,
+  floorRestitution: 0.72,
+  ceilingRestitution: 0.72,
+  wallRestitution: 0.88,
+  floorFriction: 0.92,
+  rollFriction: 380,
+  settleSpeed: 55,
+  settleSpeedX: 30,
   settleGap: 2,
   maxStep: 1 / 120,
-  maxDuration: 3,
+  maxDuration: 5.5,
 }
 
 /** 甩出判定的手感参数（物理 px/s） */
@@ -75,7 +75,7 @@ export const FLING = {
   sampleMs: 100,
 }
 
-export type PhysicsImpact = 'floor' | 'ceiling' | 'wall' | null
+export type PhysicsImpact = 'floor' | 'ceiling' | 'wall-left' | 'wall-right' | null
 
 export interface PhysicsStepResult {
   state: PhysicsState
@@ -95,12 +95,12 @@ function bounceOffWalls(
   if (state.x < bounds.left) {
     state.x = bounds.left
     state.vx = Math.abs(state.vx) * params.wallRestitution
-    return 'wall'
+    return 'wall-left'
   }
   if (state.x > maxX) {
     state.x = maxX
     state.vx = -Math.abs(state.vx) * params.wallRestitution
-    return 'wall'
+    return 'wall-right'
   }
   return null
 }

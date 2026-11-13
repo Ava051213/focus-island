@@ -15,7 +15,7 @@ function simulate(state: PhysicsState, dt = 1 / 60) {
   while (!settled && elapsed < PHYSICS.maxDuration) {
     const r = stepPhysics(state, BOUNDS, WIN, dt)
     if (r.impact === 'floor') floorHits += 1
-    if (r.impact === 'wall') wallHits += 1
+    if (r.impact === 'wall-left' || r.impact === 'wall-right') wallHits += 1
     settled = r.settled
     elapsed += dt
   }
@@ -106,9 +106,9 @@ describe('stepPhysics · 墙壁与顶边', () => {
     expect(r.settled).toBe(true)
     expect(s.vx).toBe(0)
     expect(s.y).toBe(FLOOR_Y)
-    // 摩擦滑行距离有限（800² / (2·700) ≈ 457px）
-    expect(s.x).toBeGreaterThan(500)
-    expect(s.x).toBeLessThan(1050)
+    // 摩擦滑行距离有限（800² / (2·380) ≈ 842px）
+    expect(s.x).toBeGreaterThan(1000)
+    expect(s.x).toBeLessThan(1500)
   })
 })
 
