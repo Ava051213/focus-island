@@ -8,7 +8,6 @@ import {
   edgeRatioForPosition,
   nearestEdge,
   snapToNearestEdge,
-  stripWindowSize,
   type PlacementArea,
 } from '../utils/islandPlacement'
 import type { NotificationType } from './useTimer'
@@ -346,7 +345,7 @@ export function useIslandInteraction(options: IslandInteractionOptions) {
       const area: PlacementArea = { left: screen.left, top: screen.top, width: screen.width, height: screen.height }
       // 只贴边不悬空：松手必落在最近的一条边上
       const edge = nearestEdge(area, { width: windowWidth, height: windowHeight }, currentWindowX, currentWindowY)
-      const ratio = edgeRatioForPosition(area, { width: windowWidth, height: windowHeight }, edge, currentWindowX, currentWindowY)
+      const ratio = edgeRatioForPosition(area, { width: windowWidth, height: windowHeight }, edge, currentWindowX)
       settings.value.islandEdge = edge
       settings.value.islandEdgeRatio = ratio
     }
@@ -364,9 +363,11 @@ export function useIslandInteraction(options: IslandInteractionOptions) {
       const height = (BASE_HEIGHT + 6 + 60) * scale
       await invoke('set_island_custom_size', { width, height })
     } else if (showStrip.value) {
-      // 停靠细条：贴顶/底是横条，贴左/右变竖条，位置都跟着岛所在的边
-      const strip = stripWindowSize(settings.value.islandEdge, scale, DOCK_STRIP_WINDOW_H)
-      await invoke('set_island_custom_size', strip)
+      // 停靠细条（横条，位置跟着岛所在的边）
+      await invoke('set_island_custom_size', {
+        width: 360 * scale,
+        height: DOCK_STRIP_WINDOW_H * scale,
+      })
     } else {
       // 普通胶囊尺寸
       await invoke('set_island_size', { scale })

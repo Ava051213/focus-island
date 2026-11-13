@@ -57,13 +57,6 @@ const capsuleRadius = computed(() => capsuleHeight.value / 2);
 // 岛贴底边时内容朝屏幕内侧长：通知横幅翻到岛上方，挤压动画原点也翻到底部
 const bannerFlipped = computed(() => settings.value.islandEdge === "bottom");
 
-// 岛贴左右边时停靠细条竖起来
-const stripVertical = computed(
-    () =>
-        showStrip.value &&
-        (settings.value.islandEdge === "left" || settings.value.islandEdge === "right"),
-);
-
 const progressScale = computed(() => {
     if (state.value === "idle" || state.value === "alert") return 0;
     const v = timer.progress.value;
@@ -100,7 +93,7 @@ onUnmounted(() => {
 <template>
     <div
         class="island-container w-full h-full flex items-start justify-center"
-        :class="{ 'flip-inner': bannerFlipped, 'strip-vertical': stripVertical }"
+        :class="{ 'flip-inner': bannerFlipped }"
     >
         <div class="island-stack">
             <div
@@ -132,8 +125,8 @@ onUnmounted(() => {
                         '--ring-color': ringColor,
                         '--ring-opacity': timer.running.value ? 1 : 0.35,
                         '--island-scale': settings.islandScale ?? 1,
-                        width: (stripVertical ? DOCK_STRIP_WINDOW_H * (settings.islandScale ?? 1) : capsuleWidth) + 'px',
-                        height: (showStrip ? (stripVertical ? capsuleWidth : DOCK_STRIP_WINDOW_H * (settings.islandScale ?? 1)) : capsuleHeight) + 'px',
+                        width: capsuleWidth + 'px',
+                        height: (showStrip ? DOCK_STRIP_WINDOW_H * (settings.islandScale ?? 1) : capsuleHeight) + 'px',
                         borderRadius: (showStrip ? 4 : capsuleRadius) + 'px',
                     }"
                 >
@@ -142,7 +135,6 @@ onUnmounted(() => {
                         :progress="stripProgress"
                         :color="stripColor"
                         :scale="settings.islandScale ?? 1"
-                        :vertical="stripVertical"
                     />
                     <template v-else>
                         <CapsuleIdle
@@ -196,11 +188,6 @@ onUnmounted(() => {
 /* 贴底边时整组内容沉到窗口底部，横幅出现在岛上方 */
 .island-container.flip-inner {
     align-items: flex-end;
-}
-
-/* 竖条在窗口里垂直居中（窗口比条长，上下各留悬停余量） */
-.island-container.strip-vertical {
-    align-items: center;
 }
 
 .island-container.flip-inner .island-stack {

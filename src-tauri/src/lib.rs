@@ -86,13 +86,11 @@ impl ShortcutBindings {
 static LAST_PANEL_SIZE: OnceLock<Mutex<Option<tauri::PhysicalSize<u32>>>> = OnceLock::new();
 static LAST_ISLAND_PLACE: OnceLock<Mutex<Option<IslandPlace>>> = OnceLock::new();
 
-/// 岛贴哪条边；只贴边不悬空。
+/// 岛贴哪条边；只贴顶/底，不悬空、不贴左右侧。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum IslandEdge {
     Top,
     Bottom,
-    Left,
-    Right,
 }
 
 impl IslandEdge {
@@ -100,8 +98,6 @@ impl IslandEdge {
         match value {
             "top" => Some(Self::Top),
             "bottom" => Some(Self::Bottom),
-            "left" => Some(Self::Left),
-            "right" => Some(Self::Right),
             _ => None,
         }
     }
@@ -137,24 +133,11 @@ fn island_position_for_edge(
 ) -> (i32, i32) {
     let (area_x, area_y, area_w, area_h) = area;
     let (win_w, win_h) = win;
-    let (x, y) = match edge {
-        IslandEdge::Top => (
-            area_x + offset_along_edge(area_w, win_w, ratio) as i64,
-            area_y,
-        ),
-        // 窗口比区域还大时钳回区域起点，别探出屏幕外
-        IslandEdge::Bottom => (
-            area_x + offset_along_edge(area_w, win_w, ratio) as i64,
-            (area_y + area_h - win_h).max(area_y),
-        ),
-        IslandEdge::Left => (
-            area_x,
-            area_y + offset_along_edge(area_h, win_h, ratio) as i64,
-        ),
-        IslandEdge::Right => (
-            (area_x + area_w - win_w).max(area_x),
-            area_y + offset_along_edge(area_h, win_h, ratio) as i64,
-        ),
+    let x = area_x + offset_along_edge(area_w, win_w, ratio) as i64;
+    // 贴底且窗口比区域还高时钳回区域起点，别探出屏幕外
+    let y = match edge {
+        IslandEdge::Top => area_y,
+        IslandEdge::Bottom => (area_y + area_h - win_h).max(area_y),
     };
     (x as i32, y as i32)
 }
@@ -176,8 +159,6 @@ fn shift_outward(x: i32, y: i32, edge: IslandEdge, outward: i64) -> (i32, i32) {
     match edge {
         IslandEdge::Top => (x, y - shift),
         IslandEdge::Bottom => (x, y + shift),
-        IslandEdge::Left => (x - shift, y),
-        IslandEdge::Right => (x + shift, y),
     }
 }
 
@@ -232,15 +213,8 @@ fn peek_island<R: Runtime>(app: AppHandle<R>, retract: bool) {
     let Some(main) = app.get_webview_window("main") else { return };
     let Ok(size) = main.outer_size() else { return };
     let place = get_last_island_place();
-    let outward = if retract {
-        let along = match place.edge {
-            IslandEdge::Top | IslandEdge::Bottom => size.height as i64,
-            IslandEdge::Left | IslandEdge::Right => size.width as i64,
-        };
-        peek_outward(along)
-    } else {
-        0
-    };
+    // 上下贴边时外滑距离都按窗口高度算
+    let outward = if retract { peek_outward(size.height as i64) } else { 0 };
     apply_island_place(&app, place, outward);
 }
 
@@ -995,16 +969,10 @@ mod tests {
     }
 
     #[test]
-    fn side_edges_slide_vertically() {
-        assert_eq!(island_position_for_edge(AREA, WIN, IslandEdge::Left, None), (0, 519));
-        assert_eq!(island_position_for_edge(AREA, WIN, IslandEdge::Left, Some(0.5)), (0, 519));
-        assert_eq!(island_position_for_edge(AREA, WIN, IslandEdge::Right, Some(0.25)), (1560, 260));
-    }
-
-    #[test]
     fn window_bigger_than_area_parks_at_origin() {
+        // 窗口比区域还高/宽时钳回区域起点，别探出屏幕外
         assert_eq!(island_position_for_edge(AREA, (3000, 1500), IslandEdge::Bottom, Some(0.8)), (0, 0));
-        assert_eq!(island_position_for_edge(AREA, (3000, 1500), IslandEdge::Right, None), (0, 0));
+        assert_eq!(island_position_for_edge(AREA, (3000, 1500), IslandEdge::Top, None), (0, 0));
     }
 
     #[test]
@@ -1058,8 +1026,9 @@ mod tests {
     fn island_edge_parses_known_directions() {
         assert_eq!(IslandEdge::parse("top"), Some(IslandEdge::Top));
         assert_eq!(IslandEdge::parse("bottom"), Some(IslandEdge::Bottom));
-        assert_eq!(IslandEdge::parse("left"), Some(IslandEdge::Left));
-        assert_eq!(IslandEdge::parse("right"), Some(IslandEdge::Right));
+        // 左右贴边已移除
+        assert_eq!(IslandEdge::parse("left"), None);
+        assert_eq!(IslandEdge::parse("right"), None);
         assert_eq!(IslandEdge::parse("center"), None);
     }
 }
@@ -1081,8 +1050,6 @@ mod peek_tests {
     fn shift_outward_slides_away_from_screen() {
         assert_eq!(shift_outward(780, 0, IslandEdge::Top, 32), (780, -32));
         assert_eq!(shift_outward(780, 1038, IslandEdge::Bottom, 32), (780, 1070));
-        assert_eq!(shift_outward(0, 519, IslandEdge::Left, 32), (-32, 519));
-        assert_eq!(shift_outward(1560, 519, IslandEdge::Right, 32), (1592, 519));
         // 0 表示不外滑
         assert_eq!(shift_outward(780, 0, IslandEdge::Top, 0), (780, 0));
     }

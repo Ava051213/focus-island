@@ -7,7 +7,6 @@ import {
   nearestEdge,
   offsetAlongEdge,
   snapToNearestEdge,
-  stripWindowSize,
 } from '../islandPlacement'
 
 // 1920×1080 显示器、360×42 窗口（物理像素）
@@ -39,29 +38,22 @@ describe('islandPositionForEdge', () => {
     expect(islandPositionForEdge(AREA, WIN, 'bottom', null)).toEqual({ x: 780, y: 1038 })
   })
 
-  it('贴左右沿垂直方向滑', () => {
-    expect(islandPositionForEdge(AREA, WIN, 'left', null)).toEqual({ x: 0, y: 519 })
-    expect(islandPositionForEdge(AREA, WIN, 'right', 0.25)).toEqual({ x: 1560, y: 260 })
-  })
-
   it('比例超界按 0~1 钳制', () => {
     expect(islandPositionForEdge(AREA, WIN, 'top', 1.5)).toEqual({ x: 1560, y: 0 })
     expect(islandPositionForEdge(AREA, WIN, 'top', -2)).toEqual({ x: 0, y: 0 })
   })
 
   it('窗口比区域还大时贴起点', () => {
-    expect(islandPositionForEdge(AREA, { width: 3000, height: 1500 }, 'right', null))
+    expect(islandPositionForEdge(AREA, { width: 3000, height: 1500 }, 'bottom', null))
       .toEqual({ x: 0, y: 0 })
   })
 })
 
 describe('edgeDistances / nearestEdge', () => {
-  it('算出到四条边的距离', () => {
+  it('算出到上下两条边的距离', () => {
     expect(edgeDistances(AREA, WIN, 100, 200)).toEqual({
       top: 200,
       bottom: 838,
-      left: 100,
-      right: 1460,
     })
   })
 
@@ -69,24 +61,25 @@ describe('edgeDistances / nearestEdge', () => {
     expect(nearestEdge(AREA, WIN, 100, 10)).toBe('top')
     // y 超过工作区底部（比如压到任务栏区），bottom 为负
     expect(nearestEdge(AREA, WIN, 100, 1100)).toBe('bottom')
-    expect(nearestEdge(AREA, WIN, 10, 500)).toBe('left')
-    expect(nearestEdge(AREA, WIN, 1900, 500)).toBe('right')
+    // 左右不再参与：x=10 时上下距离相同，按顶边处理
+    expect(nearestEdge(AREA, WIN, 10, 500)).toBe('top')
+    expect(nearestEdge(AREA, WIN, 1900, 900)).toBe('bottom')
   })
 })
 
 describe('edgeRatioForPosition', () => {
   it('按当前窗口位置反算沿边比例', () => {
-    expect(edgeRatioForPosition(AREA, WIN, 'top', 780, 0)).toBeCloseTo(0.5)
-    expect(edgeRatioForPosition(AREA, WIN, 'left', 0, 519)).toBeCloseTo(0.5)
+    expect(edgeRatioForPosition(AREA, WIN, 'top', 780)).toBeCloseTo(0.5)
+    expect(edgeRatioForPosition(AREA, WIN, 'bottom', 780)).toBeCloseTo(0.5)
   })
 
   it('钳进 0~1', () => {
-    expect(edgeRatioForPosition(AREA, WIN, 'top', -50, 0)).toBe(0)
-    expect(edgeRatioForPosition(AREA, WIN, 'top', 1900, 0)).toBe(1)
+    expect(edgeRatioForPosition(AREA, WIN, 'top', -50)).toBe(0)
+    expect(edgeRatioForPosition(AREA, WIN, 'top', 1900)).toBe(1)
   })
 
-  it('窗口比区域还大时返回 null', () => {
-    expect(edgeRatioForPosition(AREA, { width: 3000, height: 42 }, 'top', 0, 0)).toBeNull()
+  it('窗口比区域还宽时返回 null', () => {
+    expect(edgeRatioForPosition(AREA, { width: 3000, height: 42 }, 'top', 0)).toBeNull()
   })
 })
 
@@ -107,10 +100,10 @@ describe('snapToNearestEdge', () => {
     expect(snapped).toEqual({ x: 500, y: 1038, edge: 'bottom' })
   })
 
-  it('拐角处垂直于滑动方向的边优先接管', () => {
-    // x=1900 时窗口已越过右边 340px，最近边是 right 而不是 top
+  it('横向位置再偏也只在上下两条边里选', () => {
+    // x=1900 已越过右边界，但左右贴边已移除：按上下距离选
     const snapped = snapToNearestEdge(AREA, WIN, 1900, 8, 24)
-    expect(snapped).toEqual({ x: 1560, y: 8, edge: 'right' })
+    expect(snapped).toEqual({ x: 1560, y: 0, edge: 'top' })
   })
 })
 
@@ -119,22 +112,5 @@ describe('clamp01', () => {
     expect(clamp01(1.5)).toBe(1)
     expect(clamp01(-0.2)).toBe(0)
     expect(clamp01(0.4)).toBe(0.4)
-  })
-})
-
-describe('stripWindowSize', () => {
-  it('贴顶/底是横条（360×14）', () => {
-    expect(stripWindowSize('top', 1, 14)).toEqual({ width: 360, height: 14 })
-    expect(stripWindowSize('bottom', 1, 14)).toEqual({ width: 360, height: 14 })
-  })
-
-  it('贴左/右变竖条（14×360）', () => {
-    expect(stripWindowSize('left', 1, 14)).toEqual({ width: 14, height: 360 })
-    expect(stripWindowSize('right', 1, 14)).toEqual({ width: 14, height: 360 })
-  })
-
-  it('跟随缩放比例', () => {
-    expect(stripWindowSize('top', 1.5, 14)).toEqual({ width: 540, height: 21 })
-    expect(stripWindowSize('right', 0.5, 14)).toEqual({ width: 7, height: 180 })
   })
 })

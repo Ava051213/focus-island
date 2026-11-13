@@ -7,6 +7,7 @@ import {
   defaultTraySettings,
   migrateSettingsV1ToV2,
   migrateSettingsV2ToV3,
+  migrateSettingsV3ToV4,
   normalizeSettingsShape,
 } from '../settingsMigration'
 
@@ -119,5 +120,31 @@ describe('settings 迁移', () => {
     expect(result.migrated).toBe(true)
     expect(result.data.islandEdge).toBe('top')
     expect(result.data.islandEdgeRatio).toBeCloseTo(0.2)
+  })
+
+  it('v3 → v4：左右贴边落到底边', () => {
+    expect((migrateSettingsV3ToV4({ islandEdge: 'left' }) as Record<string, unknown>).islandEdge).toBe('bottom')
+    expect((migrateSettingsV3ToV4({ islandEdge: 'right' }) as Record<string, unknown>).islandEdge).toBe('bottom')
+  })
+
+  it('v3 → v4：顶/底贴边原样保留', () => {
+    expect((migrateSettingsV3ToV4({ islandEdge: 'top' }) as Record<string, unknown>).islandEdge).toBe('top')
+    expect((migrateSettingsV3ToV4({ islandEdge: 'bottom' }) as Record<string, unknown>).islandEdge).toBe('bottom')
+  })
+
+  it('v3 → v4：沿边比例跟着保留', () => {
+    const migrated = migrateSettingsV3ToV4({ islandEdge: 'left', islandEdgeRatio: 0.4 }) as Record<string, unknown>
+    expect(migrated.islandEdge).toBe('bottom')
+    expect(migrated.islandEdgeRatio).toBeCloseTo(0.4)
+  })
+
+  it('通过 migrations 链从 v3 升到 v4', () => {
+    const result = migrate<Record<string, unknown>>(
+      { schemaVersion: 3, data: { islandEdge: 'right', islandEdgeRatio: 0.6 } },
+      { currentVersion: 4, migrations: { 1: migrateSettingsV1ToV2, 2: migrateSettingsV2ToV3, 3: migrateSettingsV3ToV4 } },
+    )
+    expect(result.migrated).toBe(true)
+    expect(result.data.islandEdge).toBe('bottom')
+    expect(result.data.islandEdgeRatio).toBeCloseTo(0.6)
   })
 })

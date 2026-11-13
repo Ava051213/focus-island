@@ -5,7 +5,7 @@
  * 这里统一升级成嵌套结构，并把旧字段映射过去。
  * 迁移函数本身不改文件，由 persistence 的 migrate 入口调用。
  */
-import { clamp01, isIslandEdge } from './islandPlacement'
+import { clamp01 } from './islandPlacement'
 import { DEFAULT_TOGGLE_SHORTCUT, canonicalShortcut } from './shortcuts'
 
 export interface ShortcutSettings {
@@ -94,12 +94,15 @@ export function normalizeSettingsShape(raw: unknown): Record<string, unknown> {
       : false,
   }
 
-  // 贴边定位：岛只贴四边。旧字段 islandXRatio 映射成 top 边的沿边比例。
+  // 贴边定位：岛只贴顶/底边。旧字段 islandXRatio 映射成顶边的沿边比例。
   const legacyX = typeof record.islandXRatio === 'number' && Number.isFinite(record.islandXRatio)
     ? clamp01(record.islandXRatio)
     : null
   delete record.islandXRatio
-  record.islandEdge = isIslandEdge(record.islandEdge) ? record.islandEdge : 'top'
+  // 左右贴边已移除：历史数据落到底边（重力世界的自然落点），其余非法值回顶边
+  record.islandEdge = record.islandEdge === 'top' || record.islandEdge === 'bottom'
+    ? record.islandEdge
+    : (record.islandEdge === 'left' || record.islandEdge === 'right' ? 'bottom' : 'top')
   record.islandEdgeRatio = typeof record.islandEdgeRatio === 'number' && Number.isFinite(record.islandEdgeRatio)
     ? clamp01(record.islandEdgeRatio)
     : legacyX
@@ -115,5 +118,10 @@ export function migrateSettingsV1ToV2(data: unknown): unknown {
 
 /** schemaVersion 2 → 3：islandXRatio → islandEdge + islandEdgeRatio（贴边定位） */
 export function migrateSettingsV2ToV3(data: unknown): unknown {
+  return normalizeSettingsShape(data)
+}
+
+/** schemaVersion 3 → 4：左右贴边移除，历史数据落到底边 */
+export function migrateSettingsV3ToV4(data: unknown): unknown {
   return normalizeSettingsShape(data)
 }

@@ -7,6 +7,7 @@ import {
   defaultTraySettings,
   migrateSettingsV1ToV2,
   migrateSettingsV2ToV3,
+  migrateSettingsV3ToV4,
   normalizeSettingsShape,
   type NotificationSettings,
   type ShortcutSettings,
@@ -145,8 +146,8 @@ function applyThemeToDOM() {
 
 const store = createPersistedStore({
   file: 'settings.json',
-  schemaVersion: 3,
-  migrations: { 1: migrateSettingsV1ToV2, 2: migrateSettingsV2ToV3 },
+  schemaVersion: 4,
+  migrations: { 1: migrateSettingsV1ToV2, 2: migrateSettingsV2ToV3, 3: migrateSettingsV3ToV4 },
   snapshot: () => settings.value,
   restore: (data) => {
     if (!data || typeof data !== 'object') throw new Error('settings.json is not an object')

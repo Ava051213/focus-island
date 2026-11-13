@@ -5,23 +5,16 @@ const props = defineProps<{
   progress: number
   color: string
   scale: number
-  /** 竖条形态：岛贴左右边时进度从底往上长 */
-  vertical?: boolean
 }>()
 
-const fillSize = computed(() => `${Math.max(0, Math.min(1, props.progress)) * 100}%`)
-const thickness = computed(() => `${Math.max(2, 4 * props.scale)}px`)
+const fillWidth = computed(() => `${Math.max(0, Math.min(1, props.progress)) * 100}%`)
+const barHeight = computed(() => `${Math.max(2, 4 * props.scale)}px`)
 </script>
 
 <template>
-  <div class="dock-strip" :class="{ vertical }" :style="{ '--strip-color': color }">
-    <div class="track" :style="vertical ? { width: thickness } : { height: thickness }">
-      <div
-        class="fill"
-        :style="vertical
-          ? { height: fillSize, width: thickness, background: color }
-          : { width: fillSize, height: thickness, background: color }"
-      />
+  <div class="dock-strip" :style="{ '--strip-color': color }">
+    <div class="track" :style="{ height: barHeight }">
+      <div class="fill" :style="{ width: fillWidth, height: barHeight, background: color }" />
     </div>
   </div>
 </template>
@@ -44,15 +37,9 @@ const thickness = computed(() => `${Math.max(2, 4 * props.scale)}px`)
   align-items: stretch;
 }
 
-.dock-strip.vertical .track {
-  height: 80%;
-  flex-direction: column;
-  justify-content: flex-end;
-}
-
 .fill {
   border-radius: 999px;
-  transition: width 0.4s linear, height 0.4s linear, background 0.3s ease;
+  transition: width 0.4s linear, background 0.3s ease;
   min-width: 0;
 }
 </style>

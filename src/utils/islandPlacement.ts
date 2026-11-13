@@ -1,21 +1,19 @@
 /**
  * 岛的贴边定位纯逻辑。
  *
- * 定位哲学：岛永远挂在某条边上（top / bottom / left / right），不悬空。
- * - 贴顶 / 贴底：沿边左右滑，ratio 是水平方向的位置比例
- * - 贴左 / 贴右：沿边上下滑，ratio 是垂直方向的位置比例
- * - ratio 为 null 表示沿边居中
+ * 定位哲学：岛永远挂在顶边或底边，不悬空、不贴左右侧。
+ * - ratio 是沿边的水平滑动比例 0~1，null 表示沿边居中
  *
  * 这里只做计算，全部物理像素；真正摆窗口由 Rust 的 place_island 命令完成
  * （带 work-area 感知，Rust 侧有一份等价实现并以它为准）。
  */
 
-export type IslandEdge = 'top' | 'bottom' | 'left' | 'right'
+export type IslandEdge = 'top' | 'bottom'
 
-export const ISLAND_EDGES: IslandEdge[] = ['top', 'bottom', 'left', 'right']
+export const ISLAND_EDGES: IslandEdge[] = ['top', 'bottom']
 
 export function isIslandEdge(value: unknown): value is IslandEdge {
-  return value === 'top' || value === 'bottom' || value === 'left' || value === 'right'
+  return value === 'top' || value === 'bottom'
 }
 
 export function clamp01(value: number): number {
@@ -43,67 +41,49 @@ export function offsetAlongEdge(areaLength: number, windowLength: number, ratio:
   return Math.round(offset)
 }
 
-/** 按贴边语义算窗口左上角坐标 */
+/** 按贴边语义算窗口左上角坐标；贴底且窗口比区域还高时钳回区域起点 */
 export function islandPositionForEdge(
   area: PlacementArea,
   windowSize: WindowSize,
   edge: IslandEdge,
   ratio: number | null,
 ): { x: number; y: number } {
-  const horizontal = edge === 'top' || edge === 'bottom'
-  const alongOffset = horizontal
-    ? offsetAlongEdge(area.width, windowSize.width, ratio)
-    : offsetAlongEdge(area.height, windowSize.height, ratio)
-  const x = edge === 'left'
-    ? area.left
-    : edge === 'right'
-      ? Math.max(area.left, area.left + area.width - windowSize.width)
-      : area.left + alongOffset
+  const x = area.left + offsetAlongEdge(area.width, windowSize.width, ratio)
   const y = edge === 'top'
     ? area.top
-    : edge === 'bottom'
-      ? Math.max(area.top, area.top + area.height - windowSize.height)
-      : area.top + alongOffset
+    : Math.max(area.top, area.top + area.height - windowSize.height)
   return { x: Math.round(x), y: Math.round(y) }
 }
 
-/** 窗口矩形到区域四条边的距离（可能为负：已经越过该边） */
+/** 窗口矩形到区域上下两条边的距离（可能为负：已经越过该边） */
 export function edgeDistances(
   area: PlacementArea,
   windowSize: WindowSize,
-  x: number,
+  _x: number,
   y: number,
 ): Record<IslandEdge, number> {
   return {
     top: y - area.top,
     bottom: area.top + area.height - (y + windowSize.height),
-    left: x - area.left,
-    right: area.left + area.width - (x + windowSize.width),
   }
 }
 
-/** 最近的边；并列时按 top > bottom > left > right 取先 */
+/** 最近的边；并列时取顶边 */
 export function nearestEdge(area: PlacementArea, windowSize: WindowSize, x: number, y: number): IslandEdge {
   const d = edgeDistances(area, windowSize, x, y)
-  return ISLAND_EDGES.reduce((best, e) => (d[e] < d[best] ? e : best), ISLAND_EDGES[0])
+  return d.top <= d.bottom ? 'top' : 'bottom'
 }
 
-/** 按当前窗口位置算沿边比例；窗口比区域还大时返回 null（居中） */
+/** 按当前窗口位置算沿边比例；窗口比区域还宽时返回 null（居中） */
 export function edgeRatioForPosition(
   area: PlacementArea,
   windowSize: WindowSize,
-  edge: IslandEdge,
+  _edge: IslandEdge,
   x: number,
-  y: number,
 ): number | null {
-  const horizontal = edge === 'top' || edge === 'bottom'
-  const areaLength = horizontal ? area.width : area.height
-  const windowLength = horizontal ? windowSize.width : windowSize.height
-  const max = areaLength - windowLength
+  const max = area.width - windowSize.width
   if (max <= 0) return null
-  const pos = horizontal ? x : y
-  const origin = horizontal ? area.left : area.top
-  return clamp01((pos - origin) / max)
+  return clamp01((x - area.left) / max)
 }
 
 /**
@@ -121,20 +101,7 @@ export function snapToNearestEdge(
   const edge = nearestEdge(area, windowSize, x, y)
   const distance = edgeDistances(area, windowSize, x, y)[edge]
   if (distance > threshold) return null
-  const ratio = edgeRatioForPosition(area, windowSize, edge, x, y)
+  const ratio = edgeRatioForPosition(area, windowSize, edge, x)
   const snapped = islandPositionForEdge(area, windowSize, edge, ratio)
   return { ...snapped, edge }
-}
-
-/** 停靠细条的窗口尺寸：贴顶/底是横条，贴左/右变竖条（scale 为缩放比例） */
-export function stripWindowSize(
-  edge: IslandEdge,
-  scale: number,
-  stripThickness: number,
-): { width: number; height: number } {
-  const vertical = edge === 'left' || edge === 'right'
-  return {
-    width: (vertical ? stripThickness : 360) * scale,
-    height: (vertical ? 360 : stripThickness) * scale,
-  }
 }
