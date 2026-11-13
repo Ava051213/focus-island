@@ -1,72 +1,116 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
 import type { FloatingBubble } from "../composables/useIslandBubbles";
 
-const props = defineProps<{
+defineProps<{
     bubble: FloatingBubble;
 }>();
 
 defineEmits<{ click: [] }>();
-
-const rootRef = ref<HTMLElement | null>(null);
-
-// 每颗泡泡生成一条自己的轨迹：整体匀速上飘，水平方向分段随机游走，
-// 出生时冒出来、临消失前淡出。用 WAAPI 逐段插值，比固定 keyframes 自然。
-onMounted(() => {
-    const el = rootRef.value;
-    if (!el) return;
-    const rise = props.bubble.riseTo;
-    const segments = 6;
-    const frames: Keyframe[] = [
-        {
-            transform: "translate(0px, 0px) scale(0.45)",
-            opacity: 0,
-            offset: 0,
-            easing: "ease-out",
-        },
-    ];
-    let x = 0;
-    for (let i = 1; i <= segments; i++) {
-        const last = i === segments;
-        const offset = i / segments;
-        if (!last) {
-            // 每段随机游走一步，起点方向由 swayX 给出偏向
-            const bias = i === 1 ? props.bubble.swayX * 0.4 : 0;
-            x += bias + (Math.random() * 2 - 1) * 44;
-            x = Math.max(-80, Math.min(80, x));
-        }
-        frames.push({
-            transform: `translate(${x.toFixed(1)}px, ${(-rise * offset).toFixed(1)}px) scale(1)`,
-            opacity: offset >= 0.92 ? 0 : 0.95,
-            offset,
-            easing: last ? "ease-in" : "ease-in-out",
-        });
-    }
-    el.animate(frames, {
-        duration: props.bubble.driftMs,
-        fill: "forwards",
-        easing: "linear",
-    });
-});
 </script>
 
 <template>
     <div
-        ref="rootRef"
         class="bubble-drift"
         :data-bubble-id="bubble.id"
-        :style="{ left: bubble.x + 'px', top: bubble.y + 'px' }"
+        :style="{
+            left: bubble.x + 'px',
+            top: bubble.y + 'px',
+            '--rise-to': -bubble.riseTo + 'px',
+            '--drift-ms': bubble.driftMs + 'ms',
+            '--sway-a': bubble.swayAmp + 'px',
+            '--sway-delay': -bubble.swayPhase + 'ms',
+        }"
         @click.stop="$emit('click')"
     >
-        <span class="bubble-shine"></span>
-        <div class="bubble-inner">{{ bubble.text }}</div>
+        <div class="bubble-sway">
+            <div class="bubble-float">
+                <span class="bubble-shine"></span>
+                <div class="bubble-inner">{{ bubble.text }}</div>
+            </div>
+        </div>
     </div>
 </template>
 
 <style scoped>
+/* 三层各管一个运动，叠加起来才是连续轻盈的轨迹：
+   外层匀速上飘（浮力恒定），中层正弦横摆（只在端点转向），内层微呼吸 */
 .bubble-drift {
     position: absolute;
     /* 语句自适应：单行随内容伸缩，超长才折行 */
+    max-width: 420px;
+    white-space: nowrap;
+    animation: bubble-rise var(--drift-ms) linear forwards;
+    will-change: transform, opacity;
+}
+
+@keyframes bubble-rise {
+    0% {
+        opacity: 0;
+        transform: translateY(0) scale(0.7);
+    }
+
+    9% {
+        opacity: 0.96;
+        transform: translateY(-14px) scale(1);
+    }
+
+    86% {
+        opacity: 0.96;
+    }
+
+    100% {
+        opacity: 0;
+        transform: translateY(var(--rise-to)) scale(1);
+    }
+}
+
+.bubble-sway {
+    animation: bubble-sway var(--drift-ms) ease-in-out infinite;
+    animation-delay: var(--sway-delay);
+    will-change: transform;
+}
+
+/* 正弦式横摆：端点转向、中段最快，连续无停顿 */
+@keyframes bubble-sway {
+    0% {
+        transform: translateX(0);
+    }
+
+    12.5% {
+        transform: translateX(var(--sway-a));
+    }
+
+    25% {
+        transform: translateX(0);
+    }
+
+    37.5% {
+        transform: translateX(calc(var(--sway-a) * -1));
+    }
+
+    50% {
+        transform: translateX(0);
+    }
+
+    62.5% {
+        transform: translateX(var(--sway-a));
+    }
+
+    75% {
+        transform: translateX(0);
+    }
+
+    87.5% {
+        transform: translateX(calc(var(--sway-a) * -1));
+    }
+
+    100% {
+        transform: translateX(0);
+    }
+}
+
+.bubble-float {
+    position: relative;
     max-width: 420px;
     white-space: nowrap;
     padding: 7px 16px;
@@ -90,7 +134,7 @@ onMounted(() => {
     cursor: pointer;
     user-select: none;
     pointer-events: auto;
-    will-change: transform, opacity;
+    animation: bubble-bob 2.6s ease-in-out infinite alternate;
 }
 
 /* 肥皂泡的高光点 */
@@ -106,11 +150,7 @@ onMounted(() => {
     pointer-events: none;
 }
 
-/* 微微的果冻感呼吸，幅度很小不影响轨迹 */
-.bubble-inner {
-    animation: bubble-bob 2.6s ease-in-out infinite alternate;
-}
-
+/* 微微的呼吸，幅度很小 */
 @keyframes bubble-bob {
     from {
         transform: translateY(-1px) scale(1, 0.99);
