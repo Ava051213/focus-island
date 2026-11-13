@@ -1,15 +1,18 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { invoke } from "@tauri-apps/api/core";
 import { useIslandState } from "../composables/useIslandState";
 import { useTimer } from "../composables/useTimer";
 import { useSettings } from "../composables/useSettings";
 import { useDockMode } from "../composables/useDockMode";
 import { useIslandBridge } from "../composables/useIslandBridge";
+import { useIslandBubbles } from "../composables/useIslandBubbles";
 import { useIslandInteraction } from "../composables/useIslandInteraction";
 import CapsuleIdle from "./CapsuleIdle.vue";
 import DockStrip from "./DockStrip.vue";
 import CapsuleFocus from "./CapsuleFocus.vue";
 import NotificationBanner from "./NotificationBanner.vue";
+import Bubble from "./Bubble.vue";
 
 const { state, setNotificationVisible } = useIslandState();
 const timer = useTimer();
@@ -28,6 +31,10 @@ const {
     onCapsuleToggle,
     onCapsuleSkip,
 } = bridge;
+
+// 泡泡：未晚随口说句话
+const bubbles = useIslandBubbles();
+const { currentBubble, bubbleVisible } = bubbles;
 
 // 窗口交互：悬停、点击穿透、拖动、尺寸与位置
 const interaction = useIslandInteraction({ notificationType });
@@ -96,13 +103,29 @@ watch(notificationType, (val) => {
     void applyWindowSize();
 });
 
+// 泡泡出现/消失时窗口跟着长高缩回
+watch(bubbleVisible, () => {
+    void applyWindowSize();
+});
+
+// 戳一下泡泡 = 打开清单面板
+async function onBubbleClick() {
+    try {
+        await invoke("toggle_panel");
+    } catch {
+        // 忽略
+    }
+}
+
 onMounted(async () => {
     interaction.start();
+    void bubbles.start();
     await bridge.start();
 });
 
 onUnmounted(() => {
     interaction.stop();
+    bubbles.stop();
     bridge.stop();
 });
 </script>
@@ -187,7 +210,14 @@ onUnmounted(() => {
                     </template>
                 </div>
             </div>
+            <Bubble
+                v-if="currentBubble"
+                :bubble="currentBubble"
+                :flipped="bannerFlipped"
+                @click="onBubbleClick"
+            />
             <NotificationBanner
+                v-else
                 :type="notificationType"
                 :scale="settings.islandScale ?? 1"
                 @confirm="onNotifConfirm"

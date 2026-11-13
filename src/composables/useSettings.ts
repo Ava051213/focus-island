@@ -2,13 +2,16 @@ import { ref, computed, watch, watchEffect } from 'vue'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { createPersistedStore } from './persistence'
 import {
+  defaultBubbleSettings,
   defaultNotificationSettings,
   defaultShortcutSettings,
   defaultTraySettings,
   migrateSettingsV1ToV2,
   migrateSettingsV2ToV3,
   migrateSettingsV3ToV4,
+  migrateSettingsV4ToV5,
   normalizeSettingsShape,
+  type BubbleSettings,
   type NotificationSettings,
   type ShortcutSettings,
   type TraySettings,
@@ -39,6 +42,7 @@ export interface Settings {
   islandEdge: IslandEdge                // 岛贴在哪条边（只贴边不悬空）
   islandEdgeRatio: number | null        // 沿边的滑动比例 0~1，null 表示沿边居中
   islandPeek: boolean                   // 闲置时滑出屏只留一条细边（常驻模式）
+  bubbles: BubbleSettings               // 岛吐泡泡：未晚随口说句话的开关组
   focusDuration: number
   breakDuration: number
   colorMode: ColorMode
@@ -71,6 +75,7 @@ const DEFAULT_SETTINGS: Settings = {
   islandEdge: 'top',
   islandEdgeRatio: null,
   islandPeek: false,
+  bubbles: defaultBubbleSettings(),
   focusDuration: 25,
   breakDuration: 5,
   colorMode: 'system',
@@ -94,6 +99,7 @@ function cloneSettings(source: Settings): Settings {
     shortcuts: { ...source.shortcuts },
     tray: { ...source.tray },
     notifications: { ...source.notifications },
+    bubbles: { ...source.bubbles },
   }
 }
 
@@ -146,8 +152,8 @@ function applyThemeToDOM() {
 
 const store = createPersistedStore({
   file: 'settings.json',
-  schemaVersion: 4,
-  migrations: { 1: migrateSettingsV1ToV2, 2: migrateSettingsV2ToV3, 3: migrateSettingsV3ToV4 },
+  schemaVersion: 5,
+  migrations: { 1: migrateSettingsV1ToV2, 2: migrateSettingsV2ToV3, 3: migrateSettingsV3ToV4, 4: migrateSettingsV4ToV5 },
   snapshot: () => settings.value,
   restore: (data) => {
     if (!data || typeof data !== 'object') throw new Error('settings.json is not an object')

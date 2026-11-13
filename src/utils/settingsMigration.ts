@@ -25,6 +25,26 @@ export interface NotificationSettings {
   permissionAsked: boolean
 }
 
+export type BubbleTone = 'quiet' | 'normal' | 'lively'
+
+export interface BubbleSettings {
+  enabled: boolean
+  /** 密度档位：安静 / 正常 / 勤快 */
+  tone: BubbleTone
+  /** 撒娇：随机冒一句娇气的悄悄话 */
+  coquetry: boolean
+  /** 闲置喊话：闲置几分钟没人理时喊你回来 */
+  idleCall: boolean
+  /** 哄人：跳过/放弃轮次时安慰一句 */
+  comfort: boolean
+}
+
+const BUBBLE_TONES: BubbleTone[] = ['quiet', 'normal', 'lively']
+
+export function defaultBubbleSettings(): BubbleSettings {
+  return { enabled: true, tone: 'normal', coquetry: true, idleCall: true, comfort: true }
+}
+
 export function defaultShortcutSettings(): ShortcutSettings {
   return {
     toggleTimer: DEFAULT_TOGGLE_SHORTCUT,
@@ -108,6 +128,18 @@ export function normalizeSettingsShape(raw: unknown): Record<string, unknown> {
     : legacyX
   record.islandPeek = typeof record.islandPeek === 'boolean' ? record.islandPeek : false
 
+  // 泡泡：未晚随口说句话的开关组
+  const bubblesRaw = isRecord(record.bubbles) ? record.bubbles : null
+  record.bubbles = {
+    enabled: typeof bubblesRaw?.enabled === 'boolean' ? bubblesRaw.enabled : true,
+    tone: BUBBLE_TONES.includes(bubblesRaw?.tone as BubbleTone)
+      ? (bubblesRaw?.tone as BubbleTone)
+      : 'normal',
+    coquetry: typeof bubblesRaw?.coquetry === 'boolean' ? bubblesRaw.coquetry : true,
+    idleCall: typeof bubblesRaw?.idleCall === 'boolean' ? bubblesRaw.idleCall : true,
+    comfort: typeof bubblesRaw?.comfort === 'boolean' ? bubblesRaw.comfort : true,
+  }
+
   return record
 }
 
@@ -123,5 +155,10 @@ export function migrateSettingsV2ToV3(data: unknown): unknown {
 
 /** schemaVersion 3 → 4：左右贴边移除，历史数据落到底边 */
 export function migrateSettingsV3ToV4(data: unknown): unknown {
+  return normalizeSettingsShape(data)
+}
+
+/** schemaVersion 4 → 5：补泡泡设置组 */
+export function migrateSettingsV4ToV5(data: unknown): unknown {
   return normalizeSettingsShape(data)
 }

@@ -4,6 +4,7 @@ import { listen } from '@tauri-apps/api/event'
 import { useSettings } from './useSettings'
 import { useIslandState } from './useIslandState'
 import { useTimer } from './useTimer'
+import { useIslandBubbles } from './useIslandBubbles'
 
 // Collapsed strip window height (logical px). The visible bar is thinner inside.
 export const DOCK_STRIP_WINDOW_H = 14
@@ -18,12 +19,13 @@ export function useDockMode() {
   const { settings } = useSettings()
   const { state, notificationVisible } = useIslandState()
   const timer = useTimer()
+  const { bubbleVisible } = useIslandBubbles()
 
   const dockMode = computed(() => settings.value.islandDisplayMode === 'dock')
 
-  // During notifications / idle-alert / panel-open, always show the full capsule.
+  // During notifications / idle-alert / panel-open / bubble, always show the full capsule.
   const forceExpanded = computed(
-    () => notificationVisible.value || state.value === 'alert' || panelVisible.value
+    () => notificationVisible.value || state.value === 'alert' || panelVisible.value || bubbleVisible.value
   )
 
   const dockCollapsed = computed(

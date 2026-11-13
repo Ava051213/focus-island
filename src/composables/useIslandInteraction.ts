@@ -4,6 +4,7 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { availableMonitors, getCurrentWindow, PhysicalPosition } from '@tauri-apps/api/window'
 import { useSettings } from './useSettings'
 import { useDockMode } from './useDockMode'
+import { useIslandBubbles } from './useIslandBubbles'
 import {
   edgeDistances,
   edgeRatioForPosition,
@@ -38,6 +39,9 @@ const MAGNET_SNAP_CSS_PX = 24
 // 闲置多久后收起（毫秒）
 const PEEK_IDLE_MS = 3 * 60 * 1000
 
+// 泡泡区高度（逻辑像素）：胶囊下方的漂浮余量
+const BUBBLE_AREA_H = 56
+
 // 贴边参数的 watch 只装一次（composable 可能被多次调用）
 let watchInstalled = false
 let peekWatchInstalled = false
@@ -46,6 +50,7 @@ export function useIslandInteraction(options: IslandInteractionOptions) {
   const { settings, settingsReady } = useSettings()
   const { dockCollapsed, panelVisible, updatePointerOver, DOCK_STRIP_WINDOW_H } = useDockMode()
   const showStrip = dockCollapsed
+  const { bubbleVisible } = useIslandBubbles()
 
   const notificationType = options.notificationType
 
@@ -239,7 +244,7 @@ export function useIslandInteraction(options: IslandInteractionOptions) {
 
   // 这些场景收起会挡住正事，强制保持滑回状态
   function peekForceActive(): boolean {
-    return notificationType.value !== null || dragging.value || physicsActive || panelVisible.value
+    return notificationType.value !== null || bubbleVisible.value || dragging.value || physicsActive || panelVisible.value
   }
 
   function cancelPeekTimer() {
@@ -485,6 +490,11 @@ export function useIslandInteraction(options: IslandInteractionOptions) {
       // 展开到胶囊 + 间隙 + 通知横幅的高度
       const width = 360 * scale
       const height = (BASE_HEIGHT + 6 + 60) * scale
+      await invoke('set_island_custom_size', { width, height })
+    } else if (bubbleVisible.value) {
+      // 泡泡在飘：胶囊 + 间隙 + 泡泡区
+      const width = 360 * scale
+      const height = (BASE_HEIGHT + 6 + BUBBLE_AREA_H) * scale
       await invoke('set_island_custom_size', { width, height })
     } else if (showStrip.value) {
       // 停靠细条（横条，位置跟着岛所在的边）

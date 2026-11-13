@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { emit } from '@tauri-apps/api/event'
 import { useSettings, presetThemes, type ColorMode, type IslandDisplayMode } from '../composables/useSettings'
 import { useRewardUnlocks } from '../composables/useWeeklyGoals'
+import type { BubbleTone } from '../utils/settingsMigration'
 
 const { settings } = useSettings()
 const { unlockedRewards } = useRewardUnlocks()
@@ -22,6 +24,12 @@ const displayModeOptions: Array<{ id: IslandDisplayMode; label: string; hint: st
   { id: 'dock', label: '边缘停靠', hint: '贴边藏成一条，鼠标来了才展开喔' },
 ]
 
+const toneOptions: Array<{ id: BubbleTone; label: string; hint: string }> = [
+  { id: 'quiet', label: '安静', hint: '大概一小时冒一句' },
+  { id: 'normal', label: '正常', hint: '二十来分钟一句' },
+  { id: 'lively', label: '勤快', hint: '十来分钟一句，很黏人' },
+]
+
 function switchColorMode(mode: ColorMode) {
   if (settings.value.colorMode === mode) return
   settings.value.colorMode = mode
@@ -31,6 +39,11 @@ function switchColorMode(mode: ColorMode) {
 function resetIslandPosition() {
   settings.value.islandEdge = 'top'
   settings.value.islandEdgeRatio = null
+}
+
+// 让主窗口直接吐一个泡泡，验收用
+function tryBubble() {
+  void emit('island-bubble', { kind: 'test' })
 }
 </script>
 
@@ -74,6 +87,66 @@ function resetIslandPosition() {
         <span class="switch-track"></span>
       </label>
     </div>
+
+    <div class="section-subtitle">吐泡泡</div>
+    <div class="peek-row">
+      <div class="peek-copy">
+        <span class="peek-label">让未晚随口说话</span>
+        <span class="peek-hint">岛会冒小泡泡，飘两秒就破，点一下进面板</span>
+      </div>
+      <label class="switch" aria-label="吐泡泡">
+        <input v-model="settings.bubbles.enabled" type="checkbox" />
+        <span class="switch-track"></span>
+      </label>
+    </div>
+    <template v-if="settings.bubbles.enabled">
+      <div class="mode-toggle bubble-tone" role="group" aria-label="泡泡密度">
+        <button
+          v-for="t in toneOptions"
+          :key="t.id"
+          type="button"
+          class="mode-btn"
+          :class="{ active: settings.bubbles.tone === t.id }"
+          :title="t.hint"
+          @click="settings.bubbles.tone = t.id"
+        >
+          {{ t.label }}
+        </button>
+      </div>
+      <div class="peek-row">
+        <div class="peek-copy">
+          <span class="peek-label">撒撒娇</span>
+          <span class="peek-hint">时不时冒一句娇气的悄悄话</span>
+        </div>
+        <label class="switch" aria-label="撒撒娇">
+          <input v-model="settings.bubbles.coquetry" type="checkbox" />
+          <span class="switch-track"></span>
+        </label>
+      </div>
+      <div class="peek-row">
+        <div class="peek-copy">
+          <span class="peek-label">闲置喊话</span>
+          <span class="peek-hint">5 分钟没人理，岛会喊你回来</span>
+        </div>
+        <label class="switch" aria-label="闲置喊话">
+          <input v-model="settings.bubbles.idleCall" type="checkbox" />
+          <span class="switch-track"></span>
+        </label>
+      </div>
+      <div class="peek-row">
+        <div class="peek-copy">
+          <span class="peek-label">哄哄我</span>
+          <span class="peek-hint">跳过或放弃一轮时，安慰一句</span>
+        </div>
+        <label class="switch" aria-label="哄哄我">
+          <input v-model="settings.bubbles.comfort" type="checkbox" />
+          <span class="switch-track"></span>
+        </label>
+      </div>
+      <button type="button" class="reset-pos-btn bubble-test" @click="tryBubble">
+        吐一个试试
+      </button>
+    </template>
   </div>
 
   <div class="settings-section">
@@ -330,6 +403,15 @@ function resetIslandPosition() {
   padding: 0 10px;
   cursor: pointer;
   transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.bubble-tone {
+  margin-top: 10px;
+}
+
+.bubble-test {
+  display: block;
+  margin: 10px auto 0;
 }
 
 .reset-pos-btn:hover {
