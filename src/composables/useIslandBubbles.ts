@@ -91,11 +91,15 @@ async function tryCoquetry() {
   scheduleCoquetry()
 }
 
-/** 吐一个泡泡；横幅在显示时泡泡让位，总开关关着不吐 */
+/** 吐一个泡泡；横幅在显示时泡泡让位，总开关与类型开关把关 */
 export function showBubble(kind: BubbleKind, text?: string) {
   const { settings } = useSettings()
   const { notificationType } = useIslandBridge()
-  if (!settings.value.bubbles.enabled) return
+  const bubbles = settings.value.bubbles
+  if (!bubbles.enabled) return
+  if (kind === 'coquetry' && !bubbles.coquetry) return
+  if (kind === 'idle' && !bubbles.idleCall) return
+  if (kind === 'comfort' && !bubbles.comfort) return
   if (notificationType.value !== null) return
   clearTimers()
   const line = text ?? pickBubbleLine(kind, recentLines)

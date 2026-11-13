@@ -137,6 +137,8 @@ export function useTimerBridge() {
         outcome: 'skipped',
         minutes: Math.round(session.actualDuration / 60),
       })
+      // 放弃了一轮专注，让岛哄一句
+      void emit('island-bubble', { kind: 'comfort', task: effect.taskTitle ?? '' }).catch(() => {})
     }
   }
 
@@ -161,6 +163,8 @@ export function useTimerBridge() {
             outcome: 'abandoned',
             minutes: Math.round(outcome.session.actualDuration / 60),
           })
+          // 恢复提示里选择了放弃，也哄一句
+          void emit('island-bubble', { kind: 'comfort', task: outcome.session.taskTitle ?? '' }).catch(() => {})
         }
       }
     }
