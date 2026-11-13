@@ -19,11 +19,12 @@ defineEmits<{ click: [] }>();
             '--drift-ms': bubble.driftMs + 'ms',
             '--arc-x': bubble.arcX + 'px',
             '--arc-ease': bubble.arcEase,
+            '--tint-h': bubble.tintH + '',
         }"
         @click.stop="$emit('click')"
     >
         <div class="bubble-arc">
-            <div class="bubble-float">
+            <div class="bubble-float" :class="`v-${bubble.variant}`">
                 <span class="bubble-shine"></span>
                 <div class="bubble-inner">{{ bubble.text }}</div>
             </div>
@@ -101,6 +102,31 @@ defineEmits<{ click: [] }>();
     cursor: pointer;
     user-select: none;
     pointer-events: auto;
+}
+
+/* 墨泡：和岛同款的深色玻璃，白字 */
+.bubble-float.v-1 {
+    background: linear-gradient(135deg, rgba(34, 36, 44, 0.85), rgba(18, 20, 26, 0.8));
+    border-color: rgba(255, 255, 255, 0.2);
+    box-shadow:
+        inset 0 1px 4px rgba(255, 255, 255, 0.16),
+        0 6px 20px rgba(0, 0, 0, 0.32);
+    color: rgba(255, 255, 255, 0.94);
+    text-shadow: none;
+}
+
+/* 糖果泡：随机马卡龙色调，色相由 --tint-h 决定 */
+.bubble-float.v-2 {
+    background: linear-gradient(
+        135deg,
+        hsla(var(--tint-h), 92%, 90%, 0.8),
+        hsla(var(--tint-h), 86%, 80%, 0.62)
+    );
+    border-color: hsla(var(--tint-h), 72%, 62%, 0.55);
+    box-shadow:
+        inset 0 1px 5px rgba(255, 255, 255, 0.6),
+        0 6px 20px hsla(var(--tint-h), 60%, 55%, 0.22);
+    color: hsla(var(--tint-h), 48%, 26%, 0.96);
 }
 
 /* 肥皂泡的高光点 */

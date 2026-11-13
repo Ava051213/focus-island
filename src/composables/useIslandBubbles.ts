@@ -28,6 +28,10 @@ export interface FloatingBubble {
   arcX: number
   /** 弧线的节奏：先横后竖 / 先竖后横 / 对称弧 */
   arcEase: string
+  /** 皮肤编号：0 虹彩玻璃 / 1 墨泡 / 2 糖果泡 */
+  variant: number
+  /** 糖果泡的色相（deg），只有 variant 2 用 */
+  tintH: number
 }
 
 /** 同时最多几个泡泡在飘 */
@@ -194,6 +198,8 @@ function spawn(kind: BubbleKind, text?: string) {
       driftMs,
       arcX: (Math.random() * 2 - 1) * 170,
       arcEase: ['ease-out', 'ease-in', 'ease-in-out'][Math.floor(Math.random() * 3)],
+      variant: Math.floor(Math.random() * 3),
+      tintH: [150, 25, 265, 205][Math.floor(Math.random() * 4)],
     }
     bubbles.value.push(bubble)
     window.setTimeout(() => {
