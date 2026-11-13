@@ -1,9 +1,10 @@
 import { computed, ref, watch } from 'vue'
+import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { useSettings } from './useSettings'
 import { useIslandBridge } from './useIslandBridge'
 import { useIslandState } from './useIslandState'
-import { pickBubbleLine, type BubbleKind } from '../utils/bubbleTexts'
+import { BUBBLE_TONE_MS, pickBubbleLine, type BubbleKind } from '../utils/bubbleTexts'
 
 /**
  * 岛吐泡泡的 main 侧队列（模块级单例，只在 main 窗口装载）。
@@ -34,6 +35,7 @@ const bubblePhase = ref<'show' | 'pop'>('show')
 let seq = 0
 let showTimer: number | null = null
 let popTimer: number | null = null
+let coquetryTimer: number | null = null
 let recentLines: string[] = []
 let lastBubbleAt = 0
 let unlistenBubble: UnlistenFn | null = null
@@ -48,6 +50,45 @@ function clearTimers() {
     window.clearTimeout(popTimer)
     popTimer = null
   }
+}
+
+function clearCoquetryTimer() {
+  if (coquetryTimer !== null) {
+    window.clearTimeout(coquetryTimer)
+    coquetryTimer = null
+  }
+}
+
+/** 档位对应的基础间隔，±30% 抖动让它不像机械整点 */
+function toneIntervalMs(tone: 'quiet' | 'normal' | 'lively'): number {
+  return BUBBLE_TONE_MS[tone] * (0.7 + Math.random() * 0.6)
+}
+
+/** 撒娇定时：到点先检查场合（面板开着不打扰），吐完排下一个 */
+function scheduleCoquetry() {
+  clearCoquetryTimer()
+  const { settings } = useSettings()
+  if (!settings.value.bubbles.enabled || !settings.value.bubbles.coquetry) return
+  coquetryTimer = window.setTimeout(() => {
+    coquetryTimer = null
+    void tryCoquetry()
+  }, toneIntervalMs(settings.value.bubbles.tone))
+}
+
+async function tryCoquetry() {
+  const { settings } = useSettings()
+  if (!settings.value.bubbles.enabled || !settings.value.bubbles.coquetry) return
+  try {
+    const panelOpen = await invoke<boolean>('is_panel_visible')
+    if (panelOpen) {
+      scheduleCoquetry()
+      return
+    }
+  } catch {
+    // 查不到就当面板没开
+  }
+  showBubble('coquetry')
+  scheduleCoquetry()
 }
 
 /** 吐一个泡泡；横幅在显示时泡泡让位，总开关关着不吐 */
@@ -85,7 +126,7 @@ export function useIslandBubbles() {
   const { state } = useIslandState()
   const bubbleVisible = computed(() => currentBubble.value !== null)
 
-  // 总开关关掉时立刻收掉正在飘的泡泡；进闲置时喊一句
+  // 总开关关掉时立刻收掉正在飘的泡泡；进闲置时喊一句；档位/开关变化重排撒娇节奏
   if (!installed) {
     installed = true
     watch(
@@ -93,6 +134,7 @@ export function useIslandBubbles() {
       (on) => {
         if (!on) {
           clearTimers()
+          clearCoquetryTimer()
           currentBubble.value = null
         }
       },
@@ -101,6 +143,10 @@ export function useIslandBubbles() {
       if (s !== 'alert' || prev === 'alert') return
       maybeIdleCall()
     })
+    watch(
+      () => [settings.value.bubbles.enabled, settings.value.bubbles.coquetry, settings.value.bubbles.tone] as const,
+      () => scheduleCoquetry(),
+    )
   }
 
   async function start() {
@@ -110,12 +156,14 @@ export function useIslandBubbles() {
       if (!kind) return
       showBubble(kind, typeof payload.text === 'string' && payload.text ? payload.text : undefined)
     })
+    scheduleCoquetry()
   }
 
   function stop() {
     unlistenBubble?.()
     unlistenBubble = null
     clearTimers()
+    clearCoquetryTimer()
     currentBubble.value = null
   }
 

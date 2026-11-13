@@ -6,13 +6,15 @@ import { useTimer, type NotificationType } from './useTimer'
 import { notifyTrayHidden } from './useSystemNotify'
 import type { TimerStatePayload } from './useTimerBridge'
 
+// 模块级单例：bridge 可能被多处调用（Island.vue、泡泡队列），
+// 横幅类型必须全员共享，否则通知互斥会读到各自的 null。
+const notificationType = ref<NotificationType>(null)
+const panelMotionState = ref<'idle' | 'opening' | 'closing'>('idle')
+
 export function useIslandBridge() {
   const { state, setState } = useIslandState()
   const { settings } = useSettings()
   const timer = useTimer()
-
-  const notificationType = ref<NotificationType>(null)
-  const panelMotionState = ref<'idle' | 'opening' | 'closing'>('idle')
 
   let unlistenTimer: (() => void) | null = null
   let unlistenPanelMotion: (() => void) | null = null
