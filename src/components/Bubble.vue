@@ -17,28 +17,30 @@ defineEmits<{ click: [] }>();
             top: bubble.y + 'px',
             '--rise-to': -bubble.riseTo + 'px',
             '--drift-ms': bubble.driftMs + 'ms',
-            '--sway-a': bubble.swayAmp + 'px',
-            '--sway-delay': -bubble.swayPhase + 'ms',
+            '--sway-a1': bubble.swayA1 + 'px',
+            '--sway-a2': bubble.swayA2 + 'px',
+            '--phase1': -bubble.phase1 + 'ms',
+            '--phase2': -bubble.phase2 + 'ms',
+            '--wobble-phase': -bubble.wobblePhase + 'ms',
         }"
         @click.stop="$emit('click')"
     >
-        <div class="bubble-sway">
-            <div class="bubble-float">
-                <span class="bubble-shine"></span>
-                <div class="bubble-inner">{{ bubble.text }}</div>
+        <div class="bubble-sway1">
+            <div class="bubble-sway2">
+                <div class="bubble-float">
+                    <span class="bubble-shine"></span>
+                    <div class="bubble-inner">{{ bubble.text }}</div>
+                </div>
             </div>
         </div>
     </div>
 </template>
 
 <style scoped>
-/* 三层各管一个运动，叠加起来才是连续轻盈的轨迹：
-   外层匀速上飘（浮力恒定），中层正弦横摆（只在端点转向），内层微呼吸 */
+/* 轨迹 = 匀速上飘 ⊕ 两个非整数频率比的正弦横摆 ⊕ 轻微旋转晃动。
+   每层各自平滑、相位随机，叠加出来是一条处处连续、永不重复的利萨如路线。 */
 .bubble-drift {
     position: absolute;
-    /* 语句自适应：单行随内容伸缩，超长才折行 */
-    max-width: 420px;
-    white-space: nowrap;
     animation: bubble-rise var(--drift-ms) linear forwards;
     will-change: transform, opacity;
 }
@@ -64,20 +66,27 @@ defineEmits<{ click: [] }>();
     }
 }
 
-.bubble-sway {
+/* 主摆：整个漂移期一个周期 */
+.bubble-sway1 {
     animation: bubble-sway var(--drift-ms) ease-in-out infinite;
-    animation-delay: var(--sway-delay);
+    animation-delay: var(--phase1);
     will-change: transform;
 }
 
-/* 正弦式横摆：端点转向、中段最快，连续无停顿 */
+/* 次摆：频率是非整数比（×0.37），叠加出永不循环的 wandering */
+.bubble-sway2 {
+    animation: bubble-sway calc(var(--drift-ms) * 0.37) ease-in-out infinite;
+    animation-delay: var(--phase2);
+    will-change: transform;
+}
+
 @keyframes bubble-sway {
     0% {
         transform: translateX(0);
     }
 
     12.5% {
-        transform: translateX(var(--sway-a));
+        transform: translateX(var(--amp, var(--sway-a1)));
     }
 
     25% {
@@ -85,7 +94,7 @@ defineEmits<{ click: [] }>();
     }
 
     37.5% {
-        transform: translateX(calc(var(--sway-a) * -1));
+        transform: translateX(calc(var(--amp, var(--sway-a1)) * -1));
     }
 
     50% {
@@ -93,7 +102,7 @@ defineEmits<{ click: [] }>();
     }
 
     62.5% {
-        transform: translateX(var(--sway-a));
+        transform: translateX(var(--amp, var(--sway-a1)));
     }
 
     75% {
@@ -101,7 +110,7 @@ defineEmits<{ click: [] }>();
     }
 
     87.5% {
-        transform: translateX(calc(var(--sway-a) * -1));
+        transform: translateX(calc(var(--amp, var(--sway-a1)) * -1));
     }
 
     100% {
@@ -109,8 +118,28 @@ defineEmits<{ click: [] }>();
     }
 }
 
+.bubble-sway1 .bubble-sway2 {
+    --amp: var(--sway-a2);
+}
+
+/* 轻微的旋转+上下晃动：真泡泡在空气里会这样颤 */
 .bubble-float {
     position: relative;
+    animation: bubble-wobble 2.7s ease-in-out infinite alternate;
+    animation-delay: var(--wobble-phase);
+}
+
+@keyframes bubble-wobble {
+    from {
+        transform: translateY(-3px) rotate(-1.6deg);
+    }
+
+    to {
+        transform: translateY(3px) rotate(1.6deg);
+    }
+}
+
+.bubble-float {
     max-width: 420px;
     white-space: nowrap;
     padding: 7px 16px;
@@ -134,7 +163,6 @@ defineEmits<{ click: [] }>();
     cursor: pointer;
     user-select: none;
     pointer-events: auto;
-    animation: bubble-bob 2.6s ease-in-out infinite alternate;
 }
 
 /* 肥皂泡的高光点 */
@@ -150,14 +178,7 @@ defineEmits<{ click: [] }>();
     pointer-events: none;
 }
 
-/* 微微的呼吸，幅度很小 */
-@keyframes bubble-bob {
-    from {
-        transform: translateY(-1px) scale(1, 0.99);
-    }
-
-    to {
-        transform: translateY(1px) scale(0.995, 1.01);
-    }
+.bubble-inner {
+    position: relative;
 }
 </style>

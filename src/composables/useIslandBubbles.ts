@@ -24,9 +24,13 @@ export interface FloatingBubble {
   /** 向上飘的目标距离（px），飘到顶就淡出 */
   riseTo: number
   driftMs: number
-  /** 正弦横摆幅度（px）与相位偏移（ms），让每颗泡的路线都不一样 */
-  swayAmp: number
-  swayPhase: number
+  /** 双频正弦横摆的两组幅度/相位（非整数频率比，轨迹永不重复） */
+  swayA1: number
+  swayA2: number
+  phase1: number
+  phase2: number
+  /** 旋转晃动的相位 */
+  wobblePhase: number
 }
 
 /** 同时最多几个泡泡在飘 */
@@ -186,8 +190,11 @@ function spawn(kind: BubbleKind, text?: string) {
       // 飘到屏幕顶再淡出
       riseTo: point.y + 80,
       driftMs,
-      swayAmp: 34 + Math.random() * 50,
-      swayPhase: Math.random() * 0.4 * driftMs,
+      swayA1: 38 + Math.random() * 28,
+      swayA2: 12 + Math.random() * 14,
+      phase1: Math.random() * driftMs,
+      phase2: Math.random() * driftMs,
+      wobblePhase: Math.random() * 2700,
     }
     bubbles.value.push(bubble)
     window.setTimeout(() => {
