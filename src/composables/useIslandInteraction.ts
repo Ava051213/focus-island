@@ -35,6 +35,13 @@ const HOVER_POLL_ACTIVE_MS = 200
 // 拖拽中的磁性吸附距离（CSS 像素），转物理像素要乘 dpr
 const MAGNET_SNAP_CSS_PX = 24
 
+// 甩出速度的采样窗口（毫秒）：取最近这段指针位移估速度
+const FLING_SAMPLE_MS = 100
+// 释放速度低于该值（物理 px/s）且贴近顶边，才算停靠顶边而不是撞天花板
+const FLING_DOCK_SPEED = 320
+// 甩出速度上限（物理 px/s），别把岛扔成导弹
+const FLING_MAX_SPEED = 4500
+
 // 闲置多久后收起（毫秒）
 const PEEK_IDLE_MS = 3 * 60 * 1000
 
@@ -69,6 +76,8 @@ export function useIslandInteraction(options: IslandInteractionOptions) {
   let dragStartWindowX = 0
   let dragStartWindowY = 0
   let dragMoved = false
+  // 指针位置采样，用于松手时估甩出速度
+  let pointerSamples: Array<{ t: number; x: number; y: number }> = []
 
   let screens: ScreenRect[] = []
   let virtualLeft = 0
@@ -295,8 +304,8 @@ export function useIslandInteraction(options: IslandInteractionOptions) {
     schedulePeek()
   }
 
-  /** 松手后交给重力：掉下去弹几下停到底边；期间随时可被抓住或打断 */
-  async function startDropPhysics(area: PlacementArea) {
+  /** 松手后交给重力：带着甩出速度掉落弹跳，最后停到底边；期间随时可被抓住或打断 */
+  async function startThrowPhysics(area: PlacementArea, velocity: { vx: number; vy: number }) {
     cancelPhysics()
     let bounds: [number, number, number, number] | null = null
     try {
@@ -312,8 +321,8 @@ export function useIslandInteraction(options: IslandInteractionOptions) {
     }
     const win = { width: windowWidth, height: windowHeight }
     const pbounds = { left: bounds[0], top: bounds[1], width: bounds[2], height: bounds[3] }
-    const state = { x: currentWindowX, y: currentWindowY, vx: 0, vy: 0 }
-    if (isRestingOnFloor(state, pbounds, win)) {
+    const state = { x: currentWindowX, y: currentWindowY, vx: velocity.vx, vy: velocity.vy }
+    if (isRestingOnFloor(state, pbounds, win) && Math.hypot(state.vx, state.vy) < FLING_DOCK_SPEED) {
       await settleAfterPhysics(area, win, state.x)
       return
     }
@@ -351,6 +360,25 @@ export function useIslandInteraction(options: IslandInteractionOptions) {
     return { x: cx, y: cy }
   }
 
+  /** 用最近的指针采样估甩出速度（物理 px/s），采样太少或停顿就返回零 */
+  function estimateFlingVelocity(): { vx: number; vy: number } {
+    const dpr = window.devicePixelRatio || 1
+    const now = performance.now()
+    const recent = pointerSamples.filter(s => now - s.t <= FLING_SAMPLE_MS)
+    if (recent.length < 2) return { vx: 0, vy: 0 }
+    const first = recent[0]
+    const last = recent[recent.length - 1]
+    const dt = (last.t - first.t) / 1000
+    if (dt < 0.016) return { vx: 0, vy: 0 }
+    const vx = ((last.x - first.x) / dt) * dpr
+    const vy = ((last.y - first.y) / dt) * dpr
+    const speed = Math.hypot(vx, vy)
+    if (speed > FLING_MAX_SPEED) {
+      return { vx: (vx / speed) * FLING_MAX_SPEED, vy: (vy / speed) * FLING_MAX_SPEED }
+    }
+    return { vx, vy }
+  }
+
   function onCapsulePointerDown(e: PointerEvent) {
     if (e.button !== 0) return
     const el = e.currentTarget as HTMLElement | null
@@ -365,6 +393,7 @@ export function useIslandInteraction(options: IslandInteractionOptions) {
     dragStartWindowX = currentWindowX
     dragStartWindowY = currentWindowY
     dragMoved = false
+    pointerSamples = [{ t: performance.now(), x: e.screenX, y: e.screenY }]
     // 下落途中一把抓住：取消物理；从收起状态直接拖：先滑回满贴边位置再跟手
     cancelPhysics()
     cancelPeekTimer()
@@ -379,6 +408,8 @@ export function useIslandInteraction(options: IslandInteractionOptions) {
     if (!dragMoved && Math.abs(dxCss) < 4 && Math.abs(dyCss) < 4) return
     dragMoved = true
     dragging.value = true
+    pointerSamples.push({ t: performance.now(), x: e.screenX, y: e.screenY })
+    if (pointerSamples.length > 40) pointerSamples = pointerSamples.slice(-40)
     const dpr = window.devicePixelRatio || 1
     const moved = clampToVirtualDesktop(
       dragStartWindowX + dxCss * dpr,
@@ -414,20 +445,22 @@ export function useIslandInteraction(options: IslandInteractionOptions) {
     dragging.value = false
     await refreshIslandGeometry()
     const win = { width: windowWidth, height: windowHeight }
+    const fling = estimateFlingVelocity()
     const screen = screenForPoint(currentWindowX + windowWidth / 2, currentWindowY + windowHeight / 2)
     if (screen) {
       const area: PlacementArea = { left: screen.left, top: screen.top, width: screen.width, height: screen.height }
-      // 慢速贴近顶边：照旧吸附停靠，不演物理
+      // 慢速且贴近顶边：照旧吸附停靠，不演物理；甩上去的会撞顶弹回来
       const dTop = edgeDistances(area, win, currentWindowX, currentWindowY).top
-      if (dTop <= MAGNET_SNAP_CSS_PX * (window.devicePixelRatio || 1)) {
+      const flingSpeed = Math.hypot(fling.vx, fling.vy)
+      if (dTop <= MAGNET_SNAP_CSS_PX * (window.devicePixelRatio || 1) && flingSpeed < FLING_DOCK_SPEED) {
         settings.value.islandEdge = 'top'
         settings.value.islandEdgeRatio = edgeRatioForPosition(area, win, 'top', currentWindowX)
         await placeFromSettings()
         schedulePeek()
         return
       }
-      // 其余位置交给重力：掉下去弹几下停到底边
-      await startDropPhysics(area)
+      // 其余交给重力：带着甩出速度掉下去，撞墙弹回，最后停到底边
+      await startThrowPhysics(area, fling)
       return
     }
     // 拿不到屏幕信息时退回普通贴边落位
