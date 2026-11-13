@@ -6,13 +6,13 @@ const BOUNDS = { left: 0, top: 0, width: 1920, height: 1080 }
 const WIN = { width: 360, height: 42 }
 const FLOOR_Y = 1080 - 42
 
-/** 固定步长模拟到收敛或超时，统计碰撞次数 */
+/** 固定步长模拟到收敛（上限给足，弹性高时弹跳链很长），统计碰撞次数 */
 function simulate(state: PhysicsState, dt = 1 / 60) {
   let floorHits = 0
   let wallHits = 0
   let settled = false
   let elapsed = 0
-  while (!settled && elapsed < PHYSICS.maxDuration) {
+  while (!settled && elapsed < 12) {
     const r = stepPhysics(state, BOUNDS, WIN, dt)
     if (r.impact === 'floor') floorHits += 1
     if (r.impact === 'wall-left' || r.impact === 'wall-right') wallHits += 1

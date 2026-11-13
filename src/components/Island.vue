@@ -53,7 +53,7 @@ watch(physicsImpact, (val) => {
     squashTimer = window.setTimeout(() => {
         squashClass.value = "";
         squashTimer = null;
-    }, 320);
+    }, 280);
 });
 onUnmounted(() => {
     if (squashTimer !== null) window.clearTimeout(squashTimer);
@@ -248,43 +248,39 @@ onUnmounted(() => {
     transform: scale(1.04);
 }
 
-/* 弹跳质感：碰撞瞬间挤压回弹（带一次过冲回摆），锚点贴碰撞面。
+/* 弹跳质感：碰撞瞬间轻微挤压回弹，锚点贴碰撞面。
    注意窗口 360×42 只比胶囊大 20/8px，横向放大不能超过 1.12。 */
 .capsule-shell.impact-floor {
     transform-origin: center bottom;
-    animation: island-squash-y 0.3s cubic-bezier(0.3, 0.9, 0.4, 1) both;
+    animation: island-squash-y 0.26s cubic-bezier(0.3, 0.9, 0.4, 1) both;
 }
 
 .capsule-shell.impact-ceiling {
     transform-origin: center top;
-    animation: island-squash-y 0.3s cubic-bezier(0.3, 0.9, 0.4, 1) both;
+    animation: island-squash-y 0.26s cubic-bezier(0.3, 0.9, 0.4, 1) both;
 }
 
 .capsule-shell.impact-wall-left {
     transform-origin: left center;
-    animation: island-squash-x 0.3s cubic-bezier(0.3, 0.9, 0.4, 1) both;
+    animation: island-squash-x 0.26s cubic-bezier(0.3, 0.9, 0.4, 1) both;
 }
 
 .capsule-shell.impact-wall-right {
     transform-origin: right center;
-    animation: island-squash-x 0.3s cubic-bezier(0.3, 0.9, 0.4, 1) both;
+    animation: island-squash-x 0.26s cubic-bezier(0.3, 0.9, 0.4, 1) both;
 }
 
 @keyframes island-squash-y {
     0% {
-        transform: scale(1.12, 0.6);
+        transform: scale(1.07, 0.78);
     }
 
-    38% {
-        transform: scale(0.92, 1.16);
+    42% {
+        transform: scale(0.96, 1.07);
     }
 
-    66% {
-        transform: scale(1.05, 0.93);
-    }
-
-    84% {
-        transform: scale(0.985, 1.02);
+    72% {
+        transform: scale(1.02, 0.985);
     }
 
     100% {
@@ -294,19 +290,15 @@ onUnmounted(() => {
 
 @keyframes island-squash-x {
     0% {
-        transform: scale(0.66, 1.14);
+        transform: scale(0.8, 1.07);
     }
 
-    38% {
-        transform: scale(1.12, 0.9);
+    42% {
+        transform: scale(1.06, 0.96);
     }
 
-    66% {
-        transform: scale(0.95, 1.05);
-    }
-
-    84% {
-        transform: scale(1.02, 0.99);
+    72% {
+        transform: scale(0.99, 1.01);
     }
 
     100% {

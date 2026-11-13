@@ -53,16 +53,16 @@ export interface PhysicsParams {
 /** 手感参数集中处；要调弹跳的「弹性」改这里 */
 export const PHYSICS: PhysicsParams = {
   gravity: 2800,
-  floorRestitution: 0.72,
-  ceilingRestitution: 0.72,
-  wallRestitution: 0.88,
+  floorRestitution: 0.8,
+  ceilingRestitution: 0.78,
+  wallRestitution: 0.92,
   floorFriction: 0.92,
   rollFriction: 380,
-  settleSpeed: 55,
-  settleSpeedX: 30,
+  settleSpeed: 60,
+  settleSpeedX: 25,
   settleGap: 2,
   maxStep: 1 / 120,
-  maxDuration: 5.5,
+  maxDuration: 9,
 }
 
 /** 甩出判定的手感参数（物理 px/s） */
