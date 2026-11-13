@@ -377,6 +377,12 @@ fn set_click_through<R: Runtime>(window: WebviewWindow<R>, ignore: bool) {
     let _ = window.set_ignore_cursor_events(ignore);
 }
 
+/// 全局光标位置（物理像素）；泡泡 overlay 用它做悬停命中检测。
+#[tauri::command]
+fn get_cursor_position() -> (f64, f64) {
+    mouse_position_raw()
+}
+
 #[tauri::command]
 fn set_island_size<R: Runtime>(app: AppHandle<R>, scale: f64) {
     if let Some(main) = app.get_webview_window("main") {
@@ -836,6 +842,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             is_mouse_over_window,
             set_click_through,
+            get_cursor_position,
             set_island_size,
             set_island_custom_size,
             place_island,

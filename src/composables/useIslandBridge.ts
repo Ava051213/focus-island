@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { emit, listen } from '@tauri-apps/api/event'
 import { useSettings } from './useSettings'
 import { useIslandState } from './useIslandState'
@@ -24,6 +24,13 @@ export function useIslandBridge() {
   let panelMotionTimer: ReturnType<typeof setTimeout> | null = null
   let countdownTimer: ReturnType<typeof setInterval> | null = null
   let countdownEndAt = 0
+
+  // 进闲置时让泡泡 overlay 喊一句（闲置喊话的视觉在 overlay 窗口渲染）
+  watch(state, (s, prev) => {
+    if (s === 'alert' && prev !== 'alert') {
+      void emit('island-bubble', { kind: 'idle' }).catch(() => {})
+    }
+  })
 
   function playNotificationSound() {
     if (!settings.value.notifications.sound) return

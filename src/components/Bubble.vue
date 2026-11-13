@@ -1,84 +1,83 @@
 <script setup lang="ts">
-import type { IslandBubble } from "../composables/useIslandBubbles";
+import type { FloatingBubble } from "../composables/useIslandBubbles";
 
 defineProps<{
-    bubble: IslandBubble;
-    /** 岛贴底边时泡泡在岛上方，冒出方向要跟着翻 */
-    flipped: boolean;
+    bubble: FloatingBubble;
 }>();
 
 defineEmits<{ click: [] }>();
 </script>
 
 <template>
-    <Transition name="bubble">
-        <div
-            v-if="bubble"
-            :key="bubble.id"
-            class="bubble"
-            :class="{ flipped }"
-            @click.stop="$emit('click')"
-        >
-            <div class="bubble-inner">{{ bubble.text }}</div>
-        </div>
-    </Transition>
+    <div
+        class="bubble-drift"
+        :data-bubble-id="bubble.id"
+        :style="{
+            left: bubble.x + 'px',
+            top: bubble.y + 'px',
+            '--drift-ms': bubble.driftMs + 'ms',
+            '--sway-x': bubble.swayX + 'px',
+            '--rise-to': -bubble.riseTo + 'px',
+        }"
+        @click.stop="$emit('click')"
+    >
+        <div class="bubble-inner">{{ bubble.text }}</div>
+    </div>
 </template>
 
 <style scoped>
-.bubble {
+.bubble-drift {
+    position: absolute;
     max-width: 240px;
     padding: 8px 14px;
     border-radius: 16px;
-    background: rgba(22, 22, 26, 0.85);
-    border: 1px solid rgba(255, 255, 255, 0.14);
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
-    color: rgba(255, 255, 255, 0.92);
+    background: rgba(240, 244, 255, 0.82);
+    border: 1px solid rgba(255, 255, 255, 0.6);
+    box-shadow: 0 4px 18px rgba(80, 120, 200, 0.22);
+    color: rgba(30, 34, 44, 0.9);
     font-size: 12px;
     line-height: 1.4;
     text-align: center;
     cursor: pointer;
     user-select: none;
     pointer-events: auto;
-    /* 默认在岛下方：从靠近岛的上边缘冒出来 */
-    transform-origin: 50% 0;
+    will-change: transform, opacity;
+    animation: bubble-drift var(--drift-ms) linear forwards;
 }
 
-.bubble.flipped {
-    transform-origin: 50% 100%;
+/* 外层负责整体上飘与淡出；内层负责左右轻摆 */
+@keyframes bubble-drift {
+    0% {
+        opacity: 0;
+        transform: translate(0, 0) scale(0.5);
+    }
+
+    10% {
+        opacity: 0.96;
+        transform: translate(calc(var(--sway-x) * 0.15), -26px) scale(1);
+    }
+
+    82% {
+        opacity: 0.92;
+    }
+
+    100% {
+        opacity: 0;
+        transform: translate(var(--sway-x), var(--rise-to)) scale(1);
+    }
 }
 
-/* 漂浮摆在内层做，和外层的进出场 transition 不打架 */
 .bubble-inner {
-    animation: bubble-float 2.2s ease-in-out infinite alternate;
+    animation: bubble-sway 3.2s ease-in-out infinite alternate;
 }
 
-@keyframes bubble-float {
+@keyframes bubble-sway {
     from {
-        transform: translateY(-2px) rotate(-0.5deg);
+        transform: translateX(-9px) rotate(-1deg);
     }
 
     to {
-        transform: translateY(3px) rotate(0.5deg);
+        transform: translateX(9px) rotate(1deg);
     }
-}
-
-/* 冒出：从岛边挤出来，带一点弹性过冲 */
-.bubble-enter-active {
-    transition: opacity 0.22s ease-out, transform 0.26s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-.bubble-enter-from {
-    opacity: 0;
-    transform: scale(0.4);
-}
-
-/* 破裂：轻轻胀一下再散掉 */
-.bubble-leave-active {
-    transition: opacity 0.24s ease-in, transform 0.24s ease-in;
-}
-
-.bubble-leave-to {
-    opacity: 0;
-    transform: scale(1.14);
 }
 </style>

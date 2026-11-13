@@ -1,56 +1,58 @@
-import { computed, ref, watch } from 'vue'
+import { ref, watch } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
+import { getCurrentWindow, PhysicalPosition, PhysicalSize } from '@tauri-apps/api/window'
 import { useSettings } from './useSettings'
-import { useIslandBridge } from './useIslandBridge'
-import { useIslandState } from './useIslandState'
 import { BUBBLE_TONE_MS, pickBubbleLine, type BubbleKind } from '../utils/bubbleTexts'
 
 /**
- * 岛吐泡泡的 main 侧队列（模块级单例，只在 main 窗口装载）。
+ * 泡泡 overlay 窗口（label: bubble）专用的漂移泡泡管理。
  *
- * 同时最多一个泡泡：新的来了就顶掉旧的。触发源有两类——
- * - panel 推过来的 `island-bubble` 事件（哄人这类，panel 才知道的事）
- * - main 本地（闲置喊话、撒娇定时器），直接调 showBubble
+ * overlay 铺满岛所在屏的工作区，默认整面鼠标穿透；泡泡从岛边冒出，
+ * 带着左右轻摆向上飘，飘到屏幕顶部淡出。触发源：
+ * - panel / main 通过 `island-bubble` 广播事件投递（哄人、闲置喊话、测试）
+ * - 本地撒娇定时器（档位节奏，面板开着时不打扰）
  */
 
-export interface IslandBubble {
+export interface FloatingBubble {
   id: number
   kind: BubbleKind
   text: string
+  /** 出生点与漂移参数（overlay 内逻辑像素） */
+  x: number
+  y: number
+  /** 向上飘的目标距离（px），飘到顶就淡出 */
+  riseTo: number
+  driftMs: number
+  swayX: number
 }
 
-/** 泡泡停留时长与破裂动画时长（毫秒） */
-const BUBBLE_SHOW_MS = 2600
-const BUBBLE_POP_MS = 260
-/** 选句时避开的最近说过条数 */
-const RECENT_MAX = 6
+/** 同时最多几个泡泡在飘 */
+const MAX_CONCURRENT = 3
+/** 漂移时长（毫秒）与移除余量 */
+const DRIFT_MS = 7800
+const REMOVE_SLACK_MS = 150
+/** 无泡泡后多久隐藏 overlay */
+const HIDE_GRACE_MS = 3000
 /** 闲置喊话的最小间隔：活动-闲置反复横跳时别连环喊 */
 const IDLE_CALL_MIN_GAP_MS = 10 * 60 * 1000
+/** 悬停轮询间隔（毫秒） */
+const HOVER_POLL_MS = 180
 
 const BUBBLE_KINDS: BubbleKind[] = ['coquetry', 'idle', 'comfort', 'test']
 
-const currentBubble = ref<IslandBubble | null>(null)
-const bubblePhase = ref<'show' | 'pop'>('show')
+const bubbles = ref<FloatingBubble[]>([])
 let seq = 0
-let showTimer: number | null = null
-let popTimer: number | null = null
-let coquetryTimer: number | null = null
 let recentLines: string[] = []
 let lastBubbleAt = 0
+let coquetryTimer: number | null = null
+let hideGraceTimer: number | null = null
+let hoverTimer: number | null = null
+let clickThroughActive: boolean | null = null
+let overlayOrigin: { x: number; y: number } | null = null
+let overlayScale = 1
 let unlistenBubble: UnlistenFn | null = null
 let installed = false
-
-function clearTimers() {
-  if (showTimer !== null) {
-    window.clearTimeout(showTimer)
-    showTimer = null
-  }
-  if (popTimer !== null) {
-    window.clearTimeout(popTimer)
-    popTimer = null
-  }
-}
 
 function clearCoquetryTimer() {
   if (coquetryTimer !== null) {
@@ -59,12 +61,153 @@ function clearCoquetryTimer() {
   }
 }
 
+function stopHoverPoll() {
+  if (hoverTimer !== null) {
+    window.clearInterval(hoverTimer)
+    hoverTimer = null
+  }
+  clickThroughActive = null
+}
+
+/** 悬停轮询：光标压在某个泡泡上才让 overlay 可点，其余区域保持穿透 */
+function startHoverPoll() {
+  if (hoverTimer !== null) return
+  hoverTimer = window.setInterval(async () => {
+    if (bubbles.value.length === 0 || overlayOrigin === null) return
+    try {
+      const [cx, cy] = await invoke<[number, number]>('get_cursor_position')
+      // 光标换算成 overlay 内逻辑坐标
+      const lx = (cx - overlayOrigin.x) / overlayScale
+      const ly = (cy - overlayOrigin.y) / overlayScale
+      let hit = false
+      for (const el of document.querySelectorAll<HTMLElement>('[data-bubble-id]')) {
+        const r = el.getBoundingClientRect()
+        if (lx >= r.left && lx <= r.right && ly >= r.top && ly <= r.bottom) {
+          hit = true
+          break
+        }
+      }
+      const next = hit
+      if (next !== clickThroughActive) {
+        clickThroughActive = next
+        await invoke('set_click_through', { ignore: !next })
+      }
+    } catch {
+      // 命令不可用时保持现状
+    }
+  }, HOVER_POLL_MS)
+}
+
+async function showOverlay() {
+  const win = getCurrentWindow()
+  // 每次吐泡泡都按岛当前所在屏的工作区重新铺 overlay
+  const area = await invoke<[number, number, number, number] | null>('get_island_work_area')
+  if (!area) return
+  const [l, t, w, h] = area
+  overlayOrigin = { x: l, y: t }
+  await win.setPosition(new PhysicalPosition(l, t))
+  await win.setSize(new PhysicalSize(w, h))
+  overlayScale = await win.scaleFactor()
+  clickThroughActive = true
+  await invoke('set_click_through', { ignore: true })
+  await win.show()
+  startHoverPoll()
+}
+
+async function scheduleHide() {
+  if (hideGraceTimer !== null) window.clearTimeout(hideGraceTimer)
+  hideGraceTimer = window.setTimeout(async () => {
+    hideGraceTimer = null
+    if (bubbles.value.length > 0) return
+    stopHoverPoll()
+    try {
+      await getCurrentWindow().hide()
+    } catch {
+      // 忽略
+    }
+  }, HIDE_GRACE_MS)
+}
+
+/** 出生点：岛边缘附近，转成 overlay 内逻辑坐标 */
+async function spawnPoint(): Promise<{ x: number; y: number } | null> {
+  try {
+    const metrics = await invoke<{
+      island_x: number
+      island_y: number
+      island_width: number
+      island_height: number
+    } | null>('get_panel_transition_metrics')
+    if (!metrics || overlayOrigin === null) return null
+    const scale = overlayScale || 1
+    const centerX = (metrics.island_x + metrics.island_width / 2 - overlayOrigin.x) / scale
+    const edgeY =
+      metrics.island_y - overlayOrigin.y < 40
+        ? // 岛贴顶：从岛下缘冒
+          (metrics.island_y + metrics.island_height - overlayOrigin.y) / scale
+        : // 岛贴底：从岛上缘冒
+          (metrics.island_y - overlayOrigin.y) / scale
+    return {
+      x: Math.max(10, centerX + (Math.random() * 240 - 120)),
+      y: Math.max(10, edgeY),
+    }
+  } catch {
+    return null
+  }
+}
+
+/** 吐一个泡泡；类型开关与横幅让位由 spawn 闸门统一把关 */
+function spawn(kind: BubbleKind, text?: string) {
+  const { settings } = useSettings()
+  const b = settings.value.bubbles
+  if (!b.enabled) return
+  if (kind === 'coquetry' && !b.coquetry) return
+  if (kind === 'idle' && !b.idleCall) return
+  if (kind === 'comfort' && !b.comfort) return
+  if (kind === 'idle' && Date.now() - lastBubbleAt < IDLE_CALL_MIN_GAP_MS) return
+  if (bubbles.value.length >= MAX_CONCURRENT) return
+
+  void (async () => {
+    if (bubbles.value.length === 0) await showOverlay()
+    else await scheduleHideCheck()
+    const point = await spawnPoint()
+    if (!point) return
+    const line = text ?? pickBubbleLine(kind, recentLines)
+    recentLines = [line, ...recentLines].slice(0, 6)
+    lastBubbleAt = Date.now()
+    const driftMs = DRIFT_MS + Math.random() * 1200
+    const bubble: FloatingBubble = {
+      id: ++seq,
+      kind,
+      text: line,
+      x: point.x,
+      y: point.y,
+      // 飘到屏幕顶再淡出
+      riseTo: point.y + 80,
+      driftMs,
+      swayX: (Math.random() * 2 - 1) * 60,
+    }
+    bubbles.value.push(bubble)
+    window.setTimeout(() => {
+      bubbles.value = bubbles.value.filter(bb => bb.id !== bubble.id)
+      if (bubbles.value.length === 0) void scheduleHide()
+    }, driftMs + REMOVE_SLACK_MS)
+  })()
+}
+
+async function scheduleHideCheck() {
+  // 已有泡泡在飘时取消隐藏计划即可
+  if (hideGraceTimer !== null) {
+    window.clearTimeout(hideGraceTimer)
+    hideGraceTimer = null
+  }
+}
+
 /** 档位对应的基础间隔，±30% 抖动让它不像机械整点 */
 function toneIntervalMs(tone: 'quiet' | 'normal' | 'lively'): number {
   return BUBBLE_TONE_MS[tone] * (0.7 + Math.random() * 0.6)
 }
 
-/** 撒娇定时：到点先检查场合（面板开着不打扰），吐完排下一个 */
+/** 撒娇定时：到点先看场合（面板开着不打扰），排下一个 */
 function scheduleCoquetry() {
   clearCoquetryTimer()
   const { settings } = useSettings()
@@ -87,69 +230,26 @@ async function tryCoquetry() {
   } catch {
     // 查不到就当面板没开
   }
-  showBubble('coquetry')
+  spawn('coquetry')
   scheduleCoquetry()
-}
-
-/** 吐一个泡泡；横幅在显示时泡泡让位，总开关与类型开关把关 */
-export function showBubble(kind: BubbleKind, text?: string) {
-  const { settings } = useSettings()
-  const { notificationType } = useIslandBridge()
-  const bubbles = settings.value.bubbles
-  if (!bubbles.enabled) return
-  if (kind === 'coquetry' && !bubbles.coquetry) return
-  if (kind === 'idle' && !bubbles.idleCall) return
-  if (kind === 'comfort' && !bubbles.comfort) return
-  if (notificationType.value !== null) return
-  clearTimers()
-  const line = text ?? pickBubbleLine(kind, recentLines)
-  recentLines = [line, ...recentLines].slice(0, RECENT_MAX)
-  lastBubbleAt = Date.now()
-  currentBubble.value = { id: ++seq, kind, text: line }
-  bubblePhase.value = 'show'
-  showTimer = window.setTimeout(() => {
-    showTimer = null
-    bubblePhase.value = 'pop'
-    popTimer = window.setTimeout(() => {
-      popTimer = null
-      currentBubble.value = null
-    }, BUBBLE_POP_MS)
-  }, BUBBLE_SHOW_MS)
-}
-
-/** 闲置喊话：进 alert 时喊一次，受开关与最小间隔约束 */
-function maybeIdleCall() {
-  const { settings } = useSettings()
-  if (!settings.value.bubbles.idleCall) return
-  if (Date.now() - lastBubbleAt < IDLE_CALL_MIN_GAP_MS) return
-  showBubble('idle')
 }
 
 export function useIslandBubbles() {
   const { settings } = useSettings()
-  const { state } = useIslandState()
-  const bubbleVisible = computed(() => currentBubble.value !== null)
 
-  // 总开关关掉时立刻收掉正在飘的泡泡；进闲置时喊一句；档位/开关变化重排撒娇节奏
   if (!installed) {
     installed = true
     watch(
-      () => settings.value.bubbles.enabled,
-      (on) => {
-        if (!on) {
-          clearTimers()
+      () => settings.value.bubbles,
+      () => {
+        if (!settings.value.bubbles.enabled) {
           clearCoquetryTimer()
-          currentBubble.value = null
+          bubbles.value = []
+          void scheduleHide()
         }
+        scheduleCoquetry()
       },
-    )
-    watch(state, (s, prev) => {
-      if (s !== 'alert' || prev === 'alert') return
-      maybeIdleCall()
-    })
-    watch(
-      () => [settings.value.bubbles.enabled, settings.value.bubbles.coquetry, settings.value.bubbles.tone] as const,
-      () => scheduleCoquetry(),
+      { deep: true },
     )
   }
 
@@ -158,7 +258,7 @@ export function useIslandBubbles() {
     unlistenBubble = await listen<{ kind?: string; text?: string }>('island-bubble', ({ payload }) => {
       const kind = BUBBLE_KINDS.find(k => k === payload?.kind)
       if (!kind) return
-      showBubble(kind, typeof payload.text === 'string' && payload.text ? payload.text : undefined)
+      spawn(kind, typeof payload.text === 'string' && payload.text ? payload.text : undefined)
     })
     scheduleCoquetry()
   }
@@ -166,16 +266,23 @@ export function useIslandBubbles() {
   function stop() {
     unlistenBubble?.()
     unlistenBubble = null
-    clearTimers()
     clearCoquetryTimer()
-    currentBubble.value = null
+    stopHoverPoll()
+    bubbles.value = []
+  }
+
+  async function onBubbleClick() {
+    try {
+      await invoke('toggle_panel')
+    } catch {
+      // 忽略
+    }
   }
 
   return {
-    currentBubble,
-    bubblePhase,
-    bubbleVisible,
+    bubbles,
     start,
     stop,
+    onBubbleClick,
   }
 }

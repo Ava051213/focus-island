@@ -1,10 +1,13 @@
 {
   "identifier": "default",
   "description": "Default capabilities for FocusIsland",
-  "windows": ["main", "panel"],
+  "windows": ["main", "panel", "bubble"],
   "permissions": [
     "core:default",
     "core:window:allow-set-position",
+    "core:window:allow-set-size",
+    "core:window:allow-show",
+    "core:window:allow-hide",
     "core:window:allow-set-focus",
     "fs:default",
     "fs:allow-read-text-file",
