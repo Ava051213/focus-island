@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest'
 import { migrate, UnknownSchemaVersionError } from '../schema'
 import { DEFAULT_TOGGLE_SHORTCUT } from '../shortcuts'
 import {
+  defaultBubbleSettings,
   defaultNotificationSettings,
   defaultShortcutSettings,
   defaultTraySettings,
   migrateSettingsV1ToV2,
   migrateSettingsV2ToV3,
   migrateSettingsV3ToV4,
+  migrateSettingsV4ToV5,
   normalizeSettingsShape,
 } from '../settingsMigration'
 
@@ -146,5 +148,38 @@ describe('settings 迁移', () => {
     expect(result.migrated).toBe(true)
     expect(result.data.islandEdge).toBe('bottom')
     expect(result.data.islandEdgeRatio).toBeCloseTo(0.6)
+  })
+
+  it('v4 → v5：没有泡泡设置时补全默认值', () => {
+    const migrated = migrateSettingsV4ToV5({}) as Record<string, unknown>
+    expect(migrated.bubbles).toEqual(defaultBubbleSettings())
+  })
+
+  it('v4 → v5：已带泡泡设置时原样保留', () => {
+    const migrated = migrateSettingsV4ToV5({
+      bubbles: { enabled: false, tone: 'lively', coquetry: false, idleCall: true, comfort: false },
+    }) as Record<string, unknown>
+    expect(migrated.bubbles).toEqual({
+      enabled: false,
+      tone: 'lively',
+      coquetry: false,
+      idleCall: true,
+      comfort: false,
+    })
+  })
+
+  it('v4 → v5：非法档位与缺失字段归一化', () => {
+    const migrated = migrateSettingsV4ToV5({ bubbles: { tone: '吵死了' } }) as Record<string, unknown>
+    expect(migrated.bubbles).toEqual(defaultBubbleSettings())
+  })
+
+  it('通过 migrations 链从 v4 升到 v5', () => {
+    const result = migrate<Record<string, unknown>>(
+      { schemaVersion: 4, data: { islandEdge: 'top' } },
+      { currentVersion: 5, migrations: { 1: migrateSettingsV1ToV2, 2: migrateSettingsV2ToV3, 3: migrateSettingsV3ToV4, 4: migrateSettingsV4ToV5 } },
+    )
+    expect(result.migrated).toBe(true)
+    expect(result.data.islandEdge).toBe('top')
+    expect((result.data.bubbles as Record<string, unknown>).enabled).toBe(true)
   })
 })
