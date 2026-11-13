@@ -21,7 +21,9 @@ export interface FloatingBubble {
   /** 出生点与漂移参数（overlay 内逻辑像素） */
   x: number
   y: number
-  /** 向上飘的目标距离（px），飘到顶就淡出 */
+  /** 1 = 向上飘（岛贴底），-1 = 向下飘（岛贴顶） */
+  dir: 1 | -1
+  /** 沿方向的漂移距离（px），飘到对侧边缘前淡出 */
   riseTo: number
   driftMs: number
   /** 双频正弦横摆的两组幅度/相位（非整数频率比，轨迹永不重复） */
@@ -56,6 +58,7 @@ let hideGraceTimer: number | null = null
 let hoverTimer: number | null = null
 let clickThroughActive: boolean | null = null
 let overlayOrigin: { x: number; y: number } | null = null
+let overlayHeight = 0
 let overlayScale = 1
 let unlistenBubble: UnlistenFn | null = null
 let installed = false
@@ -111,9 +114,10 @@ async function showOverlay() {
   if (!area) return
   const [l, t, w, h] = area
   overlayOrigin = { x: l, y: t }
+  overlayScale = await win.scaleFactor()
+  overlayHeight = h / overlayScale
   await win.setPosition(new PhysicalPosition(l, t))
   await win.setSize(new PhysicalSize(w, h))
-  overlayScale = await win.scaleFactor()
   clickThroughActive = true
   await invoke('set_click_through', { ignore: true })
   await win.show()
@@ -134,8 +138,8 @@ async function scheduleHide() {
   }, HIDE_GRACE_MS)
 }
 
-/** 出生点：岛边缘附近，转成 overlay 内逻辑坐标 */
-async function spawnPoint(): Promise<{ x: number; y: number } | null> {
+/** 出生点与方向：岛贴顶 → 泡泡往下滴，岛贴底 → 泡泡往上飘；转成 overlay 内逻辑坐标 */
+async function spawnPoint(): Promise<{ x: number; y: number; dir: 1 | -1 } | null> {
   try {
     const metrics = await invoke<{
       island_x: number
@@ -146,15 +150,16 @@ async function spawnPoint(): Promise<{ x: number; y: number } | null> {
     if (!metrics || overlayOrigin === null) return null
     const scale = overlayScale || 1
     const centerX = (metrics.island_x + metrics.island_width / 2 - overlayOrigin.x) / scale
-    const edgeY =
-      metrics.island_y - overlayOrigin.y < 40
-        ? // 岛贴顶：从岛下缘冒
-          (metrics.island_y + metrics.island_height - overlayOrigin.y) / scale
-        : // 岛贴底：从岛上缘冒
-          (metrics.island_y - overlayOrigin.y) / scale
+    const islandLocalY = metrics.island_y - overlayOrigin.y
+    // 岛贴顶（localY 很小）→ 从岛下缘冒、向下飘；岛贴底 → 从岛上缘冒、向上飘
+    const fromTop = islandLocalY < 40
+    const edgeY = fromTop
+      ? (islandLocalY + metrics.island_height) / scale
+      : islandLocalY / scale
     return {
       x: Math.max(10, centerX + (Math.random() * 240 - 120)),
       y: Math.max(10, edgeY),
+      dir: fromTop ? -1 : 1,
     }
   } catch {
     return null
@@ -181,14 +186,16 @@ function spawn(kind: BubbleKind, text?: string) {
     recentLines = [line, ...recentLines].slice(0, 6)
     lastBubbleAt = Date.now()
     const driftMs = DRIFT_MS + Math.random() * 1200
+    // 沿方向飘到对侧边缘外再淡出
+    const riseTo = point.dir === 1 ? point.y + 90 : overlayHeight - point.y + 90
     const bubble: FloatingBubble = {
       id: ++seq,
       kind,
       text: line,
       x: point.x,
       y: point.y,
-      // 飘到屏幕顶再淡出
-      riseTo: point.y + 80,
+      dir: point.dir,
+      riseTo,
       driftMs,
       swayA1: 38 + Math.random() * 28,
       swayA2: 12 + Math.random() * 14,

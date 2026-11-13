@@ -15,7 +15,7 @@ defineEmits<{ click: [] }>();
         :style="{
             left: bubble.x + 'px',
             top: bubble.y + 'px',
-            '--rise-to': -bubble.riseTo + 'px',
+            '--rise-to': bubble.dir * bubble.riseTo + 'px',
             '--drift-ms': bubble.driftMs + 'ms',
             '--sway-a1': bubble.swayA1 + 'px',
             '--sway-a2': bubble.swayA2 + 'px',
@@ -53,7 +53,7 @@ defineEmits<{ click: [] }>();
 
     9% {
         opacity: 0.96;
-        transform: translateY(-14px) scale(1);
+        transform: translateY(calc(var(--rise-to) * 0.02)) scale(1);
     }
 
     86% {
@@ -125,17 +125,17 @@ defineEmits<{ click: [] }>();
 /* 轻微的旋转+上下晃动：真泡泡在空气里会这样颤 */
 .bubble-float {
     position: relative;
-    animation: bubble-wobble 2.7s ease-in-out infinite alternate;
+    animation: bubble-wobble 3.4s ease-in-out infinite alternate;
     animation-delay: var(--wobble-phase);
 }
 
 @keyframes bubble-wobble {
     from {
-        transform: translateY(-3px) rotate(-1.6deg);
+        transform: translateY(-5px) rotate(-1.4deg);
     }
 
     to {
-        transform: translateY(3px) rotate(1.6deg);
+        transform: translateY(5px) rotate(1.4deg);
     }
 }
 
