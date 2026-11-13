@@ -26,6 +26,12 @@ function switchColorMode(mode: ColorMode) {
   if (settings.value.colorMode === mode) return
   settings.value.colorMode = mode
 }
+
+// 贴边参数写回后由主窗口的 watch 重新摆位（跨窗口同步驱动）
+function resetIslandPosition() {
+  settings.value.islandEdge = 'top'
+  settings.value.islandEdgeRatio = null
+}
 </script>
 
 <template>
@@ -85,6 +91,12 @@ function switchColorMode(mode: ColorMode) {
         v-model.number="settings.islandScale"
       />
       <span class="opacity-value">{{ Math.round(settings.islandScale * 100) }}%</span>
+    </div>
+    <div class="slider-row">
+      <label class="slider-label">位置</label>
+      <button type="button" class="reset-pos-btn" @click="resetIslandPosition">
+        拖乱了？回到默认位置
+      </button>
     </div>
   </div>
 
@@ -219,6 +231,26 @@ function switchColorMode(mode: ColorMode) {
   min-width: 32px;
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+
+.reset-pos-btn {
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 11px;
+  line-height: 1;
+  height: 24px;
+  padding: 0 10px;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.reset-pos-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.3);
 }
 
 .theme-grid {

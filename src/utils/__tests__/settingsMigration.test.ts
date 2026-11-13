@@ -6,6 +6,7 @@ import {
   defaultShortcutSettings,
   defaultTraySettings,
   migrateSettingsV1ToV2,
+  migrateSettingsV2ToV3,
   normalizeSettingsShape,
 } from '../settingsMigration'
 
@@ -77,5 +78,46 @@ describe('settings 迁移', () => {
       { schemaVersion: 3, data: {} },
       { currentVersion: 2, migrations: { 1: migrateSettingsV1ToV2 } },
     )).toThrow(UnknownSchemaVersionError)
+  })
+
+  it('v2 → v3：islandXRatio 映射成贴边参数并删除旧字段', () => {
+    const migrated = migrateSettingsV2ToV3({ islandXRatio: 0.7 }) as Record<string, unknown>
+    expect(migrated.islandEdge).toBe('top')
+    expect(migrated.islandEdgeRatio).toBeCloseTo(0.7)
+    expect(migrated.islandXRatio).toBeUndefined()
+  })
+
+  it('v2 → v3：islandXRatio 为 null 时沿边居中', () => {
+    const migrated = migrateSettingsV2ToV3({ islandXRatio: null }) as Record<string, unknown>
+    expect(migrated.islandEdge).toBe('top')
+    expect(migrated.islandEdgeRatio).toBeNull()
+  })
+
+  it('v2 → v3：已带贴边字段的数据原样保留', () => {
+    const migrated = migrateSettingsV2ToV3({
+      islandEdge: 'bottom',
+      islandEdgeRatio: 0.3,
+    }) as Record<string, unknown>
+    expect(migrated.islandEdge).toBe('bottom')
+    expect(migrated.islandEdgeRatio).toBeCloseTo(0.3)
+  })
+
+  it('非法贴边字段归一化成默认值', () => {
+    const normalized = normalizeSettingsShape({
+      islandEdge: 'diagonal',
+      islandEdgeRatio: Number.NaN,
+    })
+    expect(normalized.islandEdge).toBe('top')
+    expect(normalized.islandEdgeRatio).toBeNull()
+  })
+
+  it('通过 migrations 链从 v2 升到 v3', () => {
+    const result = migrate<Record<string, unknown>>(
+      { schemaVersion: 2, data: { islandXRatio: 0.2 } },
+      { currentVersion: 3, migrations: { 1: migrateSettingsV1ToV2, 2: migrateSettingsV2ToV3 } },
+    )
+    expect(result.migrated).toBe(true)
+    expect(result.data.islandEdge).toBe('top')
+    expect(result.data.islandEdgeRatio).toBeCloseTo(0.2)
   })
 })

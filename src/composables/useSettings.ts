@@ -6,11 +6,15 @@ import {
   defaultShortcutSettings,
   defaultTraySettings,
   migrateSettingsV1ToV2,
+  migrateSettingsV2ToV3,
   normalizeSettingsShape,
   type NotificationSettings,
   type ShortcutSettings,
   type TraySettings,
 } from '../utils/settingsMigration'
+import type { IslandEdge } from '../utils/islandPlacement'
+
+export type { IslandEdge }
 
 export interface ThemePreset {
   id: string
@@ -31,7 +35,8 @@ export interface Settings {
   islandOpacity: number      // 透明度 0~0.7，值越大越透明，CSS alpha = 1 - value
   islandScale: number        // 灵动岛缩放比例 0.5~1.5
   islandDisplayMode: IslandDisplayMode  // 灵动岛显示方式：常驻 / 边缘停靠
-  islandXRatio: number | null            // 顶部水平位置比例 0~1，null 表示居中
+  islandEdge: IslandEdge                // 岛贴在哪条边（只贴边不悬空）
+  islandEdgeRatio: number | null        // 沿边的滑动比例 0~1，null 表示沿边居中
   focusDuration: number
   breakDuration: number
   colorMode: ColorMode
@@ -61,7 +66,8 @@ const DEFAULT_SETTINGS: Settings = {
   islandOpacity: 0.25,
   islandScale: 1.0,
   islandDisplayMode: 'resident',
-  islandXRatio: null,
+  islandEdge: 'top',
+  islandEdgeRatio: null,
   focusDuration: 25,
   breakDuration: 5,
   colorMode: 'system',
@@ -137,8 +143,8 @@ function applyThemeToDOM() {
 
 const store = createPersistedStore({
   file: 'settings.json',
-  schemaVersion: 2,
-  migrations: { 1: migrateSettingsV1ToV2 },
+  schemaVersion: 3,
+  migrations: { 1: migrateSettingsV1ToV2, 2: migrateSettingsV2ToV3 },
   snapshot: () => settings.value,
   restore: (data) => {
     if (!data || typeof data !== 'object') throw new Error('settings.json is not an object')

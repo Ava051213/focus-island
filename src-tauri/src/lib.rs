@@ -22,6 +22,10 @@ use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
 #[cfg(target_os = "windows")]
 use windows::Win32::Foundation::{POINT, RECT};
 #[cfg(target_os = "windows")]
+use windows::Win32::Graphics::Gdi::{
+    GetMonitorInfoW, MonitorFromPoint, MONITORINFO, MONITOR_DEFAULTTONEAREST,
+};
+#[cfg(target_os = "windows")]
 use windows::Win32::UI::WindowsAndMessaging::{
     AllowSetForegroundWindow, GetCursorPos, GetWindowRect, ASFW_ANY,
 };
@@ -80,6 +84,177 @@ impl ShortcutBindings {
 }
 
 static LAST_PANEL_SIZE: OnceLock<Mutex<Option<tauri::PhysicalSize<u32>>>> = OnceLock::new();
+static LAST_ISLAND_PLACE: OnceLock<Mutex<Option<IslandPlace>>> = OnceLock::new();
+
+/// 岛贴哪条边；只贴边不悬空。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum IslandEdge {
+    Top,
+    Bottom,
+    Left,
+    Right,
+}
+
+impl IslandEdge {
+    fn parse(value: &str) -> Option<Self> {
+        match value {
+            "top" => Some(Self::Top),
+            "bottom" => Some(Self::Bottom),
+            "left" => Some(Self::Left),
+            "right" => Some(Self::Right),
+            _ => None,
+        }
+    }
+}
+
+/// 贴边摆放参数：边 + 沿边比例（None = 沿边居中）。
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct IslandPlace {
+    edge: IslandEdge,
+    ratio: Option<f64>,
+}
+
+/// 沿边方向的窗口原点偏移；ratio None = 居中；窗口比区域还大时贴起点。
+fn offset_along_edge(area_len: i64, win_len: i64, ratio: Option<f64>) -> i32 {
+    let max = area_len - win_len;
+    if max <= 0 {
+        return 0;
+    }
+    let offset = match ratio {
+        None => max as f64 / 2.0,
+        Some(r) => r.clamp(0.0, 1.0) * max as f64,
+    };
+    offset.round() as i32
+}
+
+/// 按贴边语义算窗口左上角物理坐标。area = (left, top, width, height)，
+/// 是窗口所在显示器的可用区域（Windows 排除任务栏）。
+fn island_position_for_edge(
+    area: (i64, i64, i64, i64),
+    win: (i64, i64),
+    edge: IslandEdge,
+    ratio: Option<f64>,
+) -> (i32, i32) {
+    let (area_x, area_y, area_w, area_h) = area;
+    let (win_w, win_h) = win;
+    let (x, y) = match edge {
+        IslandEdge::Top => (
+            area_x + offset_along_edge(area_w, win_w, ratio) as i64,
+            area_y,
+        ),
+        // 窗口比区域还大时钳回区域起点，别探出屏幕外
+        IslandEdge::Bottom => (
+            area_x + offset_along_edge(area_w, win_w, ratio) as i64,
+            (area_y + area_h - win_h).max(area_y),
+        ),
+        IslandEdge::Left => (
+            area_x,
+            area_y + offset_along_edge(area_h, win_h, ratio) as i64,
+        ),
+        IslandEdge::Right => (
+            (area_x + area_w - win_w).max(area_x),
+            area_y + offset_along_edge(area_h, win_h, ratio) as i64,
+        ),
+    };
+    (x as i32, y as i32)
+}
+
+/// 窗口中心所在显示器的可用区域。Windows 用 GetMonitorInfoW 拿 work-area
+/// （排除任务栏），其他平台退回整块显示器。
+#[cfg(target_os = "windows")]
+fn work_area_at(center: (i32, i32)) -> Option<(i64, i64, i64, i64)> {
+    let hmonitor = unsafe {
+        MonitorFromPoint(
+            POINT { x: center.0, y: center.1 },
+            MONITOR_DEFAULTTONEAREST,
+        )
+    };
+    if hmonitor.is_invalid() {
+        return None;
+    }
+    let mut info = MONITORINFO {
+        cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+        ..Default::default()
+    };
+    if unsafe { GetMonitorInfoW(hmonitor, &mut info) }.as_bool() {
+        let rc = info.rcWork;
+        Some((
+            rc.left as i64,
+            rc.top as i64,
+            (rc.right - rc.left) as i64,
+            (rc.bottom - rc.top) as i64,
+        ))
+    } else {
+        None
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn work_area_at(_center: (i32, i32)) -> Option<(i64, i64, i64, i64)> {
+    None
+}
+
+fn last_island_place_lock() -> &'static Mutex<Option<IslandPlace>> {
+    LAST_ISLAND_PLACE.get_or_init(|| Mutex::new(None))
+}
+
+fn set_last_island_place(place: IslandPlace) {
+    if let Ok(mut slot) = last_island_place_lock().lock() {
+        *slot = Some(place);
+    }
+}
+
+/// 上一次贴边摆放参数；进程启动后还没摆过时按默认（顶边居中）。
+fn get_last_island_place() -> IslandPlace {
+    last_island_place_lock()
+        .lock()
+        .ok()
+        .and_then(|slot| *slot)
+        .unwrap_or(IslandPlace { edge: IslandEdge::Top, ratio: None })
+}
+
+/// 按 give 的贴边参数把主窗口摆到所在显示器的可用区域上。
+fn apply_island_place<R: Runtime>(app: &AppHandle<R>, place: IslandPlace) {
+    let Some(main) = app.get_webview_window("main") else {
+        return;
+    };
+    let Ok(size) = main.outer_size() else { return };
+    let Ok(pos) = main.outer_position() else { return };
+    let center = (
+        pos.x + size.width as i32 / 2,
+        pos.y + size.height as i32 / 2,
+    );
+    // 先按窗口中心找所在显示器的 work-area；拿不到再退回当前显示器整块屏
+    let area = work_area_at(center).or_else(|| {
+        main.current_monitor().ok().flatten().map(|m| {
+            let p = m.position();
+            let s = m.size();
+            (p.x as i64, p.y as i64, s.width as i64, s.height as i64)
+        })
+    });
+    let Some(area) = area else { return };
+    let (x, y) = island_position_for_edge(
+        area,
+        (size.width as i64, size.height as i64),
+        place.edge,
+        place.ratio,
+    );
+    let _ = main.set_position(tauri::PhysicalPosition::new(x, y));
+}
+
+#[tauri::command]
+fn place_island<R: Runtime>(app: AppHandle<R>, edge: String, ratio: Option<f64>) -> Result<(), String> {
+    let Some(edge) = IslandEdge::parse(&edge) else {
+        return Err(format!("未知的贴边方向：{edge}"));
+    };
+    let place = IslandPlace {
+        edge,
+        ratio: ratio.map(|r| r.clamp(0.0, 1.0)),
+    };
+    set_last_island_place(place);
+    apply_island_place(&app, place);
+    Ok(())
+}
 
 #[derive(serde::Serialize, Clone, Copy)]
 struct PanelTransitionMetrics {
@@ -191,17 +366,9 @@ fn set_island_size<R: Runtime>(app: AppHandle<R>, scale: f64) {
     if let Some(main) = app.get_webview_window("main") {
         let base_width = 360.0;
         let base_height = 42.0;
-        let new_width = base_width * scale;
-        let new_height = base_height * scale;
-        let _ = main.set_size(tauri::LogicalSize::new(new_width, new_height));
-        if let Ok(Some(monitor)) = main.current_monitor() {
-            let scale_factor = monitor.scale_factor();
-            let screen_width = monitor.size().width as f64;
-            let position = monitor.position();
-            let x = position.x as f64 + (screen_width - new_width * scale_factor) / 2.0;
-            let y = position.y as f64;
-            let _ = main.set_position(tauri::PhysicalPosition::new(x as i32, y as i32));
-        }
+        let _ = main.set_size(tauri::LogicalSize::new(base_width * scale, base_height * scale));
+        // 尺寸变化后按最近的贴边参数重摆，岛保持贴在原来的边上
+        apply_island_place(&app, get_last_island_place());
     }
 }
 
@@ -209,14 +376,7 @@ fn set_island_size<R: Runtime>(app: AppHandle<R>, scale: f64) {
 fn set_island_custom_size<R: Runtime>(app: AppHandle<R>, width: f64, height: f64) {
     if let Some(main) = app.get_webview_window("main") {
         let _ = main.set_size(tauri::LogicalSize::new(width, height));
-        if let Ok(Some(monitor)) = main.current_monitor() {
-            let scale_factor = monitor.scale_factor();
-            let screen_width = monitor.size().width as f64;
-            let position = monitor.position();
-            let x = position.x as f64 + (screen_width - width * scale_factor) / 2.0;
-            let y = position.y as f64;
-            let _ = main.set_position(tauri::PhysicalPosition::new(x as i32, y as i32));
-        }
+        apply_island_place(&app, get_last_island_place());
     }
 }
 
@@ -269,10 +429,53 @@ fn panel_target_position(
     main_pos: tauri::PhysicalPosition<i32>,
     main_size: tauri::PhysicalSize<u32>,
     panel_size: tauri::PhysicalSize<u32>,
+    work_area: Option<(i64, i64, i64, i64)>,
 ) -> tauri::PhysicalPosition<i32> {
-    let new_x = main_pos.x + ((main_size.width as i32 - panel_size.width as i32) / 2);
-    let new_y = main_pos.y + main_size.height as i32 + PANEL_GAP_Y;
+    let mut new_x = main_pos.x + ((main_size.width as i32 - panel_size.width as i32) / 2);
+    // 岛下方放不下整块面板就朝上弹（岛贴底边时的场景）
+    let fits_below = match work_area {
+        Some((_, area_top, _, area_height)) => {
+            main_pos.y as i64 + main_size.height as i64 + PANEL_GAP_Y as i64
+                + panel_size.height as i64
+                <= area_top + area_height
+        }
+        None => true,
+    };
+    let new_y = if fits_below {
+        main_pos.y + main_size.height as i32 + PANEL_GAP_Y
+    } else {
+        main_pos.y - PANEL_GAP_Y - panel_size.height as i32
+    };
+    // 面板别探出屏幕左右
+    if let Some((area_left, _, area_width, _)) = work_area {
+        let area_right = area_left + area_width;
+        if panel_size.width as i64 >= area_width {
+            new_x = area_left as i32;
+        } else {
+            new_x = (new_x as i64)
+                .max(area_left)
+                .min(area_right - panel_size.width as i64) as i32;
+        }
+    }
     tauri::PhysicalPosition::new(new_x, new_y)
+}
+
+/// 岛所在显示器的可用区域；拿不到 work-area 时退回整块屏。
+fn island_work_area<R: Runtime>(app: &AppHandle<R>) -> Option<(i64, i64, i64, i64)> {
+    let main = app.get_webview_window("main")?;
+    let pos = main.outer_position().ok()?;
+    let size = main.outer_size().ok()?;
+    let center = (
+        pos.x + size.width as i32 / 2,
+        pos.y + size.height as i32 / 2,
+    );
+    work_area_at(center).or_else(|| {
+        main.current_monitor().ok().flatten().map(|m| {
+            let p = m.position();
+            let s = m.size();
+            (p.x as i64, p.y as i64, s.width as i64, s.height as i64)
+        })
+    })
 }
 
 fn panel_config_values<R: Runtime>(app: &AppHandle<R>) -> (f64, f64, f64, f64) {
@@ -302,7 +505,7 @@ fn position_panel_under_island_inner<R: Runtime>(app: &AppHandle<R>) {
     let Some((main_pos, main_size)) = get_main_rect(app) else {
         return;
     };
-    let target_pos = panel_target_position(main_pos, main_size, panel_size);
+    let target_pos = panel_target_position(main_pos, main_size, panel_size, island_work_area(app));
     let _ = panel.set_position(target_pos);
 }
 
@@ -441,7 +644,7 @@ fn get_panel_transition_metrics<R: Runtime>(app: AppHandle<R>) -> Option<PanelTr
         panel_size.width.max(min_width),
         panel_size.height.max(min_height),
     );
-    let panel_pos = panel_target_position(main_pos, main_size, panel_size);
+    let panel_pos = panel_target_position(main_pos, main_size, panel_size, island_work_area(&app));
 
     Some(PanelTransitionMetrics {
         island_x: main_pos.x,
@@ -500,7 +703,7 @@ fn animate_panel_open<R: Runtime>(app: AppHandle<R>) {
         target_size.width.max(min_width),
         target_size.height.max(min_height),
     );
-    let target_pos = panel_target_position(main_pos, main_size, target_size);
+    let target_pos = panel_target_position(main_pos, main_size, target_size, island_work_area(&app));
 
     let _ = panel.set_ignore_cursor_events(false);
     let _ = panel.set_position(target_pos);
@@ -613,6 +816,7 @@ pub fn run() {
             set_click_through,
             set_island_size,
             set_island_custom_size,
+            place_island,
             emit_island_panel_motion,
             position_panel_under_island,
             get_panel_transition_metrics,
@@ -718,4 +922,101 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const AREA: (i64, i64, i64, i64) = (0, 0, 1920, 1080);
+    const WIN: (i64, i64) = (360, 42);
+
+    #[test]
+    fn top_edge_centers_by_default() {
+        assert_eq!(island_position_for_edge(AREA, WIN, IslandEdge::Top, None), (780, 0));
+    }
+
+    #[test]
+    fn top_edge_ratio_moves_along_and_clamps() {
+        assert_eq!(island_position_for_edge(AREA, WIN, IslandEdge::Top, Some(0.0)), (0, 0));
+        assert_eq!(island_position_for_edge(AREA, WIN, IslandEdge::Top, Some(1.0)), (1560, 0));
+        // 超界比例按 0~1 处理
+        assert_eq!(island_position_for_edge(AREA, WIN, IslandEdge::Top, Some(1.5)), (1560, 0));
+        assert_eq!(island_position_for_edge(AREA, WIN, IslandEdge::Top, Some(-2.0)), (0, 0));
+    }
+
+    #[test]
+    fn bottom_edge_sticks_to_work_area_bottom() {
+        assert_eq!(island_position_for_edge(AREA, WIN, IslandEdge::Bottom, None), (780, 1038));
+        assert_eq!(island_position_for_edge(AREA, WIN, IslandEdge::Bottom, Some(1.0)), (1560, 1038));
+    }
+
+    #[test]
+    fn side_edges_slide_vertically() {
+        assert_eq!(island_position_for_edge(AREA, WIN, IslandEdge::Left, None), (0, 519));
+        assert_eq!(island_position_for_edge(AREA, WIN, IslandEdge::Left, Some(0.5)), (0, 519));
+        assert_eq!(island_position_for_edge(AREA, WIN, IslandEdge::Right, Some(0.25)), (1560, 260));
+    }
+
+    #[test]
+    fn window_bigger_than_area_parks_at_origin() {
+        assert_eq!(island_position_for_edge(AREA, (3000, 1500), IslandEdge::Bottom, Some(0.8)), (0, 0));
+        assert_eq!(island_position_for_edge(AREA, (3000, 1500), IslandEdge::Right, None), (0, 0));
+    }
+
+    #[test]
+    fn offset_rounds_half_up() {
+        // 1038 * 0.25 = 259.5
+        assert_eq!(offset_along_edge(1080, 42, Some(0.25)), 260);
+    }
+
+    #[test]
+    fn panel_flips_above_when_no_room_below() {
+        // 岛贴底边：下方放不下 340 高的面板，翻到上方
+        let main_pos = tauri::PhysicalPosition::new(780, 1038);
+        let main_size = tauri::PhysicalSize::new(360, 42);
+        let panel_size = tauri::PhysicalSize::new(480, 340);
+        let pos = panel_target_position(main_pos, main_size, panel_size, Some(AREA));
+        assert_eq!(pos.y, 1038 - 6 - 340);
+        assert_eq!(pos.x, 720);
+    }
+
+    #[test]
+    fn panel_clamps_into_screen_horizontally() {
+        // 岛贴左边缘：面板居中于岛会探出左边界，钳回工作区左缘
+        let main_pos = tauri::PhysicalPosition::new(0, 500);
+        let main_size = tauri::PhysicalSize::new(360, 42);
+        let panel_size = tauri::PhysicalSize::new(480, 340);
+        let pos = panel_target_position(main_pos, main_size, panel_size, Some(AREA));
+        assert_eq!(pos.y, 500 + 42 + 6);
+        assert_eq!(pos.x, 0);
+    }
+
+    #[test]
+    fn panel_stays_below_when_it_fits() {
+        let main_pos = tauri::PhysicalPosition::new(780, 500);
+        let main_size = tauri::PhysicalSize::new(360, 42);
+        let panel_size = tauri::PhysicalSize::new(480, 340);
+        let pos = panel_target_position(main_pos, main_size, panel_size, Some(AREA));
+        assert_eq!(pos.y, 500 + 42 + 6);
+        assert_eq!(pos.x, 720);
+    }
+
+    #[test]
+    fn panel_without_work_area_keeps_legacy_below() {
+        let main_pos = tauri::PhysicalPosition::new(780, 1038);
+        let main_size = tauri::PhysicalSize::new(360, 42);
+        let panel_size = tauri::PhysicalSize::new(480, 340);
+        let pos = panel_target_position(main_pos, main_size, panel_size, None);
+        assert_eq!(pos.y, 1038 + 42 + 6);
+    }
+
+    #[test]
+    fn island_edge_parses_known_directions() {
+        assert_eq!(IslandEdge::parse("top"), Some(IslandEdge::Top));
+        assert_eq!(IslandEdge::parse("bottom"), Some(IslandEdge::Bottom));
+        assert_eq!(IslandEdge::parse("left"), Some(IslandEdge::Left));
+        assert_eq!(IslandEdge::parse("right"), Some(IslandEdge::Right));
+        assert_eq!(IslandEdge::parse("center"), None);
+    }
 }
