@@ -2,6 +2,7 @@ import { computed, ref, watch } from 'vue'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { useSettings } from './useSettings'
 import { useIslandBridge } from './useIslandBridge'
+import { useIslandState } from './useIslandState'
 import { pickBubbleLine, type BubbleKind } from '../utils/bubbleTexts'
 
 /**
@@ -23,6 +24,8 @@ const BUBBLE_SHOW_MS = 2600
 const BUBBLE_POP_MS = 260
 /** 选句时避开的最近说过条数 */
 const RECENT_MAX = 6
+/** 闲置喊话的最小间隔：活动-闲置反复横跳时别连环喊 */
+const IDLE_CALL_MIN_GAP_MS = 10 * 60 * 1000
 
 const BUBBLE_KINDS: BubbleKind[] = ['coquetry', 'idle', 'comfort', 'test']
 
@@ -32,6 +35,7 @@ let seq = 0
 let showTimer: number | null = null
 let popTimer: number | null = null
 let recentLines: string[] = []
+let lastBubbleAt = 0
 let unlistenBubble: UnlistenFn | null = null
 let installed = false
 
@@ -55,6 +59,7 @@ export function showBubble(kind: BubbleKind, text?: string) {
   clearTimers()
   const line = text ?? pickBubbleLine(kind, recentLines)
   recentLines = [line, ...recentLines].slice(0, RECENT_MAX)
+  lastBubbleAt = Date.now()
   currentBubble.value = { id: ++seq, kind, text: line }
   bubblePhase.value = 'show'
   showTimer = window.setTimeout(() => {
@@ -67,11 +72,20 @@ export function showBubble(kind: BubbleKind, text?: string) {
   }, BUBBLE_SHOW_MS)
 }
 
+/** 闲置喊话：进 alert 时喊一次，受开关与最小间隔约束 */
+function maybeIdleCall() {
+  const { settings } = useSettings()
+  if (!settings.value.bubbles.idleCall) return
+  if (Date.now() - lastBubbleAt < IDLE_CALL_MIN_GAP_MS) return
+  showBubble('idle')
+}
+
 export function useIslandBubbles() {
   const { settings } = useSettings()
+  const { state } = useIslandState()
   const bubbleVisible = computed(() => currentBubble.value !== null)
 
-  // 总开关关掉时立刻收掉正在飘的泡泡
+  // 总开关关掉时立刻收掉正在飘的泡泡；进闲置时喊一句
   if (!installed) {
     installed = true
     watch(
@@ -83,6 +97,10 @@ export function useIslandBubbles() {
         }
       },
     )
+    watch(state, (s, prev) => {
+      if (s !== 'alert' || prev === 'alert') return
+      maybeIdleCall()
+    })
   }
 
   async function start() {
