@@ -5,11 +5,12 @@ import { availableMonitors, getCurrentWindow, PhysicalPosition } from '@tauri-ap
 import { useSettings } from './useSettings'
 import { useDockMode } from './useDockMode'
 import {
+  edgeDistances,
   edgeRatioForPosition,
-  nearestEdge,
   snapToNearestEdge,
   type PlacementArea,
 } from '../utils/islandPlacement'
+import { PHYSICS, isRestingOnFloor, stepPhysics } from '../utils/islandPhysics'
 import type { NotificationType } from './useTimer'
 
 interface ScreenRect {
@@ -55,6 +56,12 @@ export function useIslandInteraction(options: IslandInteractionOptions) {
 
   let hoverTimer: ReturnType<typeof setTimeout> | null = null
   let peekTimer: number | null = null
+
+  // 落体物理：rAF 驱动，松手到落定之间 islandActive 为真
+  let physicsRaf: number | null = null
+  let physicsActive = false
+  let physicsStartAt = 0
+  let lastFrameAt = 0
 
   let dragPointerId: number | null = null
   let dragStartScreenX = 0
@@ -127,6 +134,7 @@ export function useIslandInteraction(options: IslandInteractionOptions) {
     }
     pauseHoverPolling()
     cancelPeekTimer()
+    cancelPhysics()
     if (hoverActive.value) {
       hoverActive.value = false
       syncClickThrough()
@@ -226,7 +234,7 @@ export function useIslandInteraction(options: IslandInteractionOptions) {
 
   // 这些场景收起会挡住正事，强制保持滑回状态
   function peekForceActive(): boolean {
-    return notificationType.value !== null || dragging.value || panelVisible.value
+    return notificationType.value !== null || dragging.value || physicsActive || panelVisible.value
   }
 
   function cancelPeekTimer() {
@@ -270,6 +278,70 @@ export function useIslandInteraction(options: IslandInteractionOptions) {
     await refreshIslandGeometry()
   }
 
+  // ---------- 落体物理（松手到落定） ----------
+
+  function cancelPhysics() {
+    if (physicsRaf !== null) {
+      cancelAnimationFrame(physicsRaf)
+      physicsRaf = null
+    }
+    physicsActive = false
+  }
+
+  async function settleAfterPhysics(area: PlacementArea, win: { width: number; height: number }, x: number) {
+    settings.value.islandEdge = 'bottom'
+    settings.value.islandEdgeRatio = edgeRatioForPosition(area, win, 'bottom', x)
+    await placeFromSettings()
+    schedulePeek()
+  }
+
+  /** 松手后交给重力：掉下去弹几下停到底边；期间随时可被抓住或打断 */
+  async function startDropPhysics(area: PlacementArea) {
+    cancelPhysics()
+    let bounds: [number, number, number, number] | null = null
+    try {
+      bounds = await invoke<[number, number, number, number] | null>('get_island_work_area')
+    } catch {
+      bounds = null
+    }
+    if (!bounds) {
+      // 物理边界拿不到就退回普通贴边落位
+      await placeFromSettings()
+      schedulePeek()
+      return
+    }
+    const win = { width: windowWidth, height: windowHeight }
+    const pbounds = { left: bounds[0], top: bounds[1], width: bounds[2], height: bounds[3] }
+    const state = { x: currentWindowX, y: currentWindowY, vx: 0, vy: 0 }
+    if (isRestingOnFloor(state, pbounds, win)) {
+      await settleAfterPhysics(area, win, state.x)
+      return
+    }
+    physicsActive = true
+    physicsStartAt = performance.now()
+    lastFrameAt = physicsStartAt
+    const tick = (now: number) => {
+      physicsRaf = null
+      if (!physicsActive) return
+      const dt = Math.min((now - lastFrameAt) / 1000, 0.25)
+      lastFrameAt = now
+      const result = stepPhysics(state, pbounds, win, dt)
+      void islandWindow
+        .setPosition(new PhysicalPosition(Math.round(state.x), Math.round(state.y)))
+        .catch(() => {})
+      if (result.settled || now - physicsStartAt > PHYSICS.maxDuration * 1000) {
+        // 收敛或超时：按贴边语义精确落位，消除积分累积误差
+        physicsActive = false
+        state.vy = 0
+        state.y = Math.max(pbounds.top, pbounds.top + pbounds.height - win.height)
+        void settleAfterPhysics(area, win, state.x)
+        return
+      }
+      physicsRaf = requestAnimationFrame(tick)
+    }
+    physicsRaf = requestAnimationFrame(tick)
+  }
+
   // 拖动范围放宽到整个虚拟桌面，岛可以跨到副屏
   function clampToVirtualDesktop(x: number, y: number): { x: number; y: number } {
     const maxX = virtualRight - virtualLeft - windowWidth
@@ -293,7 +365,8 @@ export function useIslandInteraction(options: IslandInteractionOptions) {
     dragStartWindowX = currentWindowX
     dragStartWindowY = currentWindowY
     dragMoved = false
-    // 从收起状态直接拖：先滑回满贴边位置再跟手
+    // 下落途中一把抓住：取消物理；从收起状态直接拖：先滑回满贴边位置再跟手
+    cancelPhysics()
     cancelPeekTimer()
     void unretractIsland()
   }
@@ -340,22 +413,32 @@ export function useIslandInteraction(options: IslandInteractionOptions) {
     if (!dragging.value) return
     dragging.value = false
     await refreshIslandGeometry()
+    const win = { width: windowWidth, height: windowHeight }
     const screen = screenForPoint(currentWindowX + windowWidth / 2, currentWindowY + windowHeight / 2)
     if (screen) {
       const area: PlacementArea = { left: screen.left, top: screen.top, width: screen.width, height: screen.height }
-      // 只贴边不悬空：松手必落在最近的一条边上
-      const edge = nearestEdge(area, { width: windowWidth, height: windowHeight }, currentWindowX, currentWindowY)
-      const ratio = edgeRatioForPosition(area, { width: windowWidth, height: windowHeight }, edge, currentWindowX)
-      settings.value.islandEdge = edge
-      settings.value.islandEdgeRatio = ratio
+      // 慢速贴近顶边：照旧吸附停靠，不演物理
+      const dTop = edgeDistances(area, win, currentWindowX, currentWindowY).top
+      if (dTop <= MAGNET_SNAP_CSS_PX * (window.devicePixelRatio || 1)) {
+        settings.value.islandEdge = 'top'
+        settings.value.islandEdgeRatio = edgeRatioForPosition(area, win, 'top', currentWindowX)
+        await placeFromSettings()
+        schedulePeek()
+        return
+      }
+      // 其余位置交给重力：掉下去弹几下停到底边
+      await startDropPhysics(area)
+      return
     }
-    // 设置可能没变（比如原边原比例），显式摆一次保证贴边落位
+    // 拿不到屏幕信息时退回普通贴边落位
     await placeFromSettings()
     schedulePeek()
   }
 
   // 根据通知 / 停靠 / 胶囊状态计算主窗口尺寸
   async function applyWindowSize() {
+    // 通知弹出/缩放变化时若还在下落，立即停掉物理并落位
+    cancelPhysics()
     const scale = settings.value.islandScale ?? 1
     if (notificationType.value !== null) {
       // 展开到胶囊 + 间隙 + 通知横幅的高度
@@ -409,11 +492,13 @@ export function useIslandInteraction(options: IslandInteractionOptions) {
         }
       },
     )
-    // 面板开着时不收起，关上面板重新计闲置
+    // 面板开着时不收起、不在下落，关上面板重新计闲置
     watch(panelVisible, (v) => {
       if (v) {
         cancelPeekTimer()
+        cancelPhysics()
         void unretractIsland()
+        if (settingsReady.value) void placeFromSettings()
       } else {
         schedulePeek()
       }
@@ -431,6 +516,7 @@ export function useIslandInteraction(options: IslandInteractionOptions) {
   function stop() {
     pauseHoverPolling()
     cancelPeekTimer()
+    cancelPhysics()
     unlistenVisibility?.()
     unlistenVisibility = null
     visibilityInstalled = false

@@ -494,6 +494,12 @@ fn island_work_area<R: Runtime>(app: &AppHandle<R>) -> Option<(i64, i64, i64, i6
     })
 }
 
+/// 给前端物理动画用的边界：岛所在屏的 work-area (left, top, width, height)。
+#[tauri::command]
+fn get_island_work_area<R: Runtime>(app: AppHandle<R>) -> Option<(i64, i64, i64, i64)> {
+    island_work_area(&app)
+}
+
 fn panel_config_values<R: Runtime>(app: &AppHandle<R>) -> (f64, f64, f64, f64) {
     if let Some(cfg) = app
         .config()
@@ -834,6 +840,7 @@ pub fn run() {
             set_island_custom_size,
             place_island,
             peek_island,
+            get_island_work_area,
             emit_island_panel_motion,
             position_panel_under_island,
             get_panel_transition_metrics,
