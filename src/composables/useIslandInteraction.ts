@@ -34,12 +34,16 @@ const HOVER_POLL_ACTIVE_MS = 200
 // 拖拽中的磁性吸附距离（CSS 像素），转物理像素要乘 dpr
 const MAGNET_SNAP_CSS_PX = 24
 
+// 闲置多久后收起（毫秒）
+const PEEK_IDLE_MS = 3 * 60 * 1000
+
 // 贴边参数的 watch 只装一次（composable 可能被多次调用）
 let watchInstalled = false
+let peekWatchInstalled = false
 
 export function useIslandInteraction(options: IslandInteractionOptions) {
   const { settings, settingsReady } = useSettings()
-  const { dockCollapsed, updatePointerOver, DOCK_STRIP_WINDOW_H } = useDockMode()
+  const { dockCollapsed, panelVisible, updatePointerOver, DOCK_STRIP_WINDOW_H } = useDockMode()
   const showStrip = dockCollapsed
 
   const notificationType = options.notificationType
@@ -47,8 +51,10 @@ export function useIslandInteraction(options: IslandInteractionOptions) {
   const islandWindow = getCurrentWindow()
   const hoverActive = ref(false)
   const dragging = ref(false)
+  const peekRetracted = ref(false)
 
   let hoverTimer: ReturnType<typeof setTimeout> | null = null
+  let peekTimer: number | null = null
 
   let dragPointerId: number | null = null
   let dragStartScreenX = 0
@@ -88,6 +94,9 @@ export function useIslandInteraction(options: IslandInteractionOptions) {
         if (over !== hoverActive.value) {
           hoverActive.value = over
           syncClickThrough()
+          // 收起状态下碰到露出的细边就滑回来；离开后重新计闲置
+          if (over) void unretractIsland()
+          else schedulePeek()
         }
       } catch {
         // 命令不可用时忽略
@@ -113,9 +122,11 @@ export function useIslandInteraction(options: IslandInteractionOptions) {
   async function onIslandVisibility(visible: boolean) {
     if (visible) {
       startHoverPolling()
+      schedulePeek()
       return
     }
     pauseHoverPolling()
+    cancelPeekTimer()
     if (hoverActive.value) {
       hoverActive.value = false
       syncClickThrough()
@@ -207,6 +218,58 @@ export function useIslandInteraction(options: IslandInteractionOptions) {
     await refreshIslandGeometry()
   }
 
+  // ---------- 闲置收起（peek，仅常驻模式） ----------
+
+  function peekEnabled(): boolean {
+    return settings.value.islandPeek && settings.value.islandDisplayMode === 'resident'
+  }
+
+  // 这些场景收起会挡住正事，强制保持滑回状态
+  function peekForceActive(): boolean {
+    return notificationType.value !== null || dragging.value || panelVisible.value
+  }
+
+  function cancelPeekTimer() {
+    if (peekTimer !== null) {
+      window.clearTimeout(peekTimer)
+      peekTimer = null
+    }
+  }
+
+  function schedulePeek() {
+    cancelPeekTimer()
+    if (!peekEnabled() || peekRetracted.value || peekForceActive() || hoverActive.value) return
+    peekTimer = window.setTimeout(() => {
+      peekTimer = null
+      void retractIsland()
+    }, PEEK_IDLE_MS)
+  }
+
+  /** 沿所在边滑出屏只留一条细边（Rust 按 work-area 定位） */
+  async function retractIsland() {
+    if (!peekEnabled() || peekForceActive() || hoverActive.value) return
+    peekRetracted.value = true
+    try {
+      await invoke('peek_island', { retract: true })
+    } catch {
+      // 命令不可用时忽略
+    }
+    await refreshIslandGeometry()
+  }
+
+  /** 滑回满贴边位置；收起状态不写持久化设置 */
+  async function unretractIsland() {
+    if (!peekRetracted.value) return
+    peekRetracted.value = false
+    cancelPeekTimer()
+    try {
+      await invoke('peek_island', { retract: false })
+    } catch {
+      // 命令不可用时忽略
+    }
+    await refreshIslandGeometry()
+  }
+
   // 拖动范围放宽到整个虚拟桌面，岛可以跨到副屏
   function clampToVirtualDesktop(x: number, y: number): { x: number; y: number } {
     const maxX = virtualRight - virtualLeft - windowWidth
@@ -230,6 +293,9 @@ export function useIslandInteraction(options: IslandInteractionOptions) {
     dragStartWindowX = currentWindowX
     dragStartWindowY = currentWindowY
     dragMoved = false
+    // 从收起状态直接拖：先滑回满贴边位置再跟手
+    cancelPeekTimer()
+    void unretractIsland()
   }
 
   function onCapsulePointerMove(e: PointerEvent) {
@@ -285,6 +351,7 @@ export function useIslandInteraction(options: IslandInteractionOptions) {
     }
     // 设置可能没变（比如原边原比例），显式摆一次保证贴边落位
     await placeFromSettings()
+    schedulePeek()
   }
 
   // 根据通知 / 停靠 / 胶囊状态计算主窗口尺寸
@@ -307,6 +374,14 @@ export function useIslandInteraction(options: IslandInteractionOptions) {
       await invoke('set_island_size', { scale })
     }
     await placeFromSettings()
+    // 收起状态下尺寸变了：该弹回（通知/面板等强制场景）就复位，否则保持收起
+    if (peekRetracted.value) {
+      if (peekForceActive() || !peekEnabled()) {
+        peekRetracted.value = false
+      } else {
+        void retractIsland()
+      }
+    }
   }
 
   // 贴边参数变化（拖拽落位、设置页重置、另一窗口同步）时重新摆位
@@ -321,15 +396,42 @@ export function useIslandInteraction(options: IslandInteractionOptions) {
     )
   }
 
+  // 闲置收起开关或显示方式变化：关掉就弹回，开着重新计闲置
+  if (!peekWatchInstalled) {
+    peekWatchInstalled = true
+    watch(
+      () => [settings.value.islandPeek, settings.value.islandDisplayMode] as const,
+      () => {
+        if (!peekEnabled()) {
+          cancelPeekTimer()
+          void unretractIsland()
+        } else {
+          schedulePeek()
+        }
+      },
+    )
+    // 面板开着时不收起，关上面板重新计闲置
+    watch(panelVisible, (v) => {
+      if (v) {
+        cancelPeekTimer()
+        void unretractIsland()
+      } else {
+        schedulePeek()
+      }
+    })
+  }
+
   function start() {
     syncClickThrough()
     startHoverPolling()
     void applyWindowSize()
     void installVisibilityWatch()
+    schedulePeek()
   }
 
   function stop() {
     pauseHoverPolling()
+    cancelPeekTimer()
     unlistenVisibility?.()
     unlistenVisibility = null
     visibilityInstalled = false
@@ -342,7 +444,10 @@ export function useIslandInteraction(options: IslandInteractionOptions) {
 
   // 设置加载完成后按保存的贴边参数摆位（启动时可能先按默认居中在顶边）
   watch(settingsReady, (ready) => {
-    if (ready) void applyWindowSize()
+    if (ready) {
+      void applyWindowSize()
+      schedulePeek()
+    }
   })
 
   return {

@@ -98,6 +98,7 @@ export function useDockMode() {
     dockExpanded,
     dockCollapsed,
     forceExpanded,
+    panelVisible,
     updatePointerOver,
     stripProgress,
     stripColor,

@@ -103,6 +103,7 @@ export function normalizeSettingsShape(raw: unknown): Record<string, unknown> {
   record.islandEdgeRatio = typeof record.islandEdgeRatio === 'number' && Number.isFinite(record.islandEdgeRatio)
     ? clamp01(record.islandEdgeRatio)
     : legacyX
+  record.islandPeek = typeof record.islandPeek === 'boolean' ? record.islandPeek : false
 
   return record
 }

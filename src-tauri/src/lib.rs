@@ -159,6 +159,80 @@ fn island_position_for_edge(
     (x as i32, y as i32)
 }
 
+/// 闲置收起时沿边露出的细边宽度（物理像素）
+const PEEK_REVEAL_PX: i64 = 10;
+
+/// 按 give 的贴边参数把主窗口摆到所在显示器的可用区域上；
+/// outward > 0 时往屏外方向再滑这么多像素（闲置收起用）。
+fn apply_island_place<R: Runtime>(app: &AppHandle<R>, place: IslandPlace, outward: i64) {
+    let Some(main) = app.get_webview_window("main") else {
+        return;
+    };
+    let Ok(size) = main.outer_size() else { return };
+    let Ok(pos) = main.outer_position() else { return };
+    let center = (
+        pos.x + size.width as i32 / 2,
+        pos.y + size.height as i32 / 2,
+    );
+    // 先按窗口中心找所在显示器的 work-area；拿不到再退回当前显示器整块屏
+    let area = work_area_at(center).or_else(|| {
+        main.current_monitor().ok().flatten().map(|m| {
+            let p = m.position();
+            let s = m.size();
+            (p.x as i64, p.y as i64, s.width as i64, s.height as i64)
+        })
+    });
+    let Some(area) = area else { return };
+    let (mut x, mut y) = island_position_for_edge(
+        area,
+        (size.width as i64, size.height as i64),
+        place.edge,
+        place.ratio,
+    );
+    if outward > 0 {
+        let shift = outward.min(i64::from(i32::MAX)) as i32;
+        match place.edge {
+            IslandEdge::Top => y -= shift,
+            IslandEdge::Bottom => y += shift,
+            IslandEdge::Left => x -= shift,
+            IslandEdge::Right => x += shift,
+        }
+    }
+    let _ = main.set_position(tauri::PhysicalPosition::new(x, y));
+}
+
+#[tauri::command]
+fn place_island<R: Runtime>(app: AppHandle<R>, edge: String, ratio: Option<f64>) -> Result<(), String> {
+    let Some(edge) = IslandEdge::parse(&edge) else {
+        return Err(format!("未知的贴边方向：{edge}"));
+    };
+    let place = IslandPlace {
+        edge,
+        ratio: ratio.map(|r| r.clamp(0.0, 1.0)),
+    };
+    set_last_island_place(place);
+    apply_island_place(&app, place, 0);
+    Ok(())
+}
+
+/// 闲置收起：沿所在边滑出屏只留一条细边；retract=false 满贴边滑回。
+#[tauri::command]
+fn peek_island<R: Runtime>(app: AppHandle<R>, retract: bool) {
+    let Some(main) = app.get_webview_window("main") else { return };
+    let Ok(size) = main.outer_size() else { return };
+    let place = get_last_island_place();
+    let outward = if retract {
+        let along = match place.edge {
+            IslandEdge::Top | IslandEdge::Bottom => size.height as i64,
+            IslandEdge::Left | IslandEdge::Right => size.width as i64,
+        };
+        (along - PEEK_REVEAL_PX).max(0)
+    } else {
+        0
+    };
+    apply_island_place(&app, place, outward);
+}
+
 /// 窗口中心所在显示器的可用区域。Windows 用 GetMonitorInfoW 拿 work-area
 /// （排除任务栏），其他平台退回整块显示器。
 #[cfg(target_os = "windows")]
@@ -211,49 +285,6 @@ fn get_last_island_place() -> IslandPlace {
         .ok()
         .and_then(|slot| *slot)
         .unwrap_or(IslandPlace { edge: IslandEdge::Top, ratio: None })
-}
-
-/// 按 give 的贴边参数把主窗口摆到所在显示器的可用区域上。
-fn apply_island_place<R: Runtime>(app: &AppHandle<R>, place: IslandPlace) {
-    let Some(main) = app.get_webview_window("main") else {
-        return;
-    };
-    let Ok(size) = main.outer_size() else { return };
-    let Ok(pos) = main.outer_position() else { return };
-    let center = (
-        pos.x + size.width as i32 / 2,
-        pos.y + size.height as i32 / 2,
-    );
-    // 先按窗口中心找所在显示器的 work-area；拿不到再退回当前显示器整块屏
-    let area = work_area_at(center).or_else(|| {
-        main.current_monitor().ok().flatten().map(|m| {
-            let p = m.position();
-            let s = m.size();
-            (p.x as i64, p.y as i64, s.width as i64, s.height as i64)
-        })
-    });
-    let Some(area) = area else { return };
-    let (x, y) = island_position_for_edge(
-        area,
-        (size.width as i64, size.height as i64),
-        place.edge,
-        place.ratio,
-    );
-    let _ = main.set_position(tauri::PhysicalPosition::new(x, y));
-}
-
-#[tauri::command]
-fn place_island<R: Runtime>(app: AppHandle<R>, edge: String, ratio: Option<f64>) -> Result<(), String> {
-    let Some(edge) = IslandEdge::parse(&edge) else {
-        return Err(format!("未知的贴边方向：{edge}"));
-    };
-    let place = IslandPlace {
-        edge,
-        ratio: ratio.map(|r| r.clamp(0.0, 1.0)),
-    };
-    set_last_island_place(place);
-    apply_island_place(&app, place);
-    Ok(())
 }
 
 #[derive(serde::Serialize, Clone, Copy)]
@@ -368,7 +399,7 @@ fn set_island_size<R: Runtime>(app: AppHandle<R>, scale: f64) {
         let base_height = 42.0;
         let _ = main.set_size(tauri::LogicalSize::new(base_width * scale, base_height * scale));
         // 尺寸变化后按最近的贴边参数重摆，岛保持贴在原来的边上
-        apply_island_place(&app, get_last_island_place());
+        apply_island_place(&app, get_last_island_place(), 0);
     }
 }
 
@@ -376,7 +407,7 @@ fn set_island_size<R: Runtime>(app: AppHandle<R>, scale: f64) {
 fn set_island_custom_size<R: Runtime>(app: AppHandle<R>, width: f64, height: f64) {
     if let Some(main) = app.get_webview_window("main") {
         let _ = main.set_size(tauri::LogicalSize::new(width, height));
-        apply_island_place(&app, get_last_island_place());
+        apply_island_place(&app, get_last_island_place(), 0);
     }
 }
 
@@ -817,6 +848,7 @@ pub fn run() {
             set_island_size,
             set_island_custom_size,
             place_island,
+            peek_island,
             emit_island_panel_motion,
             position_panel_under_island,
             get_panel_transition_metrics,

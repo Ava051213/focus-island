@@ -37,6 +37,7 @@ export interface Settings {
   islandDisplayMode: IslandDisplayMode  // 灵动岛显示方式：常驻 / 边缘停靠
   islandEdge: IslandEdge                // 岛贴在哪条边（只贴边不悬空）
   islandEdgeRatio: number | null        // 沿边的滑动比例 0~1，null 表示沿边居中
+  islandPeek: boolean                   // 闲置时滑出屏只留一条细边（常驻模式）
   focusDuration: number
   breakDuration: number
   colorMode: ColorMode
@@ -68,6 +69,7 @@ const DEFAULT_SETTINGS: Settings = {
   islandDisplayMode: 'resident',
   islandEdge: 'top',
   islandEdgeRatio: null,
+  islandPeek: false,
   focusDuration: 25,
   breakDuration: 5,
   colorMode: 'system',

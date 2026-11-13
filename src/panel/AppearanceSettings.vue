@@ -64,6 +64,16 @@ function resetIslandPosition() {
         {{ opt.label }}
       </button>
     </div>
+    <div v-if="settings.islandDisplayMode === 'resident'" class="peek-row">
+      <div class="peek-copy">
+        <span class="peek-label">闲置就悄悄让开</span>
+        <span class="peek-hint">3 分钟没人理就缩到边上，鼠标碰到再出来</span>
+      </div>
+      <label class="switch" aria-label="闲置收起">
+        <input v-model="settings.islandPeek" type="checkbox" />
+        <span class="switch-track"></span>
+      </label>
+    </div>
   </div>
 
   <div class="settings-section">
@@ -186,6 +196,81 @@ function resetIslandPosition() {
 .mode-btn.active {
   background: var(--focus-color);
   color: #fff;
+}
+
+.peek-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.peek-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.peek-label {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.peek-hint {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+  line-height: 1.4;
+}
+
+.switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 42px;
+  height: 24px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.switch input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.switch-track {
+  position: relative;
+  width: 42px;
+  height: 24px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.switch-track::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.switch input:checked + .switch-track {
+  background: color-mix(in srgb, var(--focus-color) 72%, rgba(255, 255, 255, 0.12));
+  border-color: color-mix(in srgb, var(--focus-color) 88%, transparent);
+}
+
+.switch input:checked + .switch-track::after {
+  transform: translateX(18px);
+  background: #fff;
 }
 
 .slider-row {
