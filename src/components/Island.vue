@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useIslandState } from "../composables/useIslandState";
 import { useTimer } from "../composables/useTimer";
 import { useSettings } from "../composables/useSettings";
@@ -34,6 +34,7 @@ const interaction = useIslandInteraction({ notificationType });
 const {
     hoverActive,
     dragging,
+    physicsImpact,
     onIslandClick,
     onCapsulePointerDown,
     onCapsulePointerMove,
@@ -41,6 +42,22 @@ const {
     syncClickThrough,
     applyWindowSize,
 } = interaction;
+
+// 弹跳质感：落地/撞墙/撞顶瞬间挤压回弹
+const squashClass = ref("");
+let squashTimer: number | null = null;
+watch(physicsImpact, (val) => {
+    if (!val) return;
+    squashClass.value = `impact-${val.kind}`;
+    if (squashTimer !== null) window.clearTimeout(squashTimer);
+    squashTimer = window.setTimeout(() => {
+        squashClass.value = "";
+        squashTimer = null;
+    }, 220);
+});
+onUnmounted(() => {
+    if (squashTimer !== null) window.clearTimeout(squashTimer);
+});
 
 // 悬停时才显示快捷按钮；通知横幅出现时先让用户处理通知，避免误触。
 const capsuleInteractive = computed(
@@ -114,6 +131,7 @@ onUnmounted(() => {
                         'strip-mode': showStrip,
                         interactive: hoverActive,
                         dragging: dragging,
+                        [squashClass]: squashClass !== '',
                     }"
                     @click="onIslandClick"
                     @pointerdown="onCapsulePointerDown"
@@ -228,6 +246,50 @@ onUnmounted(() => {
 .capsule-shell.dragging {
     cursor: grabbing;
     transform: scale(1.04);
+}
+
+/* 弹跳质感：碰撞瞬间挤压回弹，锚点贴碰撞面 */
+.capsule-shell.impact-floor {
+    transform-origin: center bottom;
+    animation: island-squash-y 0.22s ease-out both;
+}
+
+.capsule-shell.impact-ceiling {
+    transform-origin: center top;
+    animation: island-squash-y 0.22s ease-out both;
+}
+
+.capsule-shell.impact-wall {
+    transform-origin: center;
+    animation: island-squash-x 0.22s ease-out both;
+}
+
+@keyframes island-squash-y {
+    0% {
+        transform: scale(1.08, 0.78);
+    }
+
+    55% {
+        transform: scale(0.96, 1.08);
+    }
+
+    100% {
+        transform: scale(1, 1);
+    }
+}
+
+@keyframes island-squash-x {
+    0% {
+        transform: scale(0.76, 1.08);
+    }
+
+    55% {
+        transform: scale(1.07, 0.96);
+    }
+
+    100% {
+        transform: scale(1, 1);
+    }
 }
 
 .capsule-shell.strip-mode {

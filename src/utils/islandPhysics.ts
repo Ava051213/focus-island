@@ -65,6 +65,16 @@ export const PHYSICS: PhysicsParams = {
   maxDuration: 3,
 }
 
+/** 甩出判定的手感参数（物理 px/s） */
+export const FLING = {
+  /** 释放速度低于该值且贴近顶边，才算停靠顶边而不是撞天花板 */
+  dockSpeed: 320,
+  /** 甩出速度上限，别把岛扔成导弹 */
+  maxSpeed: 4500,
+  /** 松手时取最近这段指针位移估速度（毫秒） */
+  sampleMs: 100,
+}
+
 export type PhysicsImpact = 'floor' | 'ceiling' | 'wall' | null
 
 export interface PhysicsStepResult {

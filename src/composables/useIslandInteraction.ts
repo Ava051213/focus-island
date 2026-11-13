@@ -10,7 +10,7 @@ import {
   snapToNearestEdge,
   type PlacementArea,
 } from '../utils/islandPlacement'
-import { PHYSICS, isRestingOnFloor, stepPhysics } from '../utils/islandPhysics'
+import { FLING, PHYSICS, isRestingOnFloor, stepPhysics, type PhysicsImpact } from '../utils/islandPhysics'
 import type { NotificationType } from './useTimer'
 
 interface ScreenRect {
@@ -35,13 +35,6 @@ const HOVER_POLL_ACTIVE_MS = 200
 // 拖拽中的磁性吸附距离（CSS 像素），转物理像素要乘 dpr
 const MAGNET_SNAP_CSS_PX = 24
 
-// 甩出速度的采样窗口（毫秒）：取最近这段指针位移估速度
-const FLING_SAMPLE_MS = 100
-// 释放速度低于该值（物理 px/s）且贴近顶边，才算停靠顶边而不是撞天花板
-const FLING_DOCK_SPEED = 320
-// 甩出速度上限（物理 px/s），别把岛扔成导弹
-const FLING_MAX_SPEED = 4500
-
 // 闲置多久后收起（毫秒）
 const PEEK_IDLE_MS = 3 * 60 * 1000
 
@@ -60,6 +53,9 @@ export function useIslandInteraction(options: IslandInteractionOptions) {
   const hoverActive = ref(false)
   const dragging = ref(false)
   const peekRetracted = ref(false)
+  /** 最近一次物理碰撞（带自增 id，连续同类型碰撞也能触发动画） */
+  const physicsImpact = ref<{ kind: PhysicsImpact; id: number } | null>(null)
+  let impactSeq = 0
 
   let hoverTimer: ReturnType<typeof setTimeout> | null = null
   let peekTimer: number | null = null
@@ -322,7 +318,7 @@ export function useIslandInteraction(options: IslandInteractionOptions) {
     const win = { width: windowWidth, height: windowHeight }
     const pbounds = { left: bounds[0], top: bounds[1], width: bounds[2], height: bounds[3] }
     const state = { x: currentWindowX, y: currentWindowY, vx: velocity.vx, vy: velocity.vy }
-    if (isRestingOnFloor(state, pbounds, win) && Math.hypot(state.vx, state.vy) < FLING_DOCK_SPEED) {
+    if (isRestingOnFloor(state, pbounds, win) && Math.hypot(state.vx, state.vy) < FLING.dockSpeed) {
       await settleAfterPhysics(area, win, state.x)
       return
     }
@@ -335,6 +331,7 @@ export function useIslandInteraction(options: IslandInteractionOptions) {
       const dt = Math.min((now - lastFrameAt) / 1000, 0.25)
       lastFrameAt = now
       const result = stepPhysics(state, pbounds, win, dt)
+      if (result.impact) physicsImpact.value = { kind: result.impact, id: ++impactSeq }
       void islandWindow
         .setPosition(new PhysicalPosition(Math.round(state.x), Math.round(state.y)))
         .catch(() => {})
@@ -364,7 +361,7 @@ export function useIslandInteraction(options: IslandInteractionOptions) {
   function estimateFlingVelocity(): { vx: number; vy: number } {
     const dpr = window.devicePixelRatio || 1
     const now = performance.now()
-    const recent = pointerSamples.filter(s => now - s.t <= FLING_SAMPLE_MS)
+    const recent = pointerSamples.filter(s => now - s.t <= FLING.sampleMs)
     if (recent.length < 2) return { vx: 0, vy: 0 }
     const first = recent[0]
     const last = recent[recent.length - 1]
@@ -373,8 +370,8 @@ export function useIslandInteraction(options: IslandInteractionOptions) {
     const vx = ((last.x - first.x) / dt) * dpr
     const vy = ((last.y - first.y) / dt) * dpr
     const speed = Math.hypot(vx, vy)
-    if (speed > FLING_MAX_SPEED) {
-      return { vx: (vx / speed) * FLING_MAX_SPEED, vy: (vy / speed) * FLING_MAX_SPEED }
+    if (speed > FLING.maxSpeed) {
+      return { vx: (vx / speed) * FLING.maxSpeed, vy: (vy / speed) * FLING.maxSpeed }
     }
     return { vx, vy }
   }
@@ -452,14 +449,25 @@ export function useIslandInteraction(options: IslandInteractionOptions) {
       // 慢速且贴近顶边：照旧吸附停靠，不演物理；甩上去的会撞顶弹回来
       const dTop = edgeDistances(area, win, currentWindowX, currentWindowY).top
       const flingSpeed = Math.hypot(fling.vx, fling.vy)
-      if (dTop <= MAGNET_SNAP_CSS_PX * (window.devicePixelRatio || 1) && flingSpeed < FLING_DOCK_SPEED) {
+      // 系统要求减少动画：跳过物理，直接落到最近边
+      const reducedMotion = typeof window.matchMedia === 'function'
+        && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      if (!reducedMotion && dTop <= MAGNET_SNAP_CSS_PX * (window.devicePixelRatio || 1) && flingSpeed < FLING.dockSpeed) {
         settings.value.islandEdge = 'top'
         settings.value.islandEdgeRatio = edgeRatioForPosition(area, win, 'top', currentWindowX)
         await placeFromSettings()
         schedulePeek()
         return
       }
-      // 其余交给重力：带着甩出速度掉下去，撞墙弹回，最后停到底边
+      // 其余交给重力：带着甩出速度掉下去，撞墙弹回，最后停到底边；
+      // 减少动画时不演物理，直接按底边落位
+      if (reducedMotion) {
+        settings.value.islandEdge = 'bottom'
+        settings.value.islandEdgeRatio = edgeRatioForPosition(area, win, 'bottom', currentWindowX)
+        await placeFromSettings()
+        schedulePeek()
+        return
+      }
       await startThrowPhysics(area, fling)
       return
     }
@@ -571,6 +579,7 @@ export function useIslandInteraction(options: IslandInteractionOptions) {
   return {
     hoverActive,
     dragging,
+    physicsImpact,
     onIslandClick,
     onCapsulePointerDown,
     onCapsulePointerMove,
