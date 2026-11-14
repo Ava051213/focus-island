@@ -21,7 +21,9 @@ export interface FloatingBubble {
   /** 出生点与漂移参数（overlay 内逻辑像素） */
   x: number
   y: number
-  /** 向上飘的距离（px）：空间够就飘到对侧边缘，岛贴顶时飘进屏幕中途淡出 */
+  /** 1 = 向上飘（岛贴底），-1 = 向下飘（岛贴顶）；永远远离岛所在边 */
+  dir: 1 | -1
+  /** 沿方向的漂移距离（px），飘到对侧边缘前淡出 */
   riseTo: number
   driftMs: number
   /** 整段弧线的水平偏移（px），正负随机决定弧的朝向 */
@@ -120,6 +122,9 @@ async function showOverlay() {
   clickThroughActive = true
   await invoke('set_click_through', { ignore: true })
   await win.show()
+  // focus:false 的窗口 show 时不会提升，显式把它顶到置顶层最上面，
+  // 否则会一直压在岛窗口下面，岛贴顶时泡泡全被挡住
+  await invoke('raise_bubble_overlay')
   startHoverPoll()
 }
 
@@ -137,8 +142,8 @@ async function scheduleHide() {
   }, HIDE_GRACE_MS)
 }
 
-/** 出生点：岛贴底从岛上缘冒，岛贴顶从岛下缘冒；转成 overlay 内逻辑坐标 */
-async function spawnPoint(): Promise<{ x: number; y: number; fromTop: boolean } | null> {
+/** 出生点与方向：从岛缘留 14px 间距冒出，永远飘向对侧；转成 overlay 内逻辑坐标 */
+async function spawnPoint(): Promise<{ x: number; y: number; dir: 1 | -1 } | null> {
   try {
     const metrics = await invoke<{
       island_x: number
@@ -150,14 +155,16 @@ async function spawnPoint(): Promise<{ x: number; y: number; fromTop: boolean } 
     const scale = overlayScale || 1
     const centerX = (metrics.island_x + metrics.island_width / 2 - overlayOrigin.x) / scale
     const islandLocalY = metrics.island_y - overlayOrigin.y
+    // 岛贴顶 → 从岛下缘下方冒、向下飘；岛贴底 → 从岛上缘上方冒、向上飘
     const fromTop = islandLocalY < 40
     const edgeY = fromTop
       ? (islandLocalY + metrics.island_height) / scale
       : islandLocalY / scale
+    const gap = 14
     return {
       x: Math.max(10, centerX + (Math.random() * 240 - 120)),
-      y: Math.max(10, edgeY),
-      fromTop,
+      y: Math.max(10, fromTop ? edgeY + gap : edgeY - gap),
+      dir: fromTop ? -1 : 1,
     }
   } catch {
     return null
@@ -184,16 +191,17 @@ function spawn(kind: BubbleKind, text?: string) {
     recentLines = [line, ...recentLines].slice(0, 6)
     lastBubbleAt = Date.now()
     const driftMs = DRIFT_MS + Math.random() * 2500
-    // 永远向上飘：空间够就一路飘出屏幕顶；岛贴顶时上方空间太小，
-    // 改为向屏幕内部飘约 38% 高度后中途淡出，别刚出生就撞顶消失
-    const availableUp = point.y + 90
-    const riseTo = availableUp < 320 ? Math.round(overlayHeight * 0.38) : availableUp
+    // 永远飘向对侧：距离 = 到对侧边缘的全程减去淡出余量，不飘出屏幕
+    const riseTo = point.dir === 1
+      ? Math.max(120, point.y - 40)
+      : Math.max(120, overlayHeight - point.y - 40)
     const bubble: FloatingBubble = {
       id: ++seq,
       kind,
       text: line,
       x: point.x,
       y: point.y,
+      dir: point.dir,
       riseTo,
       driftMs,
       arcX: (Math.random() * 2 - 1) * 170,

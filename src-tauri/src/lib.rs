@@ -27,7 +27,8 @@ use windows::Win32::Graphics::Gdi::{
 };
 #[cfg(target_os = "windows")]
 use windows::Win32::UI::WindowsAndMessaging::{
-    AllowSetForegroundWindow, GetCursorPos, GetWindowRect, ASFW_ANY,
+    AllowSetForegroundWindow, GetCursorPos, GetWindowRect, SetWindowPos, HWND_TOPMOST,
+    SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, ASFW_ANY,
 };
 
 #[cfg(target_os = "linux")]
@@ -381,6 +382,39 @@ fn set_click_through<R: Runtime>(window: WebviewWindow<R>, ignore: bool) {
 #[tauri::command]
 fn get_cursor_position() -> (f64, f64) {
     mouse_position_raw()
+}
+
+/// 把 bubble overlay 提到置顶层最上面。
+///
+/// bubble 窗口是 focus:false 创建的，tao 在 show 时走 SW_SHOWNOACTIVATE
+/// ——窗口永不提升，会一直压在岛窗口下面。这里用 SetWindowPos 重申
+/// TOPMOST（不动位置大小、不抢焦点），把它顶回置顶带最上层。
+#[tauri::command]
+fn raise_bubble_overlay<R: Runtime>(app: AppHandle<R>) {
+    if let Some(bubble) = app.get_webview_window("bubble") {
+        #[cfg(target_os = "windows")]
+        {
+            if let Ok(hwnd) = bubble.hwnd() {
+                unsafe {
+                    let _ = SetWindowPos(
+                        hwnd,
+                        Some(HWND_TOPMOST),
+                        0,
+                        0,
+                        0,
+                        0,
+                        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+                    );
+                }
+            }
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            // 非 Windows：关掉再开 always-on-top 触发一次重新置顶
+            let _ = bubble.set_always_on_top(false);
+            let _ = bubble.set_always_on_top(true);
+        }
+    }
 }
 
 #[tauri::command]
@@ -843,6 +877,7 @@ pub fn run() {
             is_mouse_over_window,
             set_click_through,
             get_cursor_position,
+            raise_bubble_overlay,
             set_island_size,
             set_island_custom_size,
             place_island,

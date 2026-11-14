@@ -15,7 +15,7 @@ defineEmits<{ click: [] }>();
         :style="{
             left: bubble.x + 'px',
             top: bubble.y + 'px',
-            '--rise-to': -bubble.riseTo + 'px',
+            '--rise-to': bubble.dir * bubble.riseTo + 'px',
             '--drift-ms': bubble.driftMs + 'ms',
             '--arc-x': bubble.arcX + 'px',
             '--arc-ease': bubble.arcEase,
