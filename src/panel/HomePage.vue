@@ -453,7 +453,7 @@ function onCoachNoteEnter(event: KeyboardEvent) {
   flex-direction: column;
   gap: 5px;
   padding: 9px 11px;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--focus-color) 9%, rgba(255, 255, 255, 0.03));
   border: 1px solid color-mix(in srgb, var(--focus-color) 22%, transparent);
 }
@@ -507,7 +507,7 @@ function onCoachNoteEnter(event: KeyboardEvent) {
 .coach-start-btn {
   flex-shrink: 0;
   padding: 4px 9px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--focus-color) 16%, transparent);
   border: 1px solid color-mix(in srgb, var(--focus-color) 34%, transparent);
   color: var(--focus-color);
@@ -539,7 +539,7 @@ function onCoachNoteEnter(event: KeyboardEvent) {
   flex-direction: column;
   gap: 6px;
   padding: 8px 9px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--focus-color) 10%, rgba(255, 255, 255, 0.03));
   border: 1px solid color-mix(in srgb, var(--focus-color) 30%, transparent);
 }
@@ -606,7 +606,7 @@ function onCoachNoteEnter(event: KeyboardEvent) {
   min-width: 0;
   height: 28px;
   padding: 0 9px;
-  border-radius: 7px;
+  border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.1);
   color: rgba(255, 255, 255, 0.85);
@@ -631,7 +631,7 @@ function onCoachNoteEnter(event: KeyboardEvent) {
   flex-shrink: 0;
   padding: 0 12px;
   height: 28px;
-  border-radius: 7px;
+  border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--focus-color) 16%, transparent);
   border: 1px solid color-mix(in srgb, var(--focus-color) 38%, transparent);
   color: var(--focus-color);
@@ -667,7 +667,7 @@ function onCoachNoteEnter(event: KeyboardEvent) {
 .coach-summary-tag {
   margin-left: 6px;
   padding: 1px 5px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-size: 9px;
   color: var(--focus-color);
   background: color-mix(in srgb, var(--focus-color) 12%, transparent);
@@ -688,7 +688,7 @@ function onCoachNoteEnter(event: KeyboardEvent) {
   align-items: center;
   gap: 10px;
   padding: 9px 11px;
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.07);
 }
@@ -720,7 +720,7 @@ function onCoachNoteEnter(event: KeyboardEvent) {
   text-overflow: ellipsis;
   white-space: nowrap;
   padding: 1px 5px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-size: 9px;
   line-height: 1.4;
   color: color-mix(in srgb, var(--focus-color) 80%, transparent);
@@ -822,7 +822,7 @@ function onCoachNoteEnter(event: KeyboardEvent) {
   align-items: center;
   gap: 10px;
   padding: 11px 12px;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--focus-color) 12%, rgba(255, 255, 255, 0.04));
   border: 1px solid color-mix(in srgb, var(--focus-color) 30%, transparent);
 }
@@ -861,7 +861,7 @@ function onCoachNoteEnter(event: KeyboardEvent) {
 
 .round-btn {
   padding: 4px 9px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.12);
   color: rgba(255, 255, 255, 0.7);
@@ -909,7 +909,7 @@ function onCoachNoteEnter(event: KeyboardEvent) {
 
 .empty {
   padding: 22px 14px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   border: 1px dashed rgba(255, 255, 255, 0.08);
   font-size: 12px;
   line-height: 1.7;

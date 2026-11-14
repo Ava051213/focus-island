@@ -67,7 +67,7 @@ const discardLabel = computed(() => props.plan.phase === 'focus' ? '放弃并记
 
 .recovery-btn {
   padding: 4px 10px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   border: 1px solid rgba(255, 255, 255, 0.16);
   background: transparent;
   color: rgba(255, 255, 255, 0.7);

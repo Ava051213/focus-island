@@ -221,7 +221,7 @@ function onBackdropClick(event: MouseEvent) {
   width: 320px;
   max-height: 80vh;
   background: linear-gradient(180deg, rgba(28, 28, 32, 0.98), rgba(22, 22, 26, 0.97));
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow:
     0 24px 64px rgba(0, 0, 0, 0.5),
@@ -260,7 +260,7 @@ function onBackdropClick(event: MouseEvent) {
 .close-btn {
   width: 26px;
   height: 26px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.1);
   color: rgba(255, 255, 255, 0.5);
@@ -310,7 +310,7 @@ function onBackdropClick(event: MouseEvent) {
   align-items: center;
   gap: 10px;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.05);
   transition: all 0.2s;
@@ -329,7 +329,7 @@ function onBackdropClick(event: MouseEvent) {
 .category-icon {
   width: 26px;
   height: 26px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   border: 1px solid;
   display: flex;
   align-items: center;
@@ -369,7 +369,7 @@ function onBackdropClick(event: MouseEvent) {
 .default-badge {
   font-size: 10px;
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, 0.08);
   color: rgba(255, 255, 255, 0.4);
   font-weight: 500;
@@ -378,7 +378,7 @@ function onBackdropClick(event: MouseEvent) {
 .action-btn {
   width: 24px;
   height: 24px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   background: transparent;
   border: 1px solid transparent;
   color: rgba(255, 255, 255, 0.4);
@@ -415,7 +415,7 @@ function onBackdropClick(event: MouseEvent) {
   flex: 1;
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 6px 10px;
   font-size: 13px;
   color: #fff;
@@ -438,7 +438,7 @@ function onBackdropClick(event: MouseEvent) {
   flex-direction: column;
   gap: 12px;
   padding: 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.08);
   margin-top: 4px;
@@ -507,7 +507,7 @@ function onBackdropClick(event: MouseEvent) {
 
 .form-btn {
   padding: 6px 14px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
@@ -546,7 +546,7 @@ function onBackdropClick(event: MouseEvent) {
   gap: 8px;
   padding: 12px;
   margin-top: 4px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.03);
   border: 1px dashed rgba(255, 255, 255, 0.15);
   color: rgba(255, 255, 255, 0.5);

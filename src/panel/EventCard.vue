@@ -58,7 +58,7 @@ const tag = computed(() => EVENT_TAGS.find(t => t.id === props.event.tag) ?? EVE
   align-items: center;
   gap: 8px;
   padding: 9px 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.035);
   border: 1px solid rgba(255, 255, 255, 0.06);
   cursor: pointer;
@@ -121,7 +121,7 @@ const tag = computed(() => EVENT_TAGS.find(t => t.id === props.event.tag) ?? EVE
   flex-shrink: 0;
   font-size: 10px;
   padding: 1px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   border: 1px solid transparent;
   opacity: 0.85;
 }
@@ -130,7 +130,7 @@ const tag = computed(() => EVENT_TAGS.find(t => t.id === props.event.tag) ?? EVE
   flex-shrink: 0;
   width: 18px;
   height: 18px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   border: 1.5px solid rgba(255, 255, 255, 0.25);
   background: transparent;
   color: rgba(255, 255, 255, 0.6);

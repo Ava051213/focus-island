@@ -466,7 +466,7 @@ function removeEvent() {
 .quick-input {
   width: 100%;
   padding: 8px 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.08);
   color: #fff;
@@ -520,7 +520,7 @@ function removeEvent() {
 .ai-preview {
   margin-top: 8px;
   padding: 9px 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--focus-color) 8%, rgba(255, 255, 255, 0.03));
   border: 1px solid color-mix(in srgb, var(--focus-color) 25%, transparent);
 }
@@ -654,7 +654,7 @@ function removeEvent() {
 
 .tron-error {
   padding: 7px 9px;
-  border-radius: 7px;
+  border-radius: var(--radius-md);
   font-size: 10px;
   line-height: 1.55;
   color: #f87171;
@@ -742,7 +742,7 @@ function removeEvent() {
   flex-direction: column;
   gap: 8px;
   padding: 14px;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   background: rgba(28, 28, 32, 0.98);
   border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
@@ -750,7 +750,7 @@ function removeEvent() {
 
 .editor-title {
   padding: 8px 10px;
-  border-radius: 7px;
+  border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.1);
   color: #fff;
@@ -768,7 +768,7 @@ function removeEvent() {
   flex: 1;
   min-width: 0;
   padding: 7px 9px;
-  border-radius: 7px;
+  border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.1);
   color: rgba(255, 255, 255, 0.85);
@@ -780,7 +780,7 @@ function removeEvent() {
 
 .editor-note {
   padding: 8px 10px;
-  border-radius: 7px;
+  border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.1);
   color: rgba(255, 255, 255, 0.85);
@@ -798,7 +798,7 @@ function removeEvent() {
 
 .tag-chip {
   padding: 3px 9px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.1);
   color: rgba(255, 255, 255, 0.45);
@@ -825,7 +825,7 @@ function removeEvent() {
 
 .btn {
   padding: 5px 12px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.1);
   color: rgba(255, 255, 255, 0.6);

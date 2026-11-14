@@ -45,7 +45,7 @@ const colorStyle = computed(() => {
   gap: 4px;
   font-size: 11px;
   padding: 3px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.08);
   font-weight: 500;

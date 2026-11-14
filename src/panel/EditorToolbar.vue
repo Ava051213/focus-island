@@ -122,7 +122,7 @@ const colors = [
 .toolbar-btn {
   width: 28px;
   height: 28px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: transparent;
   border: 1px solid transparent;
   color: rgba(255, 255, 255, 0.6);
@@ -166,7 +166,7 @@ const colors = [
   padding: 6px;
   background: rgba(28, 28, 32, 0.98);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
   z-index: 100;
 }
@@ -174,7 +174,7 @@ const colors = [
 .color-option {
   width: 22px;
   height: 22px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.1);
   cursor: pointer;

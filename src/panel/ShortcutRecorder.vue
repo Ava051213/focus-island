@@ -125,7 +125,7 @@ onUnmounted(unbindListeners)
   height: 28px;
   padding: 0 10px;
   border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, 0.06);
   color: rgba(255, 255, 255, 0.85);
   font-size: 12px;

@@ -62,7 +62,7 @@ defineEmits<{
   max-width: 240px;
   background: rgba(28, 28, 32, 0.98);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   padding: 6px 0;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(16px);
@@ -94,7 +94,7 @@ defineEmits<{
   gap: 10px;
   width: 100%;
   padding: 7px 10px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: transparent;
   border: none;
   color: rgba(255, 255, 255, 0.85);

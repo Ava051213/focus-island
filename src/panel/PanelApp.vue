@@ -478,7 +478,7 @@ async function closeWindow() {
   width: 100vw;
   background:
     var(--panel-shell-bg);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--panel-shell-border);
   box-shadow:
     var(--panel-shell-shadow-1),
@@ -599,7 +599,7 @@ async function closeWindow() {
 
   100% {
     opacity: 1;
-    border-radius: 12px;
+    border-radius: var(--radius-lg);
     transform: translate3d(0, 0, 0) scale(1, 1);
   }
 }
@@ -607,7 +607,7 @@ async function closeWindow() {
 @keyframes panel-close {
   0% {
     opacity: 1;
-    border-radius: 12px;
+    border-radius: var(--radius-lg);
     transform: translate3d(0, 0, 0) scale(1, 1);
   }
 
@@ -679,7 +679,7 @@ async function closeWindow() {
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   transition: color 0.18s ease, background 0.18s ease;
   font-family: inherit;
   letter-spacing: 0.02em;

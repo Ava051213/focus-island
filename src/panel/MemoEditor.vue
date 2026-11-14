@@ -261,7 +261,7 @@ async function insertImageFromFile(file: File) {
   try {
     const compressed = await compressImage(file)
     const base64 = await readAsDataUrl(compressed ?? file)
-    const imgHtml = `<img src="${base64}" class="memo-image" style="max-width: 100%; border-radius: 8px; margin: 8px 0;">`
+    const imgHtml = `<img src="${base64}" class="memo-image" style="max-width: 100%; border-radius: var(--radius-md); margin: 8px 0;">`
 
     editorRef.value?.focus()
     insertHtml(imgHtml)

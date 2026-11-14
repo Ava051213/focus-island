@@ -206,7 +206,7 @@ function handleCloseCategoryDialog() {
 .back-btn {
   width: 28px;
   height: 28px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.1);
   color: rgba(255, 255, 255, 0.7);
@@ -238,14 +238,14 @@ function handleCloseCategoryDialog() {
   color: rgba(255, 255, 255, 0.4);
   padding: 4px 8px;
   background: rgba(255, 255, 255, 0.04);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   white-space: nowrap;
 }
 
 .header-icon-btn {
   width: 28px;
   height: 28px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.1);
   color: rgba(255, 255, 255, 0.6);
@@ -269,7 +269,7 @@ function handleCloseCategoryDialog() {
   gap: 4px;
   padding: 0 10px;
   height: 28px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--focus-color) 15%, transparent);
   border: 1px solid color-mix(in srgb, var(--focus-color) 30%, transparent);
   color: var(--focus-color);

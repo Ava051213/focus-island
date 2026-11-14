@@ -204,7 +204,7 @@ const maxPomodoros = computed(() => Math.max(...weekTrend.value.map(d => d.pomod
     <!-- Heatmap -->
     <div class="section">
       <div class="section-header">
-        <span class="section-title">专注日历</span>
+        <span class="stats-label">专注日历</span>
         <span class="heatmap-range">最近半年</span>
       </div>
       <div class="heatmap">
@@ -242,7 +242,7 @@ const maxPomodoros = computed(() => Math.max(...weekTrend.value.map(d => d.pomod
 
     <!-- Week Trend -->
     <div class="section">
-      <div class="section-title">本周概览</div>
+      <div class="stats-label">本周概览</div>
       <div class="trend-chart">
         <div class="trend-bars">
           <div
@@ -264,7 +264,7 @@ const maxPomodoros = computed(() => Math.max(...weekTrend.value.map(d => d.pomod
 
     <!-- Achievements -->
     <div class="section">
-      <div class="section-title">成就</div>
+      <div class="stats-label">成就</div>
       <div class="achievement-row">
         <div
           v-for="a in allAchievements"
@@ -299,29 +299,8 @@ const maxPomodoros = computed(() => Math.max(...weekTrend.value.map(d => d.pomod
   padding: 8px 0;
 }
 
-.back-btn {
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-  color: rgba(255, 255, 255, 0.7);
-  cursor: pointer;
-  transition: all 0.2s;
-}
 
-.back-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
-}
 
-.back-btn svg {
-  width: 18px;
-  height: 18px;
-}
 
 .page-title {
   font-size: 16px;
@@ -333,7 +312,7 @@ const maxPomodoros = computed(() => Math.max(...weekTrend.value.map(d => d.pomod
 .time-range-tabs {
   display: flex;
   background: rgba(255, 255, 255, 0.04);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 2px;
 }
 
@@ -343,7 +322,7 @@ const maxPomodoros = computed(() => Math.max(...weekTrend.value.map(d => d.pomod
   color: rgba(255, 255, 255, 0.5);
   background: transparent;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   transition: all 0.2s;
 }
@@ -366,7 +345,7 @@ const maxPomodoros = computed(() => Math.max(...weekTrend.value.map(d => d.pomod
 .stat-card {
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   padding: 14px 10px;
   text-align: center;
 }
@@ -385,7 +364,7 @@ const maxPomodoros = computed(() => Math.max(...weekTrend.value.map(d => d.pomod
 
 .week-summary {
   padding: 12px 14px;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--focus-color) 7%, rgba(255, 255, 255, 0.03));
   border: 1px solid color-mix(in srgb, var(--focus-color) 15%, rgba(255, 255, 255, 0.05));
 }
@@ -406,7 +385,7 @@ const maxPomodoros = computed(() => Math.max(...weekTrend.value.map(d => d.pomod
 .section {
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   padding: 14px;
 }
 
@@ -417,7 +396,7 @@ const maxPomodoros = computed(() => Math.max(...weekTrend.value.map(d => d.pomod
   margin-bottom: 12px;
 }
 
-.section-title {
+.stats-label {
   font-size: 13px;
   font-weight: 500;
   color: rgba(255, 255, 255, 0.8);
@@ -503,7 +482,7 @@ const maxPomodoros = computed(() => Math.max(...weekTrend.value.map(d => d.pomod
   transform: translateX(-50%);
   background: rgba(30, 30, 35, 0.95);
   border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   padding: 3px 6px;
   font-size: 10px;
   color: rgba(255, 255, 255, 0.9);
@@ -582,7 +561,7 @@ const maxPomodoros = computed(() => Math.max(...weekTrend.value.map(d => d.pomod
   width: 100%;
   max-width: 24px;
   background: var(--focus-color);
-  border-radius: 4px 4px 2px 2px;
+  border-radius: var(--radius-sm) 4px 2px 2px;
   margin-top: auto;
   position: relative;
   min-height: 4px;
@@ -624,7 +603,7 @@ const maxPomodoros = computed(() => Math.max(...weekTrend.value.map(d => d.pomod
   flex: 0 0 auto;
   width: 58px;
   padding: 6px 4px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.06);
   text-align: center;

@@ -127,7 +127,7 @@ const displayIconPaths = computed(() => props.iconPaths?.length ? props.iconPath
   height: 26px;
   background: rgba(255, 255, 255, 0.09);
   border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.06);
   transition: all 0.2s;
 }
@@ -193,7 +193,7 @@ const displayIconPaths = computed(() => props.iconPaths?.length ? props.iconPath
 .titlebar-actions button {
   width: 28px;
   height: 28px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   border: none;
   background: transparent;
   color: rgba(255,255,255,0.45);

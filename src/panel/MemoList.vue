@@ -265,7 +265,7 @@ function handleItemClick(memo: Memo) {
 </script>
 
 <template>
-  <div ref="memoListRef" class="memo-list">
+  <div ref="memoListRef" class="memo-list slim-scroll">
     <div v-if="completedMemos.length > 0 || memos.length > 0" class="memo-list-head">
       <button v-if="completedMemos.length > 0" class="archive-entry" @click="showArchive = true">
         已完成 {{ completedMemos.length }} 条
@@ -419,18 +419,8 @@ function handleItemClick(memo: Memo) {
   padding: 8px 12px;
 }
 
-.memo-list::-webkit-scrollbar {
-  width: 6px;
-}
 
-.memo-list::-webkit-scrollbar-track {
-  background: transparent;
-}
 
-.memo-list::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12);
-  border-radius: 3px;
-}
 
 .memo-list-head {
   display: flex;
@@ -464,7 +454,7 @@ function handleItemClick(memo: Memo) {
   position: relative;
   padding: 12px 14px;
   margin-bottom: 8px;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.06);
   cursor: pointer;
@@ -548,7 +538,7 @@ function handleItemClick(memo: Memo) {
   gap: 3px;
   flex-shrink: 0;
   padding: 1px 5px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-size: 9px;
   line-height: 1.4;
   color: color-mix(in srgb, var(--focus-color) 80%, transparent);
@@ -627,7 +617,7 @@ function handleItemClick(memo: Memo) {
 .action-btn {
   width: 24px;
   height: 24px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   background: transparent;
   border: 1px solid transparent;
   color: rgba(255, 255, 255, 0.3);
@@ -714,7 +704,7 @@ function handleItemClick(memo: Memo) {
   align-items: center;
   gap: 6px;
   padding: 10px 18px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--focus-color) 15%, transparent);
   border: 1px solid color-mix(in srgb, var(--focus-color) 30%, transparent);
   color: var(--focus-color);
@@ -738,7 +728,7 @@ function handleItemClick(memo: Memo) {
   align-items: center;
   gap: 12px;
   padding: 8px 14px;
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   background: rgba(30, 30, 34, 0.96);
   border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
@@ -769,7 +759,7 @@ function handleItemClick(memo: Memo) {
 .archive-dialog {
   background: rgba(28, 28, 32, 0.98);
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   padding: 18px 20px;
   width: 320px;
   max-height: 70vh;
@@ -809,7 +799,7 @@ function handleItemClick(memo: Memo) {
   align-items: center;
   gap: 10px;
   padding: 9px 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.06);
 }
@@ -843,7 +833,7 @@ function handleItemClick(memo: Memo) {
 .archive-restore-btn {
   flex-shrink: 0;
   padding: 4px 9px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--focus-color) 14%, transparent);
   border: 1px solid color-mix(in srgb, var(--focus-color) 32%, transparent);
   color: var(--focus-color);
@@ -866,7 +856,7 @@ function handleItemClick(memo: Memo) {
 .archive-close-btn {
   align-self: flex-end;
   padding: 6px 14px;
-  border-radius: 7px;
+  border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.1);
   color: rgba(255, 255, 255, 0.7);
@@ -895,7 +885,7 @@ function handleItemClick(memo: Memo) {
 .delete-dialog {
   background: rgba(28, 28, 32, 0.98);
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   padding: 20px 24px;
   min-width: 280px;
   max-width: 320px;
@@ -924,7 +914,7 @@ function handleItemClick(memo: Memo) {
 
 .dialog-btn {
   padding: 8px 16px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -965,7 +955,7 @@ function handleItemClick(memo: Memo) {
   gap: 10px;
   max-width: 92%;
   padding: 9px 13px;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: rgba(30, 30, 34, 0.96);
   border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
@@ -983,7 +973,7 @@ function handleItemClick(memo: Memo) {
 .blocked-action {
   flex-shrink: 0;
   padding: 4px 9px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--focus-color) 18%, transparent);
   border: 1px solid color-mix(in srgb, var(--focus-color) 40%, transparent);
   color: var(--focus-color);

@@ -64,7 +64,7 @@ const dueLabel = computed(() => todoDueLabel(props.todo))
   justify-content: space-between;
   gap: 10px;
   padding: 8px 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.035);
   border: 1px solid rgba(255, 255, 255, 0.07);
   border-left: 2px solid color-mix(in srgb, var(--focus-color) 45%, transparent);
@@ -94,7 +94,7 @@ const dueLabel = computed(() => todoDueLabel(props.todo))
   height: 18px;
   margin-top: 1px;
   padding: 0;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   border: 1.5px solid rgba(255, 255, 255, 0.25);
   background: transparent;
   color: rgba(255, 255, 255, 0.6);

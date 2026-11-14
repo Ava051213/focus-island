@@ -311,7 +311,7 @@ onBeforeUnmount(() => {
   gap: 6px;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   color: rgba(255, 255, 255, 0.85);
   cursor: pointer;
   transition: all 0.2s ease;
@@ -344,7 +344,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   border: 1px solid;
 }
 
@@ -380,7 +380,7 @@ onBeforeUnmount(() => {
   max-width: 200px;
   background: linear-gradient(180deg, rgba(32, 32, 38, 0.98), rgba(26, 26, 30, 0.97));
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   box-shadow:
     0 16px 40px rgba(0, 0, 0, 0.5),
     0 8px 20px rgba(0, 0, 0, 0.3);
@@ -419,7 +419,7 @@ onBeforeUnmount(() => {
   gap: 8px;
   width: 100%;
   padding: 6px 8px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: transparent;
   border: none;
   cursor: pointer;
@@ -441,7 +441,7 @@ onBeforeUnmount(() => {
   justify-content: center;
   width: 22px;
   height: 22px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   border: 1px solid;
   flex-shrink: 0;
 }
@@ -483,7 +483,7 @@ onBeforeUnmount(() => {
   gap: 5px;
   width: 100%;
   padding: 8px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: transparent;
   border: 1px dashed rgba(255, 255, 255, 0.12);
   color: var(--focus-color);
