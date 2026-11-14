@@ -34,8 +34,8 @@ export function buildPhaseMessage(
     return {
       title: '专注结束',
       body: task
-        ? `「${task}」这一轮专注完成啦，休息一下吧`
-        : '这一轮专注完成啦，休息一下吧',
+        ? `「${task}」专注完成，休息一下吧`
+        : '专注完成，休息一下吧',
     }
   }
   return {
@@ -130,7 +130,7 @@ export async function notifyTrayHidden(): Promise<boolean> {
   try {
     sendNotification({
       title: '专注岛已藏到托盘',
-      body: '点一下托盘图标就能把它叫回来',
+      body: '点击托盘图标恢复显示',
       sound: soundName(settings.value.notifications.sound),
     })
     return true

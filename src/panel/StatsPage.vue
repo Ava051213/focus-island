@@ -115,7 +115,7 @@ const weeklyComparison = computed(() => {
   const diff = thisPomodoros - lastPomodoros
 
   let comparison = ''
-  if (thisPomodoros === 0) comparison = '还没开始，慢慢来～'
+  if (thisPomodoros === 0) comparison = '还没有记录'
   else if (lastPomodoros === 0) comparison = '上周同期还没开始'
   else if (diff > 0) comparison = `比上周同期多 ${diff} 个`
   else if (diff < 0) comparison = `比上周同期少 ${-diff} 个`
@@ -160,7 +160,7 @@ const maxPomodoros = computed(() => Math.max(...weekTrend.value.map(d => d.pomod
           <path d="M15 18l-6-6 6-6" />
         </svg>
       </button>
-      <h2 class="page-title">统计</h2>
+      <h2 class="page-title">记录</h2>
       <div class="time-range-tabs">
         <button
           v-for="opt in timeRangeOptions"
@@ -181,7 +181,7 @@ const maxPomodoros = computed(() => Math.max(...weekTrend.value.map(d => d.pomod
       </div>
       <div class="stat-card">
         <div class="stat-value">{{ formatDuration(currentStats.focusMinutes) }}</div>
-        <div class="stat-label">陪你多久</div>
+        <div class="stat-label">专注时长</div>
       </div>
       <div class="stat-card">
         <div class="stat-value">{{ pendingEventCount }}</div>
@@ -204,7 +204,7 @@ const maxPomodoros = computed(() => Math.max(...weekTrend.value.map(d => d.pomod
     <!-- Heatmap -->
     <div class="section">
       <div class="section-header">
-        <span class="section-title">一起专注的日子</span>
+        <span class="section-title">专注日历</span>
         <span class="heatmap-range">最近半年</span>
       </div>
       <div class="heatmap">
@@ -242,7 +242,7 @@ const maxPomodoros = computed(() => Math.max(...weekTrend.value.map(d => d.pomod
 
     <!-- Week Trend -->
     <div class="section">
-      <div class="section-title">这一周的样子</div>
+      <div class="section-title">本周概览</div>
       <div class="trend-chart">
         <div class="trend-bars">
           <div
@@ -264,7 +264,7 @@ const maxPomodoros = computed(() => Math.max(...weekTrend.value.map(d => d.pomod
 
     <!-- Achievements -->
     <div class="section">
-      <div class="section-title">小勋章</div>
+      <div class="section-title">成就</div>
       <div class="achievement-row">
         <div
           v-for="a in allAchievements"

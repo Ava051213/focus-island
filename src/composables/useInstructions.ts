@@ -69,7 +69,7 @@ export function useInstructions() {
         return 'proposal'
       }
       if (!configured.value) {
-        result.value = '通用拆分需要 AI 帮忙，去「设置 → AI」填个 Key，或者直接说「拆成早晚各一次」～'
+        result.value = '通用拆分需要 AI，去「设置 → 未晚」填写 Key，或者直接说「拆成早晚各一次」'
         return 'rejected'
       }
       busy.value = true
@@ -77,7 +77,7 @@ export function useInstructions() {
         const tasks = await breakdownGoal(trimmed, memos.value.map(memo => memo.title))
         const parts = tasks.slice(0, 4)
         if (parts.length < 2) {
-          result.value = '没拆出几步来，换个说法试试？'
+          result.value = '没有拆出结果，换个说法试试'
           return 'rejected'
         }
         proposal.value = { kind: 'split', memoId: route.memoId, parts, summary: splitProposalSummary(memoTitle, parts) }

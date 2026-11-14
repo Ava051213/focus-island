@@ -79,8 +79,8 @@ function onBackdropClick(event: MouseEvent) {
   <div class="dialog-backdrop" @click="onBackdropClick">
     <div class="dialog-container">
       <div class="dialog-header">
-        <span class="dialog-title">整理分类呀</span>
-        <button class="close-btn" @click="emit('close')" title="关了呀"><span>✕</span></button>
+        <span class="dialog-title">整理分类</span>
+        <button class="close-btn" @click="emit('close')" title="关闭"><span>✕</span></button>
       </div>
 
       <div class="dialog-body">
@@ -157,14 +157,14 @@ function onBackdropClick(event: MouseEvent) {
               ref="addInputRef"
               v-model="newCategoryName"
               class="edit-input"
-              placeholder="给它起个名字呀"
+              placeholder="分类名称"
               @keydown.enter="saveNewCategory"
               @keydown.esc="cancelAdd"
             />
           </div>
 
           <div class="color-picker-row">
-            <span class="color-label">挑个颜色呀：</span>
+            <span class="color-label">颜色：</span>
             <div class="color-options">
               <button
                 v-for="color in CATEGORY_COLORS"
@@ -191,7 +191,7 @@ function onBackdropClick(event: MouseEvent) {
             <line x1="12" y1="5" x2="12" y2="19"/>
             <line x1="5" y1="12" x2="19" y2="12"/>
           </svg>
-          <span>新建分类嘛</span>
+          <span>新建分类</span>
         </button>
       </div>
     </div>

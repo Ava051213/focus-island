@@ -201,7 +201,7 @@ export function useTimer() {
       if (effects) startTicking()
       return
     }
-    // 完成后卡片上的「继续呀」：专注结束就再开一轮，休息结束就开始下一轮专注
+    // 完成后卡片上的「继续」：专注结束就再开一轮，休息结束就开始下一轮专注
     if (machineState.status === 'completed') {
       if (pendingNotification.value === 'focus-done') extendNotification()
       else if (pendingNotification.value === 'break-done') confirmNotification()

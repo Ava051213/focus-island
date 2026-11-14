@@ -217,7 +217,7 @@ describe('MemoEditor', () => {
     await editor.trigger('keydown', { key: 'Enter', shiftKey: true })
 
     expect(wrapper.emitted('update')).toBeUndefined()
-    expect(wrapper.text()).toContain('先写点什么')
+    expect(wrapper.text()).toContain('先写点内容')
   })
 
   it('返回时先存再告诉外面有没有内容', async () => {

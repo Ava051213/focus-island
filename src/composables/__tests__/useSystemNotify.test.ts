@@ -79,7 +79,7 @@ describe('useSystemNotify', () => {
 
     expect(buildPhaseMessage('focus-done', '写测试')).toEqual({
       title: '专注结束',
-      body: '「写测试」这一轮专注完成啦，休息一下吧',
+      body: '「写测试」专注完成，休息一下吧',
     })
     expect(buildPhaseMessage('break-done', null)).toEqual({
       title: '休息结束',

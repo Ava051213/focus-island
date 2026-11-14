@@ -305,7 +305,7 @@ function handleItemClick(memo: Memo) {
         <button
           class="memo-play-btn"
           @click="(e) => handleStartFocus(memo, e)"
-          title="陪我专注一会儿呀"
+          title="开始专注"
         >
           <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg>
         </button>
@@ -353,31 +353,31 @@ function handleItemClick(memo: Memo) {
         <line x1="21" y1="21" x2="16.65" y2="16.65"/>
       </svg>
       <div v-else class="empty-icon">📝</div>
-      <div class="empty-text">{{ searchQuery ? '翻不到呀，换个词试试？' : '还没有小记呢' }}</div>
+      <div class="empty-text">{{ searchQuery ? '没有匹配的小记' : '还没有小记' }}</div>
       <button v-if="!searchQuery" class="empty-action-btn" @click="emit('newMemo')">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <line x1="12" y1="5" x2="12" y2="19"/>
           <line x1="5" y1="12" x2="19" y2="12"/>
         </svg>
-        写一条嘛
+        写一条
       </button>
     </div>
 
     <!-- Delete Confirmation Dialog -->
     <div v-if="showDeleteConfirm" class="delete-dialog-overlay" @click="cancelDeleteMemo">
       <div class="delete-dialog" @click.stop>
-        <div class="delete-dialog-title">🗑️ 真的要丢掉这条小记吗</div>
-        <div class="delete-dialog-content">丢掉就捡不回来啦，再想想好不好～</div>
+        <div class="delete-dialog-title">删除这条小记？</div>
+        <div class="delete-dialog-content">删除后无法恢复。</div>
         <div class="delete-dialog-actions">
-          <button class="dialog-btn cancel-btn" @click="cancelDeleteMemo">再想想</button>
-          <button class="dialog-btn confirm-btn" @click="confirmDeleteMemo">丢掉吧</button>
+          <button class="dialog-btn cancel-btn" @click="cancelDeleteMemo">取消</button>
+          <button class="dialog-btn confirm-btn" @click="confirmDeleteMemo">删除</button>
         </div>
       </div>
     </div>
 
     <!-- 完成后的撤销条 -->
     <div v-if="undoState" class="undo-toast">
-      <span class="undo-text">做完「{{ undoState.title }}」啦</span>
+      <span class="undo-text">已完成「{{ undoState.title }}」</span>
       <button class="undo-btn" @click="handleUndoComplete">撤销</button>
     </div>
 
@@ -398,8 +398,8 @@ function handleItemClick(memo: Memo) {
             <button class="archive-restore-btn" @click="handleRestoreMemo(memo)">放回来</button>
           </div>
         </div>
-        <div v-else class="archive-empty">还没有完成的小记呀</div>
-        <button class="archive-close-btn" @click="showArchive = false">关上</button>
+        <div v-else class="archive-empty">还没有已完成的小记</div>
+        <button class="archive-close-btn" @click="showArchive = false">关闭</button>
       </div>
     </div>
   </div>

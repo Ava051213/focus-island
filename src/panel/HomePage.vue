@@ -307,7 +307,7 @@ function onCoachNoteEnter(event: KeyboardEvent) {
       <template v-else-if="configured">
         <p v-if="coachGreeting" class="coach-greeting">{{ coachGreeting }}</p>
         <p v-else-if="coachInsight" class="coach-content">{{ coachInsight.content }}</p>
-        <p v-else class="coach-empty">记点小记，未晚就能陪你排啦～</p>
+        <p v-else class="coach-empty">记点小记，未晚就能帮你安排今天</p>
         <p v-if="coachCare" class="coach-care">{{ coachCare }}</p>
       </template>
       <template v-else>
@@ -374,13 +374,13 @@ function onCoachNoteEnter(event: KeyboardEvent) {
 
       <div v-if="activeTaskId" class="running-card">
         <div class="running-main">
-          <span class="running-phase">{{ phase === 'focus' ? '陪你专注中' : '陪你歇着' }}</span>
+          <span class="running-phase">{{ phase === 'focus' ? '专注中' : '休息中' }}</span>
           <span class="running-title">{{ activeTaskTitle ?? '还没想好名字' }}</span>
         </div>
         <span class="running-time">{{ displayTime }}</span>
         <div class="running-actions">
           <button class="round-btn" @click="running ? pause() : resume()">
-            {{ running ? '歇一下' : '继续呀' }}
+            {{ running ? '歇一下' : '继续' }}
           </button>
           <button class="round-btn stop" @click="abandon()">不做了</button>
         </div>
@@ -396,7 +396,7 @@ function onCoachNoteEnter(event: KeyboardEvent) {
           <button
             class="home-check-btn"
             :class="{ checked: entry.done }"
-            :title="entry.done ? '还没做完，取消勾选' : '这条做完啦'"
+            :title="entry.done ? '取消勾选' : '已完成'"
             @click="toggleEntryDone(entry.id)"
           >
             <svg v-if="entry.done" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4">
@@ -421,7 +421,7 @@ function onCoachNoteEnter(event: KeyboardEvent) {
         </div>
 
         <div v-if="planEntries.length === 0 && !generating" class="empty">
-          还没有要做的事，去小记页记一条吧～
+          还没有要做的事，去小记页记一条
         </div>
       </template>
     </section>

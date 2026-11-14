@@ -158,7 +158,7 @@ async function rewriteAndSave() {
   if (rewriting.value) return
   const plain = (editorRef.value?.innerText ?? '').trim()
   if (!plain) {
-    rewriteError.value = '先写点什么嘛～'
+    rewriteError.value = '先写点内容'
     editorRef.value?.focus()
     return
   }
@@ -477,7 +477,7 @@ function formatUpdateTime(timestamp: number): string {
   <div class="memo-editor">
     <!-- Top Bar -->
     <div class="editor-top-bar">
-      <button class="top-bar-btn back-btn" @click="handleBack" title="回去啦">
+      <button class="top-bar-btn back-btn" @click="handleBack" title="返回">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M19 12H5M12 19l-7-7 7-7"/>
         </svg>
@@ -574,7 +574,7 @@ function formatUpdateTime(timestamp: number): string {
       >{{ rewriteError }}</span>
       <span v-else class="rewrite-hint">Shift+回车 整理并存回小记</span>
       <button class="rewrite-btn" :disabled="rewriting" @click="rewriteAndSave">
-        {{ rewriting ? '写着呢…' : '确定' }}
+        {{ rewriting ? '保存中…' : '确定' }}
       </button>
     </div>
 
@@ -590,11 +590,11 @@ function formatUpdateTime(timestamp: number): string {
     <!-- Delete Confirmation Dialog -->
     <div v-if="showDeleteConfirm" class="delete-dialog-overlay" @click="cancelDelete">
       <div class="delete-dialog" @click.stop>
-        <div class="delete-dialog-title">🗑️ 真的要丢掉这条小记吗</div>
-        <div class="delete-dialog-content">丢掉就捡不回来啦，再想想好不好～</div>
+        <div class="delete-dialog-title">删除这条小记？</div>
+        <div class="delete-dialog-content">删除后无法恢复。</div>
         <div class="delete-dialog-actions">
-          <button class="dialog-btn cancel-btn" @click="cancelDelete">再想想</button>
-          <button class="dialog-btn confirm-btn" @click="confirmDelete">丢掉吧</button>
+          <button class="dialog-btn cancel-btn" @click="cancelDelete">取消</button>
+          <button class="dialog-btn confirm-btn" @click="confirmDelete">删除</button>
         </div>
       </div>
     </div>

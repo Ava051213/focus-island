@@ -268,7 +268,7 @@ function removeEvent() {
       <input
         v-model="draft"
         class="quick-input"
-        placeholder="想到什么事？回车就帮你整理成日程呀～"
+        placeholder="输入一件事，回车自动整理成日程"
         @keydown.enter="submitDraft"
       />
 
@@ -276,7 +276,7 @@ function removeEvent() {
 
       <div v-else-if="preview" class="ai-preview">
         <div class="preview-head">
-          <span>要记成这条喔</span>
+          <span>确认这条</span>
           <span class="source-tag">{{ preview.source === 'ai' ? '未晚整理的' : '我自己理的' }}</span>
         </div>
         <div class="preview-title">{{ preview.title }}</div>
@@ -369,11 +369,11 @@ function removeEvent() {
       </div>
 
       <div v-if="upcoming.length === 0 && overdue.length === 0" class="empty-state">
-        还没有约定呢～想到以后要做的事，就在上面写一句嘛
+        还没有日程，在上方输入即可添加
       </div>
 
       <template v-if="upcoming.length > 0">
-        <div class="section-label">这几天的约定</div>
+        <div class="section-label">接下来的日程</div>
         <EventCard
           v-for="event in upcoming"
           :key="event.id"
@@ -384,7 +384,7 @@ function removeEvent() {
       </template>
 
       <template v-if="overdue.length > 0">
-        <div class="section-label">已经过时啦</div>
+        <div class="section-label">已过期</div>
         <EventCard
           v-for="event in overdue"
           :key="event.id"

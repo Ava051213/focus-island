@@ -12,11 +12,11 @@ const { displayTime, phase, activeTaskTitle, running } = useTimer()
 
 // 休息阶段轮换小提示，只换文字，不增加操作
 const BREAK_TIPS = [
-  '喝口水呀～',
-  '伸个懒腰～',
-  '闭眼三十秒～',
-  '看看远处～',
-  '转转眼珠～',
+  '喝口水',
+  '伸个懒腰',
+  '闭眼三十秒',
+  '看看远处',
+  '转转眼珠',
 ]
 const BREAK_TIP_INTERVAL_MS = 15_000
 
@@ -75,7 +75,7 @@ const phaseColor = computed(() =>
       <span
         class="text-white/90 font-medium truncate block"
         :style="{ fontSize: `calc(12px * var(--island-scale, 1))` }"
-      >{{ resolvedTitle ?? (phase === 'break' ? '歇一会儿呀' : '专注中呀') }}</span>
+      >{{ resolvedTitle ?? (phase === 'break' ? '休息中' : '专注中') }}</span>
     </div>
 
     <!-- Countdown -->

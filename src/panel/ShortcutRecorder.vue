@@ -109,7 +109,7 @@ onUnmounted(unbindListeners)
     tabindex="0"
     @click="startRecording"
   >
-    <span v-if="isRecording" class="recording-hint">按一个组合键嘛…</span>
+    <span v-if="isRecording" class="recording-hint">按下组合键…</span>
     <span v-else>{{ modelValue ? formatShortcut(modelValue) : (placeholder ?? '未设置') }}</span>
   </button>
 </template>
