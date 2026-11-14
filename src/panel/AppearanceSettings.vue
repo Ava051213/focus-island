@@ -1,23 +1,35 @@
 <script setup lang="ts">
-import { useSettings, presetThemes, type ColorMode } from '../composables/useSettings'
+import { useSettings, presetThemes, CUSTOM_THEME_ID, type ColorMode } from '../composables/useSettings'
 import { useRewardUnlocks } from '../composables/useWeeklyGoals'
 
 const { settings } = useSettings()
 const { unlockedRewards } = useRewardUnlocks()
 
-function isThemeLocked(theme: (typeof presetThemes)[number]): boolean {
-  return !!theme.rewardId && !unlockedRewards.value.some(id => id === theme.rewardId)
-}
-
 const colorModeOptions: Array<{ id: ColorMode; label: string }> = [
-  { id: 'dark', label: '暗暗的' },
-  { id: 'light', label: '亮亮的' },
-  { id: 'system', label: '跟着系统' },
+  { id: 'dark', label: '深色' },
+  { id: 'light', label: '浅色' },
+  { id: 'system', label: '跟随系统' },
 ]
 
 function switchColorMode(mode: ColorMode) {
   if (settings.value.colorMode === mode) return
   settings.value.colorMode = mode
+}
+
+function isThemeLocked(theme: (typeof presetThemes)[number]): boolean {
+  return !!theme.rewardId && !unlockedRewards.value.some(id => id === theme.rewardId)
+}
+
+function pickTheme(id: string, locked?: boolean) {
+  if (locked) return
+  settings.value.activeThemeId = id
+}
+
+// 自定义取色：选色即启用自定义主题
+function pickCustomColor(e: Event) {
+  const value = (e.target as HTMLInputElement).value
+  settings.value.customFocusColor = value
+  settings.value.activeThemeId = CUSTOM_THEME_ID
 }
 </script>
 
@@ -44,17 +56,42 @@ function switchColorMode(mode: ColorMode) {
         class="theme-card"
         :class="{ active: settings.activeThemeId === theme.id, locked: isThemeLocked(theme) }"
         :disabled="isThemeLocked(theme)"
-        :title="isThemeLocked(theme) ? '完成本周番茄目标就能解锁' : theme.name"
-        @click="settings.activeThemeId = theme.id"
+        :title="isThemeLocked(theme) ? '完成本周目标后解锁' : theme.name"
+        @click="pickTheme(theme.id, isThemeLocked(theme))"
       >
-        <div class="theme-colors">
-          <span class="color-dot" :style="{ background: theme.focusColor }"></span>
-          <span class="color-dot" :style="{ background: theme.breakColor }"></span>
-          <span class="color-dot" :style="{ background: theme.idleColor }"></span>
-        </div>
+        <span class="theme-strip">
+          <i :style="{ background: theme.focusColor }"></i>
+          <i :style="{ background: theme.breakColor }"></i>
+          <i :style="{ background: theme.idleColor }"></i>
+        </span>
         <span class="theme-name">{{ theme.name }}</span>
-        <span v-if="isThemeLocked(theme)" class="theme-lock">🔒</span>
-        <span v-else-if="settings.activeThemeId === theme.id" class="theme-check">✓</span>
+        <span v-if="isThemeLocked(theme)" class="theme-flag">未解锁</span>
+        <span v-else-if="settings.activeThemeId === theme.id" class="theme-flag check">✓</span>
+      </button>
+
+      <button
+        class="theme-card custom"
+        :class="{ active: settings.activeThemeId === CUSTOM_THEME_ID }"
+        @click="settings.activeThemeId = CUSTOM_THEME_ID"
+      >
+        <span class="theme-strip">
+          <i :style="{ background: settings.customFocusColor || '#888888' }"></i>
+          <i class="strip-dim"></i>
+          <i class="strip-dim"></i>
+        </span>
+        <span class="theme-name">自定义</span>
+        <span
+          v-if="settings.activeThemeId === CUSTOM_THEME_ID"
+          class="theme-flag check"
+        >✓</span>
+        <input
+          type="color"
+          class="color-input"
+          :value="settings.customFocusColor || '#f0682e'"
+          title="选一个主色"
+          @click.stop
+          @input="pickCustomColor"
+        />
       </button>
     </div>
   </div>
@@ -63,23 +100,10 @@ function switchColorMode(mode: ColorMode) {
 <style scoped>
 @reference "../styles.css";
 
-.settings-section {
-  padding: 10px 14px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.section-title {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.4);
-  font-weight: 500;
-  letter-spacing: 0.5px;
-  margin-bottom: 6px;
-}
-
 .mode-toggle {
   display: flex;
   align-items: center;
-  border: 1px solid color-mix(in srgb, var(--focus-color) 82%, transparent);
+  border: 1px solid var(--accent-strong);
   border-radius: 999px;
   overflow: hidden;
   width: fit-content;
@@ -102,11 +126,11 @@ function switchColorMode(mode: ColorMode) {
 }
 
 .mode-btn + .mode-btn {
-  border-left: 1px solid color-mix(in srgb, var(--focus-color) 58%, transparent);
+  border-left: 1px solid var(--accent-soft);
 }
 
 .mode-btn:hover {
-  background: color-mix(in srgb, var(--focus-color) 15%, transparent);
+  background: var(--accent-weak);
 }
 
 .mode-btn.active {
@@ -126,11 +150,11 @@ function switchColorMode(mode: ColorMode) {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 5px;
-  padding: 8px 4px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.03);
+  gap: 6px;
+  padding: 10px 4px 8px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-faint);
+  background: var(--surface-card);
   cursor: pointer;
   transition: all 0.2s;
   text-align: center;
@@ -151,16 +175,21 @@ function switchColorMode(mode: ColorMode) {
   cursor: default;
 }
 
-.theme-colors {
+/* 主题色的三段预览条 */
+.theme-strip {
   display: flex;
-  gap: 3px;
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
 }
 
-.color-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+.theme-strip i {
+  flex: 1;
+}
+
+.theme-strip i.strip-dim {
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .theme-name {
@@ -170,19 +199,28 @@ function switchColorMode(mode: ColorMode) {
   white-space: nowrap;
 }
 
-.theme-check {
+.theme-flag {
   position: absolute;
-  top: 2px;
-  right: 4px;
-  font-size: 10px;
+  top: 3px;
+  right: 5px;
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.theme-flag.check {
   color: var(--focus-color);
   font-weight: 700;
 }
 
-.theme-lock {
+/* 原生取色器：铺满卡片但完全透明，点卡片即弹取色 */
+.color-input {
   position: absolute;
-  top: 2px;
-  right: 4px;
-  font-size: 9px;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  border: none;
+  padding: 0;
 }
 </style>

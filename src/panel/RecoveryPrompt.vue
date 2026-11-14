@@ -48,8 +48,8 @@ const discardLabel = computed(() => props.plan.phase === 'focus' ? '放弃并记
   justify-content: space-between;
   gap: 10px;
   padding: 8px 12px;
-  background: rgba(232, 93, 58, 0.1);
-  border-bottom: 1px solid rgba(232, 93, 58, 0.24);
+  background: color-mix(in srgb, var(--focus-color) 10%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--focus-color) 24%, transparent);
 }
 
 .recovery-text {
@@ -83,7 +83,7 @@ const discardLabel = computed(() => props.plan.phase === 'focus' ? '放弃并记
 }
 
 .recovery-primary {
-  border-color: rgba(232, 93, 58, 0.45);
+  border-color: color-mix(in srgb, var(--focus-color) 45%, transparent);
   color: var(--focus-color);
 }
 

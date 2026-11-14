@@ -17,6 +17,7 @@ import {
   type TraySettings,
 } from '../utils/settingsMigration'
 import type { IslandEdge } from '../utils/islandPlacement'
+import { isValidHex, deriveThemeColors } from '../utils/themeColors'
 
 export type { IslandEdge }
 
@@ -26,10 +27,11 @@ export interface ThemePreset {
   focusColor: string
   breakColor: string
   idleColor: string
-  alertColor: string
   /** 需要达成本周目标才能使用的奖励主题 */
   rewardId?: string
 }
+
+export const CUSTOM_THEME_ID = 'custom'
 
 export type ColorMode = 'dark' | 'light' | 'system'
 
@@ -47,6 +49,8 @@ export interface Settings {
   breakDuration: number
   colorMode: ColorMode
   activeThemeId: string
+  /** 自定义主题的主色（#rrggbb），activeThemeId 为 custom 时生效 */
+  customFocusColor: string
   idleMottos: string[]       // 空闲时轮播的激励语，空数组则用内置默认
   shortcuts: ShortcutSettings      // 全局快捷键（开始/暂停、打开清单）
   tray: TraySettings               // 关闭窗口时隐藏到托盘
@@ -60,13 +64,14 @@ export interface Settings {
 }
 
 export const presetThemes: ThemePreset[] = [
-  { id: 'classic', name: '经典橙红', focusColor: '#e85d3a', breakColor: '#3a9e6e', idleColor: '#4a8fd4', alertColor: '#e8a23a' },
-  { id: 'ocean', name: '海洋蓝绿', focusColor: '#2d8cf0', breakColor: '#36b37e', idleColor: '#6b8eb2', alertColor: '#f5a623' },
-  { id: 'lavender', name: '薰衣草紫', focusColor: '#9b6dff', breakColor: '#4ecdc4', idleColor: '#7c8ba1', alertColor: '#f7b731' },
-  { id: 'forest', name: '森林深绿', focusColor: '#27ae60', breakColor: '#3498db', idleColor: '#8e9aaf', alertColor: '#e67e22' },
-  { id: 'cyber', name: '赛博朋克', focusColor: '#ff6b9d', breakColor: '#00d2d3', idleColor: '#a29bfe', alertColor: '#feca57' },
-  { id: 'dawn', name: '晨光', focusColor: '#ff8a4c', breakColor: '#5ac8a8', idleColor: '#f5c26b', alertColor: '#e06b8b', rewardId: 'theme-dawn' },
+  { id: 'ember', name: '烬橙', focusColor: '#f0682e', breakColor: '#34a86e', idleColor: '#5a9bd8' },
+  { id: 'azure', name: '黛蓝', focusColor: '#5b8ff0', breakColor: '#3fc08d', idleColor: '#9a8cf5' },
+  { id: 'celadon', name: '青瓷', focusColor: '#2fb8a6', breakColor: '#f2a154', idleColor: '#7c93b8' },
+  // 奖励位沿用 theme-dawn 这个 id，老用户已解锁的状态直接继承
+  { id: 'blossom', name: '绯樱', focusColor: '#ef6fa7', breakColor: '#41c4a4', idleColor: '#a78bfa', rewardId: 'theme-dawn' },
 ]
+
+const THEME_IDS = new Set(presetThemes.map(t => t.id))
 
 const DEFAULT_SETTINGS: Settings = {
   islandOpacity: 0.25,
@@ -79,7 +84,8 @@ const DEFAULT_SETTINGS: Settings = {
   focusDuration: 25,
   breakDuration: 5,
   colorMode: 'system',
-  activeThemeId: 'classic',
+  activeThemeId: 'ember',
+  customFocusColor: '',
   idleMottos: [],
   shortcuts: defaultShortcutSettings(),
   tray: defaultTraySettings(),
@@ -137,15 +143,17 @@ function ensureSystemSchemeListener() {
 }
 
 function applyThemeToDOM() {
-  const theme = presetThemes.find(t => t.id === settings.value.activeThemeId) ?? presetThemes[0]
+  // 自定义主题：主色来自取色器，休息/空闲色由派生规则生成
+  const colors = settings.value.activeThemeId === CUSTOM_THEME_ID && isValidHex(settings.value.customFocusColor)
+    ? deriveThemeColors(settings.value.customFocusColor)
+    : presetThemes.find(t => t.id === settings.value.activeThemeId) ?? presetThemes[0]
   const root = document.documentElement
   const resolvedColorMode = resolveColorMode(settings.value.colorMode)
   root.dataset.colorMode = resolvedColorMode
   root.style.colorScheme = resolvedColorMode
-  root.style.setProperty('--focus-color', theme.focusColor)
-  root.style.setProperty('--break-color', theme.breakColor)
-  root.style.setProperty('--idle-color', theme.idleColor)
-  root.style.setProperty('--alert-color', theme.alertColor)
+  root.style.setProperty('--focus-color', colors.focusColor)
+  root.style.setProperty('--break-color', colors.breakColor)
+  root.style.setProperty('--idle-color', colors.idleColor)
   root.style.setProperty('--island-opacity', String(1 - settings.value.islandOpacity))
   root.style.setProperty('--island-scale', String(settings.value.islandScale))
 }
@@ -167,7 +175,16 @@ const store = createPersistedStore({
       shortcuts: { ...defaults.shortcuts, ...(parsed.shortcuts ?? {}) },
       tray: { ...defaults.tray, ...(parsed.tray ?? {}) },
       notifications: { ...defaults.notifications, ...(parsed.notifications ?? {}) },
+      bubbles: { ...defaults.bubbles, ...(parsed.bubbles ?? {}) },
       colorMode: normalizeColorMode(parsed.colorMode),
+      // 主题 id 指向已下线的预设时回退默认；自定义主色只接受合法 hex
+      activeThemeId: typeof parsed.activeThemeId === 'string'
+        && (THEME_IDS.has(parsed.activeThemeId) || parsed.activeThemeId === CUSTOM_THEME_ID)
+        ? parsed.activeThemeId
+        : DEFAULT_SETTINGS.activeThemeId,
+      customFocusColor: typeof parsed.customFocusColor === 'string' && isValidHex(parsed.customFocusColor)
+        ? parsed.customFocusColor.toLowerCase()
+        : DEFAULT_SETTINGS.customFocusColor,
     }
   },
   syncEvent: 'settings-changed',

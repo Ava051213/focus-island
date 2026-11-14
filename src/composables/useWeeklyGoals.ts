@@ -38,7 +38,7 @@ const REWARD_BY_GOAL: Record<WeeklyGoalId, WeeklyRewardId> = {
 }
 
 export const WEEKLY_REWARD_LABELS: Record<WeeklyRewardId, string> = {
-  'theme-dawn': '晨光主题',
+  'theme-dawn': '绯樱主题',
   'mottos-gentle': '未晚的悄悄话',
   'mascot-face': '未晚的新表情',
 }

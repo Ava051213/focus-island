@@ -233,7 +233,7 @@ onUnmounted(() => {
 
 .capsule-shell {
     /* 纯黑背景，参考 iPhone 灵动岛：rgba(0,0,0,0.95+) */
-    background: rgba(0, 0, 0, var(--island-opacity, 0.95));
+    background: rgba(0, 0, 0, var(--island-opacity, 0.75));
     transition: width 0.3s ease, height 0.3s ease, transform 0.18s ease;
     contain: layout style paint;
 }

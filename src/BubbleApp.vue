@@ -1,7 +1,11 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted } from "vue";
 import { useIslandBubbles } from "./composables/useIslandBubbles";
+import { useSettings } from "./composables/useSettings";
 import Bubble from "./components/Bubble.vue";
+
+// 接入设置：主题变量与色板要应用到这个窗口
+useSettings();
 
 // 泡泡 overlay：铺满岛所在屏的工作区，默认整面穿透，只有泡泡本体可点
 const { bubbles, start, stop, onBubbleClick } = useIslandBubbles();

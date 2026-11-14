@@ -15,12 +15,19 @@ const emit = defineEmits<{
 
 const isFocusDone = computed(() => props.type === 'focus-done')
 
-// Primary color guides the recommended next step:
-// - focus-done → recommend break (green)
-// - break-done → recommend focus (orange)
-const primaryColor = computed(() => isFocusDone.value ? '#3a9e6e' : '#e85d3a')
+// 推荐下一步的颜色跟随主题：
+// - focus-done → 推荐休息（break 色）
+// - break-done → 推荐专注（focus 色）
+const themeColors = computed(() => {
+  const styles = getComputedStyle(document.documentElement)
+  const focus = styles.getPropertyValue('--focus-color').trim() || '#e85d3a'
+  const breakColor = styles.getPropertyValue('--break-color').trim() || '#3a9e6e'
+  return { focus, breakColor }
+})
 
-const extendColor = computed(() => isFocusDone.value ? '#e85d3a' : '#3a9e6e')
+const primaryColor = computed(() => isFocusDone.value ? themeColors.value.breakColor : themeColors.value.focus)
+
+const extendColor = computed(() => isFocusDone.value ? themeColors.value.focus : themeColors.value.breakColor)
 </script>
 
 <template>
