@@ -372,9 +372,24 @@ html, body, #app {
 
 .error-text {
   margin: 8px 0 0;
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.5;
   color: var(--color-danger);
+}
+
+/* 可展开的长错误框：默认两行截断，点击展开 */
+.error-text.expandable {
+  cursor: pointer;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin: 0;
+}
+
+.error-text.expandable.expanded {
+  display: block;
+  -webkit-line-clamp: unset;
 }
 
 /* 统一细滚动条 */

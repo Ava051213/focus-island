@@ -286,7 +286,7 @@ function removeEvent() {
         <div v-if="preview.note" class="preview-note">{{ preview.note }}</div>
         <div
           v-if="aiError"
-          class="preview-error"
+          class="error-text expandable"
           :class="{ expanded: aiErrorExpanded }"
           @click="aiErrorExpanded = !aiErrorExpanded"
         >{{ aiError }}</div>
@@ -329,7 +329,7 @@ function removeEvent() {
           </span>
         </div>
 
-        <div v-if="tronFailure" class="tron-error">
+        <div v-if="tronFailure" class="error-text tron-block">
           {{ tronFailure.message }}
           <span v-if="tronStale" class="tron-error-note">下面保留的是上一次成功拉到的那份</span>
         </div>
@@ -546,22 +546,6 @@ function removeEvent() {
   color: rgba(255, 255, 255, 0.35);
 }
 
-.preview-error {
-  margin-top: 6px;
-  font-size: 10px;
-  color: #f87171;
-  cursor: pointer;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.preview-error.expanded {
-  display: block;
-  -webkit-line-clamp: unset;
-}
-
 .preview-title {
   font-size: 13px;
   color: rgba(255, 255, 255, 0.92);
@@ -652,14 +636,11 @@ function removeEvent() {
   color: rgba(255, 255, 255, 0.3);
 }
 
-.tron-error {
+.tron-block {
   padding: 7px 9px;
   border-radius: var(--radius-md);
-  font-size: 10px;
-  line-height: 1.55;
-  color: #f87171;
-  background: rgba(248, 113, 113, 0.1);
-  border: 1px solid rgba(248, 113, 113, 0.22);
+  background: color-mix(in srgb, var(--color-danger) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-danger) 22%, transparent);
 }
 
 .tron-error-note {

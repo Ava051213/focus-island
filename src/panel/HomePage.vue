@@ -357,7 +357,7 @@ function onCoachNoteEnter(event: KeyboardEvent) {
       </div>
       <p
         v-if="planError"
-        class="coach-error"
+        class="error-text expandable"
         :class="{ expanded: coachErrorExpanded }"
         @click="coachErrorExpanded = !coachErrorExpanded"
       >{{ planError }}</p>
@@ -763,23 +763,6 @@ function onCoachNoteEnter(event: KeyboardEvent) {
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
-}
-
-.coach-error {
-  margin: 0;
-  font-size: 11px;
-  line-height: 1.5;
-  color: #f87171;
-  cursor: pointer;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.coach-error.expanded {
-  display: block;
-  -webkit-line-clamp: unset;
 }
 
 .zone-title {

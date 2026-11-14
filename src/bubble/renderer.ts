@@ -2,6 +2,7 @@ import { ref } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
+import { computeSpawnPoint } from './spawn'
 
 /**
  * 泡泡的渲染端（跑在 bubble overlay 窗口）：
@@ -85,7 +86,7 @@ function startHoverPoll() {
   }, HOVER_POLL_MS)
 }
 
-/** 出生点：岛缘留 14px 间距，永远飘向对侧；转成 overlay 内逻辑坐标 */
+/** 出生点：几何计算在 spawn.ts（纯函数），这里只负责取数 */
 async function spawnPoint(): Promise<{ x: number; y: number; dir: 1 | -1 } | null> {
   try {
     const metrics = await invoke<{
@@ -98,18 +99,7 @@ async function spawnPoint(): Promise<{ x: number; y: number; dir: 1 | -1 } | nul
     const win = getCurrentWindow()
     const origin = await win.outerPosition()
     const scale = await win.scaleFactor()
-    const centerX = (metrics.island_x + metrics.island_width / 2 - origin.x) / scale
-    const islandLocalY = metrics.island_y - origin.y
-    const fromTop = islandLocalY < 40
-    const edgeY = fromTop
-      ? (islandLocalY + metrics.island_height) / scale
-      : islandLocalY / scale
-    const gap = 14
-    return {
-      x: Math.max(10, centerX + (Math.random() * 240 - 120)),
-      y: Math.max(10, fromTop ? edgeY + gap : edgeY - gap),
-      dir: fromTop ? -1 : 1,
-    }
+    return computeSpawnPoint(metrics, { x: origin.x, y: origin.y }, scale)
   } catch {
     return null
   }
