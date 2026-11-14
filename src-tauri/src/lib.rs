@@ -141,6 +141,8 @@ fn ensure_bubble_window_inner<R: Runtime>(app: &AppHandle<R>) -> Result<bool, St
             area.3 as u32,
         ));
     }
+    // 新窗口出生即穿透：渲染端 boot 有几百毫秒窗口期，非穿透的整屏透明窗口会吞掉所有点击
+    let _ = window.set_ignore_cursor_events(true);
     let _ = window.show();
     raise_bubble_inner(app);
     Ok(true)
@@ -176,15 +178,17 @@ fn raise_bubble_inner<R: Runtime>(app: &AppHandle<R>) {
 
 /// 主窗口把一个已经把关过的泡泡推过来：窗口已在则直接发事件，
 /// 刚创建（webview 还在加载）则进待发队列等 drain，同时懒创建窗口。
+// async：同步命令在主线程执行，里面 build() 做 WebView2 创建会卡死事件循环
+// （岛拖不动、面板关不掉的根因）；async 命令跑在异步运行时线程，创建正常派发。
 #[tauri::command]
-fn push_bubble<R: Runtime>(app: AppHandle<R>, kind: String, text: String) -> Result<(), String> {
+async fn push_bubble<R: Runtime>(app: AppHandle<R>, kind: String, text: String) -> Result<(), String> {
     let payload = PendingBubble { kind, text };
     let existed_before = app.get_webview_window("bubble").is_some();
     let recently_created = bubble_created_at_lock()
         .lock()
         .ok()
         .and_then(|slot| *slot)
-        .map(|t| t.elapsed() < std::time::Duration::from_secs(2))
+        .map(|t| t.elapsed() < std::time::Duration::from_secs(5))
         .unwrap_or(false);
 
     ensure_bubble_window_inner(&app)?;
