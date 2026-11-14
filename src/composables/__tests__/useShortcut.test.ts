@@ -35,11 +35,6 @@ vi.mock('@tauri-apps/api/webviewWindow', () => ({
   getCurrentWebviewWindow: () => ({ label: 'panel' }),
 }))
 
-vi.mock('@tauri-apps/plugin-autostart', () => ({
-  enable: vi.fn(async () => {}),
-  disable: vi.fn(async () => {}),
-}))
-
 function makeTimer(opts: {
   status?: TimerStatus
   phase?: TimerPhase

@@ -38,11 +38,6 @@ vi.mock('@tauri-apps/api/webviewWindow', () => ({
   getCurrentWebviewWindow: () => ({ label: 'panel' }),
 }))
 
-vi.mock('@tauri-apps/plugin-autostart', () => ({
-  enable: vi.fn(async () => {}),
-  disable: vi.fn(async () => {}),
-}))
-
 async function setup(notifications: {
   enabled: boolean
   sound: boolean

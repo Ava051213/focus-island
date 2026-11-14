@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useSettings } from '../composables/useSettings'
-import { emitIslandBubble } from '../utils/bubbleTexts'
+import { emitIslandBubble } from '../bubble/bubbleTexts'
 import AppSwitch from './AppSwitch.vue'
 import type { BubbleTone } from '../utils/settingsMigration'
 

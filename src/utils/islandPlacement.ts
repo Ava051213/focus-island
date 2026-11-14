@@ -10,12 +10,6 @@
 
 export type IslandEdge = 'top' | 'bottom'
 
-export const ISLAND_EDGES: IslandEdge[] = ['top', 'bottom']
-
-export function isIslandEdge(value: unknown): value is IslandEdge {
-  return value === 'top' || value === 'bottom'
-}
-
 export function clamp01(value: number): number {
   return Math.min(1, Math.max(0, value))
 }

@@ -2,7 +2,7 @@ import { watch } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { useSettings } from '../composables/useSettings'
-import { BUBBLE_TONE_MS, pickBubbleLine, type BubbleKind } from '../utils/bubbleTexts'
+import { BUBBLE_TONE_MS, pickBubbleLine, type BubbleKind } from './bubbleTexts'
 
 /**
  * 泡泡的决策端（跑在 main 窗口）：类型闸门、文案挑选、密度定时、

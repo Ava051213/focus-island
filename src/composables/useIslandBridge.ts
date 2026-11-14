@@ -4,7 +4,7 @@ import { useSettings } from './useSettings'
 import { useIslandState } from './useIslandState'
 import { useTimer, type NotificationType } from './useTimer'
 import { notifyTrayHidden } from './useSystemNotify'
-import { emitIslandBubble } from '../utils/bubbleTexts'
+import { emitIslandBubble } from '../bubble/bubbleTexts'
 import type { TimerStatePayload } from './useTimerBridge'
 
 // 模块级单例：bridge 可能被多处调用（Island.vue、泡泡队列），
