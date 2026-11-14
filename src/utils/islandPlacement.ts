@@ -34,7 +34,7 @@ export interface WindowSize {
 }
 
 /** 沿边方向的窗口原点偏移；ratio null = 居中；窗口比区域还大时贴起点 */
-export function offsetAlongEdge(areaLength: number, windowLength: number, ratio: number | null): number {
+function offsetAlongEdge(areaLength: number, windowLength: number, ratio: number | null): number {
   const max = areaLength - windowLength
   if (max <= 0) return 0
   const offset = ratio === null ? max / 2 : clamp01(ratio) * max
@@ -42,7 +42,7 @@ export function offsetAlongEdge(areaLength: number, windowLength: number, ratio:
 }
 
 /** 按贴边语义算窗口左上角坐标；贴底且窗口比区域还高时钳回区域起点 */
-export function islandPositionForEdge(
+function islandPositionForEdge(
   area: PlacementArea,
   windowSize: WindowSize,
   edge: IslandEdge,

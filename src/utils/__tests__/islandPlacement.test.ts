@@ -3,9 +3,7 @@ import {
   clamp01,
   edgeDistances,
   edgeRatioForPosition,
-  islandPositionForEdge,
   nearestEdge,
-  offsetAlongEdge,
   snapToNearestEdge,
 } from '../islandPlacement'
 
@@ -13,39 +11,21 @@ import {
 const AREA = { left: 0, top: 0, width: 1920, height: 1080 }
 const WIN = { width: 360, height: 42 }
 
-describe('offsetAlongEdge', () => {
-  it('null 居中', () => {
-    expect(offsetAlongEdge(1920, 360, null)).toBe(780)
+// islandPositionForEdge / offsetAlongEdge 已转为模块私有（Rust 侧是权威实现），
+// 通过 snapToNearestEdge 与贴边落位场景间接覆盖。
+
+
+describe('islandPositionForEdge（经 snapToNearestEdge 间接覆盖）', () => {
+  it('贴顶吸附落在顶边居中位', () => {
+    expect(snapToNearestEdge(AREA, WIN, 500, 8, 24)).toEqual({ x: 500, y: 0, edge: 'top' })
   })
 
-  it('比例换算并四舍五入', () => {
-    expect(offsetAlongEdge(1080, 42, 0.25)).toBe(260) // 259.5
-    expect(offsetAlongEdge(1920, 360, 1)).toBe(1560)
+  it('贴底吸附落在工作区底部', () => {
+    expect(snapToNearestEdge(AREA, WIN, 500, 1100, 24)).toEqual({ x: 500, y: 1038, edge: 'bottom' })
   })
 
-  it('窗口比区域还大时贴起点', () => {
-    expect(offsetAlongEdge(300, 360, 0.5)).toBe(0)
-  })
-})
-
-describe('islandPositionForEdge', () => {
-  it('贴顶默认居中', () => {
-    expect(islandPositionForEdge(AREA, WIN, 'top', null)).toEqual({ x: 780, y: 0 })
-  })
-
-  it('贴底落在工作区底部', () => {
-    expect(islandPositionForEdge(AREA, WIN, 'bottom', 0)).toEqual({ x: 0, y: 1038 })
-    expect(islandPositionForEdge(AREA, WIN, 'bottom', null)).toEqual({ x: 780, y: 1038 })
-  })
-
-  it('比例超界按 0~1 钳制', () => {
-    expect(islandPositionForEdge(AREA, WIN, 'top', 1.5)).toEqual({ x: 1560, y: 0 })
-    expect(islandPositionForEdge(AREA, WIN, 'top', -2)).toEqual({ x: 0, y: 0 })
-  })
-
-  it('窗口比区域还大时贴起点', () => {
-    expect(islandPositionForEdge(AREA, { width: 3000, height: 1500 }, 'bottom', null))
-      .toEqual({ x: 0, y: 0 })
+  it('比例超界按 0~1 钳制（横向往右越界时被夹回右端）', () => {
+    expect(snapToNearestEdge(AREA, WIN, 2500, 8, 24)).toEqual({ x: 1560, y: 0, edge: 'top' })
   })
 })
 
