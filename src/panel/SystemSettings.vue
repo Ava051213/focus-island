@@ -8,7 +8,7 @@ import {
 } from '../composables/useSystemNotify'
 import ShortcutRecorder from './ShortcutRecorder.vue'
 
-const { settings } = useSettings()
+const { settings, autostartError } = useSettings()
 
 const permissionText = computed(() => {
   switch (permissionState.value) {
@@ -80,7 +80,7 @@ watch(
   </div>
 
   <div class="settings-section">
-    <div class="section-title">窗口与托盘</div>
+    <div class="section-title">托盘与启动</div>
     <div class="update-toggle-row">
       <div class="update-copy">
         <span class="update-label">关闭窗口时隐藏到托盘</span>
@@ -88,6 +88,17 @@ watch(
       </div>
       <label class="switch" aria-label="关闭窗口时隐藏到托盘">
         <input v-model="settings.tray.closeToTray" type="checkbox" />
+        <span class="switch-track"></span>
+      </label>
+    </div>
+    <div class="update-toggle-row spaced">
+      <div class="update-copy">
+        <span class="update-label">开机就来陪你</span>
+        <span class="update-hint">开机自动出现，不用你找我啦</span>
+        <span v-if="autostartError" class="update-hint is-error">{{ autostartError }}</span>
+      </div>
+      <label class="switch" aria-label="开机就来陪你">
+        <input v-model="settings.autoLaunch" type="checkbox" />
         <span class="switch-track"></span>
       </label>
     </div>

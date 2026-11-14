@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import AboutDialog from './AboutDialog.vue'
+import IslandSettings from './IslandSettings.vue'
+import BubbleSettings from './BubbleSettings.vue'
 import AppearanceSettings from './AppearanceSettings.vue'
 import BehaviorSettings from './BehaviorSettings.vue'
 import SystemSettings from './SystemSettings.vue'
@@ -34,6 +36,8 @@ function goBack() {
       </button>
     </div>
 
+    <IslandSettings />
+    <BubbleSettings />
     <AppearanceSettings />
     <BehaviorSettings />
     <SystemSettings />
