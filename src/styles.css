@@ -7,12 +7,26 @@
 }
 
 :root {
-  --island-bg: rgba(12, 12, 14, 0.65);
-  --island-radius: 22px;
+  /* 设计令牌：圆角 / 文本灰阶 / 语义色 / 表面 / 强调色 ramp */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --text-hint: rgba(255, 255, 255, 0.4);
+  --text-label: rgba(255, 255, 255, 0.78);
+  --text-title: #e8e8ea;
+  --color-danger: #f87171;
+  --color-ok: #4ade80;
+  --surface-card: rgba(255, 255, 255, 0.03);
+  --surface-dialog: rgba(28, 28, 32, 0.96);
+  --border-faint: rgba(255, 255, 255, 0.08);
+  --border-soft: rgba(255, 255, 255, 0.14);
+  --accent-weak: color-mix(in srgb, var(--focus-color) 14%, transparent);
+  --accent-soft: color-mix(in srgb, var(--focus-color) 38%, transparent);
+  --accent-strong: color-mix(in srgb, var(--focus-color) 82%, transparent);
+
   --focus-color: #e85d3a;
   --break-color: #3a9e6e;
   --idle-color: #4a8fd4;
-  --alert-color: #e8a23a;
   --island-opacity: 0.75;
   --panel-root-filter: none;
   --panel-shell-bg:
@@ -140,4 +154,244 @@ html, body, #app {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* ---------- 设置页公共组件（分区 / 标题 / 行 / 开关 / 分段按钮） ---------- */
+
+.settings-section {
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.section-title,
+.section-subtitle {
+  font-size: 11px;
+  color: var(--text-hint);
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+
+.section-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.section-title-row .section-title {
+  margin-bottom: 0;
+}
+
+.section-toggle {
+  background: none;
+  border: none;
+  padding: 2px 0;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.45);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.section-toggle:hover {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.section-summary {
+  margin: 4px 0 0;
+  font-size: 10px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.mode-toggle {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--accent-strong);
+  border-radius: 999px;
+  overflow: hidden;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.mode-btn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  height: 28px;
+  padding: 0 14px;
+  cursor: pointer;
+  transition: background 0.22s ease, color 0.22s ease;
+  white-space: nowrap;
+}
+
+.mode-btn + .mode-btn {
+  border-left: 1px solid var(--accent-soft);
+}
+
+.mode-btn:hover {
+  background: var(--accent-weak);
+}
+
+.mode-btn.active {
+  background: var(--focus-color);
+  color: #fff;
+}
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.toggle-row.spaced {
+  margin-top: 12px;
+}
+
+.toggle-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.toggle-label {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.toggle-hint {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-hint);
+}
+
+.toggle-hint.is-error {
+  color: var(--color-danger);
+}
+
+.switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 42px;
+  height: 24px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.switch input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.switch-track {
+  position: relative;
+  width: 42px;
+  height: 24px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--border-soft);
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.switch-track::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.switch input:checked + .switch-track {
+  background: color-mix(in srgb, var(--focus-color) 72%, rgba(255, 255, 255, 0.12));
+  border-color: var(--accent-strong);
+}
+
+.switch input:checked + .switch-track::after {
+  transform: translateX(18px);
+  background: #fff;
+}
+
+.switch input:focus-visible + .switch-track {
+  outline: 2px solid color-mix(in srgb, var(--focus-color) 80%, white);
+  outline-offset: 2px;
+}
+
+.ghost-btn {
+  appearance: none;
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 11px;
+  line-height: 1;
+  height: 24px;
+  padding: 0 10px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.ghost-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.back-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.back-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+.error-text {
+  margin: 8px 0 0;
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--color-danger);
+}
+
+/* 统一细滚动条 */
+.slim-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+}
+
+.slim-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+
+.slim-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.slim-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 2px;
 }

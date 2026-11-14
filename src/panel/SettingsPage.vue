@@ -21,7 +21,7 @@ function goBack() {
 </script>
 
 <template>
-  <div class="settings-page" :class="{ 'blurred': showAbout }">
+  <div class="settings-page slim-scroll" :class="{ 'blurred': showAbout }">
     <div class="settings-header">
       <button class="back-btn" @click="goBack">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -56,7 +56,7 @@ function goBack() {
   display: flex;
   flex-direction: column;
   overflow-y: auto;
-  color: #e8e8ea;
+  color: var(--text-title);
 }
 
 .settings-header {
@@ -64,28 +64,8 @@ function goBack() {
   align-items: center;
   justify-content: space-between;
   padding: 10px 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid var(--border-faint);
   flex-shrink: 0;
-}
-
-.back-btn {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.7);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
-}
-
-.back-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.2);
-  color: #fff;
 }
 
 .about-btn {
