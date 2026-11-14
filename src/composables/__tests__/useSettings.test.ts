@@ -39,7 +39,7 @@ vi.mock('@tauri-apps/api/event', () => ({
 }))
 
 vi.mock('@tauri-apps/api/webviewWindow', () => ({
-  getCurrentWebviewWindow: () => ({ label: 'panel' }),
+  getCurrentWebviewWindow: () => ({ label: 'main' }),
 }))
 
 const SETTINGS_FILE = 'focus-island/settings.json'

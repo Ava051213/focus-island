@@ -3,7 +3,8 @@ use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent},
     window::Color,
-    AppHandle, Emitter, Manager, Runtime, WebviewWindow, WindowEvent,
+    AppHandle, Emitter, Manager, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
+    WindowEvent,
 };
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -86,6 +87,142 @@ impl ShortcutBindings {
 
 static LAST_PANEL_SIZE: OnceLock<Mutex<Option<tauri::PhysicalSize<u32>>>> = OnceLock::new();
 static LAST_ISLAND_PLACE: OnceLock<Mutex<Option<IslandPlace>>> = OnceLock::new();
+
+/// 泡泡 overlay 懒创建：窗口不存在时 spawn 请求先进这个待发队列，
+/// 等 webview 启动完成后来 drain（避免事件发给还没加载完的窗口而丢失）。
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+struct PendingBubble {
+    kind: String,
+    text: String,
+}
+
+static PENDING_BUBBLES: OnceLock<Mutex<Vec<PendingBubble>>> = OnceLock::new();
+static BUBBLE_CREATED_AT: OnceLock<Mutex<Option<std::time::Instant>>> = OnceLock::new();
+
+fn pending_bubbles_lock() -> &'static Mutex<Vec<PendingBubble>> {
+    PENDING_BUBBLES.get_or_init(|| Mutex::new(Vec::new()))
+}
+
+fn bubble_created_at_lock() -> &'static Mutex<Option<std::time::Instant>> {
+    BUBBLE_CREATED_AT.get_or_init(|| Mutex::new(None))
+}
+
+/// bubble 窗口懒创建（幂等）：创建后立刻按岛所在屏的 work-area 摆位、
+/// 显示并提到置顶层最上面。
+fn ensure_bubble_window_inner<R: Runtime>(app: &AppHandle<R>) -> Result<bool, String> {
+    if let Some(w) = app.get_webview_window("bubble") {
+        let _ = w.show();
+        raise_bubble_inner(app);
+        return Ok(false);
+    }
+    let window = WebviewWindowBuilder::new(app, "bubble", WebviewUrl::App("bubble.html".into()))
+        .title("bubble")
+        .inner_size(800.0, 600.0)
+        .resizable(false)
+        .decorations(false)
+        .transparent(true)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .shadow(false)
+        .visible(false)
+        .focused(false)
+        .build()
+        .map_err(|e| e.to_string())?;
+    *bubble_created_at_lock()
+        .lock()
+        .map_err(|e| e.to_string())? = Some(std::time::Instant::now());
+    if let Some(area) = island_work_area(app) {
+        let _ = window.set_position(tauri::PhysicalPosition::new(
+            area.0 as i32,
+            area.1 as i32,
+        ));
+        let _ = window.set_size(tauri::PhysicalSize::new(
+            area.2 as u32,
+            area.3 as u32,
+        ));
+    }
+    let _ = window.show();
+    raise_bubble_inner(app);
+    Ok(true)
+}
+
+fn raise_bubble_inner<R: Runtime>(app: &AppHandle<R>) {
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(bubble) = app.get_webview_window("bubble") {
+            if let Ok(hwnd) = bubble.hwnd() {
+                unsafe {
+                    let _ = SetWindowPos(
+                        hwnd,
+                        Some(HWND_TOPMOST),
+                        0,
+                        0,
+                        0,
+                        0,
+                        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+                    );
+                }
+            }
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        if let Some(bubble) = app.get_webview_window("bubble") {
+            let _ = bubble.set_always_on_top(false);
+            let _ = bubble.set_always_on_top(true);
+        }
+    }
+}
+
+/// 主窗口把一个已经把关过的泡泡推过来：窗口已在则直接发事件，
+/// 刚创建（webview 还在加载）则进待发队列等 drain，同时懒创建窗口。
+#[tauri::command]
+fn push_bubble<R: Runtime>(app: AppHandle<R>, kind: String, text: String) -> Result<(), String> {
+    let payload = PendingBubble { kind, text };
+    let existed_before = app.get_webview_window("bubble").is_some();
+    let recently_created = bubble_created_at_lock()
+        .lock()
+        .ok()
+        .and_then(|slot| *slot)
+        .map(|t| t.elapsed() < std::time::Duration::from_secs(2))
+        .unwrap_or(false);
+
+    ensure_bubble_window_inner(&app)?;
+
+    if existed_before && !recently_created {
+        let _ = app.emit_to("bubble", "bubble-spawn", &payload);
+    } else {
+        if let Ok(mut vec) = pending_bubbles_lock().lock() {
+            vec.push(payload);
+        }
+    }
+    Ok(())
+}
+
+/// bubble webview 启动后取走待发的泡泡。
+#[tauri::command]
+fn drain_bubbles() -> Vec<PendingBubble> {
+    pending_bubbles_lock()
+        .lock()
+        .map(|mut vec| std::mem::take(&mut *vec))
+        .unwrap_or_default()
+}
+
+/// 泡泡飘完隐藏 overlay。
+#[tauri::command]
+fn hide_bubble_overlay<R: Runtime>(app: AppHandle<R>) {
+    if let Some(bubble) = app.get_webview_window("bubble") {
+        let _ = bubble.hide();
+    }
+}
+
+/// 泡泡 overlay 用完即毁：destroy 绕过 CloseRequested 的「隐藏到托盘」拦截。
+#[tauri::command]
+fn close_bubble_window<R: Runtime>(app: AppHandle<R>) {
+    if let Some(bubble) = app.get_webview_window("bubble") {
+        let _ = bubble.destroy();
+    }
+}
 
 /// 岛贴哪条边；只贴顶/底，不悬空、不贴左右侧。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -382,39 +519,6 @@ fn set_click_through<R: Runtime>(window: WebviewWindow<R>, ignore: bool) {
 #[tauri::command]
 fn get_cursor_position() -> (f64, f64) {
     mouse_position_raw()
-}
-
-/// 把 bubble overlay 提到置顶层最上面。
-///
-/// bubble 窗口是 focus:false 创建的，tao 在 show 时走 SW_SHOWNOACTIVATE
-/// ——窗口永不提升，会一直压在岛窗口下面。这里用 SetWindowPos 重申
-/// TOPMOST（不动位置大小、不抢焦点），把它顶回置顶带最上层。
-#[tauri::command]
-fn raise_bubble_overlay<R: Runtime>(app: AppHandle<R>) {
-    if let Some(bubble) = app.get_webview_window("bubble") {
-        #[cfg(target_os = "windows")]
-        {
-            if let Ok(hwnd) = bubble.hwnd() {
-                unsafe {
-                    let _ = SetWindowPos(
-                        hwnd,
-                        Some(HWND_TOPMOST),
-                        0,
-                        0,
-                        0,
-                        0,
-                        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
-                    );
-                }
-            }
-        }
-        #[cfg(not(target_os = "windows"))]
-        {
-            // 非 Windows：关掉再开 always-on-top 触发一次重新置顶
-            let _ = bubble.set_always_on_top(false);
-            let _ = bubble.set_always_on_top(true);
-        }
-    }
 }
 
 #[tauri::command]
@@ -877,7 +981,10 @@ pub fn run() {
             is_mouse_over_window,
             set_click_through,
             get_cursor_position,
-            raise_bubble_overlay,
+            push_bubble,
+            drain_bubbles,
+            hide_bubble_overlay,
+            close_bubble_window,
             set_island_size,
             set_island_custom_size,
             place_island,

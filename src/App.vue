@@ -2,8 +2,8 @@
 import { ref, onMounted } from 'vue'
 import Island from './components/Island.vue'
 import PanelApp from './panel/PanelApp.vue'
-import BubbleApp from './BubbleApp.vue'
 
+// 泡泡 overlay 不走这里：它有独立入口 bubble.html（懒创建 + 轻量包）
 const windowLabel = ref<string>('main')
 
 onMounted(async () => {
@@ -19,5 +19,4 @@ onMounted(async () => {
 <template>
   <Island v-if="windowLabel === 'main'" />
   <PanelApp v-else-if="windowLabel === 'panel'" />
-  <BubbleApp v-else-if="windowLabel === 'bubble'" />
 </template>

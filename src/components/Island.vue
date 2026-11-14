@@ -6,6 +6,7 @@ import { useSettings } from "../composables/useSettings";
 import { useDockMode } from "../composables/useDockMode";
 import { useIslandBridge } from "../composables/useIslandBridge";
 import { useIslandInteraction } from "../composables/useIslandInteraction";
+import { useBubbleSpawner } from "../bubble/spawner";
 import CapsuleIdle from "./CapsuleIdle.vue";
 import DockStrip from "./DockStrip.vue";
 import CapsuleFocus from "./CapsuleFocus.vue";
@@ -96,13 +97,17 @@ watch(notificationType, (val) => {
     void applyWindowSize();
 });
 
+const bubbleSpawner = useBubbleSpawner();
+
 onMounted(async () => {
     interaction.start();
+    void bubbleSpawner.start();
     await bridge.start();
 });
 
 onUnmounted(() => {
     interaction.stop();
+    bubbleSpawner.stop();
     bridge.stop();
 });
 </script>

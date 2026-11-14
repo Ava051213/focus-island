@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { FloatingBubble } from "../composables/useIslandBubbles";
+import type { FloatingBubble } from "./renderer";
 
 defineProps<{
     bubble: FloatingBubble;
@@ -85,11 +85,10 @@ defineEmits<{ click: [] }>();
     border-radius: 999px;
     background: linear-gradient(
         135deg,
-        rgba(255, 255, 255, 0.38),
-        rgba(255, 255, 255, 0.16) 55%,
-        rgba(186, 214, 255, 0.26)
+        rgba(255, 255, 255, 0.5),
+        rgba(255, 255, 255, 0.26) 55%,
+        rgba(186, 214, 255, 0.4)
     );
-    backdrop-filter: blur(10px) saturate(1.15);
     border: 1px solid rgba(255, 255, 255, 0.62);
     box-shadow:
         inset 0 1px 5px rgba(255, 255, 255, 0.55),

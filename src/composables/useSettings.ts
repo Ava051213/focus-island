@@ -1,5 +1,6 @@
 import { ref, computed, watch, watchEffect } from 'vue'
 import { invoke, isTauri } from '@tauri-apps/api/core'
+import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { createPersistedStore } from './persistence'
 import {
   defaultBubbleSettings,
@@ -199,6 +200,9 @@ export async function syncAutostart() {
   // 不要反过来用系统注册状态覆盖开关，启动项被清理时会把开关静默关掉。
   // Web 预览 / Vitest 没有 Tauri 运行时，直接跳过，避免无意义的 invoke 噪音。
   if (!isTauri()) return
+  // 只有 main 窗口动注册表：panel/bubble 的 useSettings 也会初始化，
+  // 三个窗口各 invoke 一次是纯浪费
+  if (getCurrentWebviewWindow().label !== 'main') return
   try {
     await invoke('set_autostart', { enabled: settings.value.autoLaunch })
     autostartError.value = null
