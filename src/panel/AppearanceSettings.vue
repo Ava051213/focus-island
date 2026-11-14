@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { emit } from '@tauri-apps/api/event'
 import { useSettings, presetThemes, type ColorMode, type IslandDisplayMode } from '../composables/useSettings'
 import { useRewardUnlocks } from '../composables/useWeeklyGoals'
+import { emitIslandBubble } from '../utils/bubbleTexts'
 import type { BubbleTone } from '../utils/settingsMigration'
 
 const { settings } = useSettings()
@@ -41,9 +41,9 @@ function resetIslandPosition() {
   settings.value.islandEdgeRatio = null
 }
 
-// 让主窗口直接吐一个泡泡，验收用
+// 让 overlay 直接吐一个泡泡，验收用
 function tryBubble() {
-  void emit('island-bubble', { kind: 'test' })
+  emitIslandBubble('test')
 }
 </script>
 

@@ -4,6 +4,7 @@ import { useSettings } from './useSettings'
 import { useIslandState } from './useIslandState'
 import { useTimer, type NotificationType } from './useTimer'
 import { notifyTrayHidden } from './useSystemNotify'
+import { emitIslandBubble } from '../utils/bubbleTexts'
 import type { TimerStatePayload } from './useTimerBridge'
 
 // 模块级单例：bridge 可能被多处调用（Island.vue、泡泡队列），
@@ -28,7 +29,7 @@ export function useIslandBridge() {
   // 进闲置时让泡泡 overlay 喊一句（闲置喊话的视觉在 overlay 窗口渲染）
   watch(state, (s, prev) => {
     if (s === 'alert' && prev !== 'alert') {
-      void emit('island-bubble', { kind: 'idle' }).catch(() => {})
+      emitIslandBubble('idle')
     }
   })
 

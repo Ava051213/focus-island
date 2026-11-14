@@ -14,6 +14,7 @@ import { useTodayPlan } from './useTodayPlan'
 import { useSessions } from './useSessions'
 import { useTimerSnapshot } from './useTimerSnapshot'
 import { notifyPhaseEnd } from './useSystemNotify'
+import { emitIslandBubble } from '../utils/bubbleTexts'
 import type { PhaseEffect } from '../timer/machine'
 import { buildSession } from '../timer/sessions'
 import { pickLastUsedMemo } from '../utils/lastTask'
@@ -138,7 +139,7 @@ export function useTimerBridge() {
         minutes: Math.round(session.actualDuration / 60),
       })
       // 放弃了一轮专注，让岛哄一句
-      void emit('island-bubble', { kind: 'comfort', task: effect.taskTitle ?? '' }).catch(() => {})
+      emitIslandBubble('comfort')
     }
   }
 
@@ -164,7 +165,7 @@ export function useTimerBridge() {
             minutes: Math.round(outcome.session.actualDuration / 60),
           })
           // 恢复提示里选择了放弃，也哄一句
-          void emit('island-bubble', { kind: 'comfort', task: outcome.session.taskTitle ?? '' }).catch(() => {})
+          emitIslandBubble('comfort')
         }
       }
     }

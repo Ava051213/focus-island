@@ -1,11 +1,20 @@
 /**
- * 泡泡文案池与选句逻辑（纯函数）。
+ * 泡泡域：文案池、选句逻辑、事件契约（纯逻辑 + 唯一发射入口）。
  *
  * 未晚的随口一句话：娇气、陪伴、年下伙伴口吻。全部本地模板，
  * 不调模型——没 Key 也照常吐泡泡。
  */
+import { emit } from '@tauri-apps/api/event'
 
 export type BubbleKind = 'coquetry' | 'idle' | 'comfort' | 'test'
+
+/**
+ * `island-bubble` 事件的统一载荷。任何窗口想吐泡泡都走 emitIslandBubble，
+ * 别手写 emit——载荷形状和校验只认这一处。
+ */
+export function emitIslandBubble(kind: BubbleKind, text?: string) {
+  void emit('island-bubble', { kind, text }).catch(() => {})
+}
 
 const POOLS: Record<BubbleKind, string[]> = {
   // 撒娇：平时随机冒一句，求关注
